@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chuang-platform-kit"
+version = "0.1.0"
+description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Gene Chuang" }]
+dependencies = [
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# The WhatsApp publisher (Pub/Sub) and the Gmail sender pull Google libraries
+# the host project usually already has; declare them here so a bare install
+# of just the kit can run every module.
+gcp = ["google-cloud-pubsub>=2.20"]
+gmail = ["google-api-python-client>=2.100", "google-auth>=2.23", "google-auth-oauthlib>=1.1"]
+dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3"]
+
+[project.urls]
+Homepage = "https://github.com/genechuang/chuang-platform-kit"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The suites are hand-rolled scripts (tests/test-*.py, one PASS/FAIL line per
+# check, a final "N failure(s)" line); tests/conftest.py runs each as one item.
+python_files = "__no_native_suites__.py"
+addopts = "-q"
