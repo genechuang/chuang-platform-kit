@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,6 +12,9 @@ requires-python = ">=3.12"
 authors = [{ name = "Gene Chuang" }]
 dependencies = [
   "requests>=2.31",
+  # clock.zone() is zoneinfo, which reads the OS zone database; Windows has
+  # none, so a Windows host (the SMAD desktop) needs the PyPI copy.
+  "tzdata; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
