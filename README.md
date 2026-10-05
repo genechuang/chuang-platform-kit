@@ -20,12 +20,29 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 ## Install
 
 ```
-pip install "chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.0"
-pip install "chuang-platform-kit[gcp,gmail] @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.0"
+pip install "chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.2"
+pip install "chuang-platform-kit[gcp,gmail] @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.2"
 ```
 
 `gcp` adds the Pub/Sub client the publisher needs; `gmail` adds the Google API client the email sender needs.
-Hosts that already carry those libraries install the bare kit.
+Hosts that already carry those libraries install the bare kit. On Windows the kit pulls `tzdata` for `clock`.
+
+## Name the host
+
+Nothing in the kit knows which project it serves. A host says so once, in its own config module,
+before anything sends or logs:
+
+```python
+from chuang_platform_kit import email_notify, redact, whatsapp_publisher
+
+whatsapp_publisher.configure(project_id='my-gcp-project', topic='whatsapp-messages')
+email_notify.configure(subject_prefix='My Project', footer='The long name under every notification')
+redact.register_secret_names('MY_ODDLY_NAMED_SECRET')   # names the TOKEN/KEY/SECRET/PASSWORD/CREDENTIALS shape misses
+```
+
+The same settings are read from the environment when a host prefers that: `GCS_PROJECT_ID` or `GCP_PROJECT_ID`
+and `WHATSAPP_PUBSUB_TOPIC`, `EMAIL_SUBJECT_PREFIX` and `EMAIL_FOOTER`, `CHUANG_PLATFORM_TZ`.
+`python -m chuang_platform_kit.redact` is the same scrub as a stdin filter, for a CI step that posts text.
 
 ## Develop
 

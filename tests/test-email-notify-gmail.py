@@ -212,6 +212,17 @@ try:
           ('<p>Hi Ann</p>' in html, 'automated notification from SMAD Pickleball' in html, FAKE_GH in html, msg.get_payload()[0].get_content_type()),
           (True, True, False, 'text/html'))
     check("  logged at INFO", cap.levels()[-1], 'INFO')
+    check("  no footer line configured: the footer is the one sentence", '<br>' in html.split('class="footer"')[1], False)
+
+    gmail.sent.clear()
+    EN.configure(footer='San Marino Awesome Dinkers')
+    try:
+        EN.send_notification_email('ann@example.com', 'Vote Reminder', '<p>Hi Ann</p>')
+        html2 = email.message_from_bytes(base64.urlsafe_b64decode(gmail.sent[0]['body']['raw'])).get_payload()[0].get_payload(decode=True).decode()
+    finally:
+        EN.configure(footer='')
+    check("configure(footer=): the host's line sits under the sentence (0.1.2)",
+          'automated notification from SMAD Pickleball.<br>\nSan Marino Awesome Dinkers</p>' in html2, True)
 
     gmail.sent.clear()
     check("no address -> False, nothing sent", (EN.send_notification_email('', 's', 'b'), gmail.sent), (False, []))

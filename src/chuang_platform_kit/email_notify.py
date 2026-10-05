@@ -42,19 +42,26 @@ SCOPES = [
     'https://www.googleapis.com/auth/contacts.readonly',
 ]
 
-# The host's name in front of every subject: configure() or the environment.
+# The host's name in front of every subject, and the line under every
+# notification's "This is an automated notification from <name>." footer:
+# configure() or the environment.
 SUBJECT_PREFIX = os.environ.get('EMAIL_SUBJECT_PREFIX', '')
+FOOTER = os.environ.get('EMAIL_FOOTER', '')
 
 from .clock import zone
 
 
-def configure(subject_prefix: str = None) -> None:
+def configure(subject_prefix: str = None, footer: str = None) -> None:
     """Tell the mailer who is sending: `subject_prefix` goes in front of every
-    subject ("SMAD Pickleball - Vote Reminder"). A host calls this once, from
-    its own config module, so the kit never carries a project's name."""
-    global SUBJECT_PREFIX
+    subject ("SMAD Pickleball - Vote Reminder") and in the footer's first line;
+    `footer` is the plain-text line under it (a host's long name, say). A host
+    calls this once, from its own config module, so the kit never carries a
+    project's name."""
+    global SUBJECT_PREFIX, FOOTER
     if subject_prefix is not None:
         SUBJECT_PREFIX = subject_prefix
+    if footer is not None:
+        FOOTER = footer
 
 
 def subject_date() -> str:
@@ -334,7 +341,7 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 
 <body>
 {body_html}
 <div class="footer">
-<p>This is an automated notification{(' from ' + SUBJECT_PREFIX) if SUBJECT_PREFIX else ''}.</p>
+<p>This is an automated notification{(' from ' + SUBJECT_PREFIX) if SUBJECT_PREFIX else ''}.{('<br>' + chr(10) + FOOTER) if FOOTER else ''}</p>
 </div>
 </body>
 </html>"""
