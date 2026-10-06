@@ -6,7 +6,7 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 
 | Module | What it does |
 |---|---|
-| `redact` | Scrub tokens and keys out of text before it reaches a log line, an email or an issue: URL-embedded tokens, token-shaped strings, and the literal value of every secret the process holds (`SECRET_ENV_NAMES`). |
+| `redact` | Scrub tokens and keys out of text before it reaches a log line, an email or an issue: URL-embedded tokens, token-shaped strings, and the literal value of every secret the process holds (`SECRET_ENV_NAMES`). `register_secret_values()` adds values no variable name flags, such as the contents of one JSON secret mounted as a single variable. |
 | `cloud_logging` | `setup_logging()`: one JSON line per record with a `severity`, redacted, the shape Cloud Logging and Error Reporting read from Cloud Run and Cloud Functions. |
 | `lazy_import` | `lazy('module')`: import a heavy library on first use, not at cold start. |
 | `phone_utils` | Normalize a phone number the way WhatsApp ids spell it. |
@@ -14,14 +14,20 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `whatsapp_message` | The message shape every WhatsApp send is built from. |
 | `whatsapp_publisher` | Publish a WhatsApp message to a Pub/Sub topic with a deterministic correlation id per target and part, so a sender can dedupe retries and nothing goes out uncounted. |
 | `greenapi` | The GREEN-API transport: send, poll the instance state, retry a connect timeout, never log the URL (the token is in its path). |
-| `email_notify` | Send mail through Gmail, redacted, with a throttle for repeated notices and dated subjects. |
+| `email_notify` | Send mail through Gmail, redacted, with a throttle for repeated notices and dated subjects. `send_message(service, to, subject, text)` sends through a Gmail service the host built and returns the message id, for hosts that keep their own OAuth token and record delivery. |
 | `clock` | The kit's time zone: `CHUANG_PLATFORM_TZ`, Pacific by default. |
 
 ## Install
 
 ```
-pip install "chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.2"
-pip install "chuang-platform-kit[gcp,gmail] @ git+https://github.com/genechuang/chuang-platform-kit@v0.1.2"
+pip install "chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v0.2.0"
+pip install "chuang-platform-kit[gcp,gmail] @ git+https://github.com/genechuang/chuang-platform-kit@v0.2.0"
+```
+
+A slim container image has no `git`, so `git+https` fails there; pin the tag's tarball instead (the repo is public):
+
+```
+chuang-platform-kit[gmail] @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v0.2.0.tar.gz
 ```
 
 `gcp` adds the Pub/Sub client the publisher needs; `gmail` adds the Google API client the email sender needs.

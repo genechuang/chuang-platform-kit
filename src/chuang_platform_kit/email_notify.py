@@ -283,6 +283,34 @@ def whatsapp_to_html(text: str) -> str:
     return text
 
 
+def send_message(service, to: str, subject: str, text: str, *, html: str = None, sender: str = None) -> str:
+    """Send one message through a Gmail `service` the HOST built, and return Gmail's message id.
+
+    The other senders here are shaped for a player reminder: they build their own Gmail service from a
+    fixed scope list, wrap the body in a template, and answer True/False. A host that keeps its own OAuth
+    token (ChuangFinance's watch holds readonly+send+drive; its collector holds send-only) and that RECORDS
+    delivery -- the id is the proof an email left -- needs the opposite: its service in, the id out, the
+    failure raised so it can be stored. Subject and body pass redact(), like every other exit. No prefix,
+    footer, template or EMAIL_DISABLED switch: the caller states the subject it wants and decides whether
+    to send. `html`, when given, is added as the alternative part; `sender` sets From (Gmail overrides it
+    with the authenticated address anyway)."""
+    from email.message import EmailMessage
+
+    from .redact import redact
+
+    msg = EmailMessage()
+    msg['To'] = to
+    if sender:
+        msg['From'] = sender
+    msg['Subject'] = redact(subject)
+    msg.set_content(redact(text))
+    if html is not None:
+        msg.add_alternative(redact(html), subtype='html')
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+    sent = service.users().messages().send(userId='me', body={'raw': raw}).execute()
+    return sent.get('id')
+
+
 def send_notification_email(email: str, subject: str, body_html: str, dry_run: bool = False) -> bool:
     """Send email notification via Gmail API.
 

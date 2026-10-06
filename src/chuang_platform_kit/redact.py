@@ -52,12 +52,23 @@ SECRET_ENV_NAMES = (
 # caught by it, with no list to keep).
 SECRET_NAME_SHAPE = re.compile(r'(_|^)(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIALS|CREDENTIALS_JSON|PRIVATE_KEY)(_JSON)?$')
 _registered = set()
+_registered_values = set()
 MIN_SECRET_LEN = 12
 
 
 def register_secret_names(*names: str) -> None:
     """A host adds the names of secrets neither list would catch."""
     _registered.update(n for n in names if n)
+
+
+def register_secret_values(*values: str) -> None:
+    """A host adds secret VALUES the name lists cannot see: Cloud Run mounts a
+    whole Secret Manager entry as ONE variable (a JSON object holding a dozen
+    logins), so no variable is named like a secret and the JSON's own keys are
+    not credential fields. The host parses that object once at start-up and
+    registers each value. A JSON credential among them is split into its secret
+    fields exactly as an environment variable would be."""
+    _registered_values.update(v for v in values if isinstance(v, str) and v.strip())
 
 
 def secret_names(env: dict) -> list:
@@ -106,24 +117,31 @@ def secret_values(env: dict = None) -> list:
         env.update(os.environ)
     vals = set()
     for name in secret_names(env):
-        v = (env.get(name) or '').strip()
-        if not v:
-            continue
-        if v.startswith('{'):
-            try:
-                doc = json.loads(v)
-            except ValueError:
-                doc = None
-            if isinstance(doc, dict):
-                for field in JSON_SECRET_FIELDS:
-                    fv = doc.get(field)
-                    if isinstance(fv, str) and len(fv) >= MIN_SECRET_LEN:
-                        vals.add(fv)
-                        vals.add(fv.replace('\n', '\\n'))   # as it prints inside JSON
-                continue
-        if len(v) >= MIN_SECRET_LEN:
-            vals.add(v)
+        vals.update(_secret_strings((env.get(name) or '').strip()))
+    for v in _registered_values:
+        vals.update(_secret_strings(v.strip()))
     return sorted(vals, key=len, reverse=True)
+
+
+def _secret_strings(v: str) -> list:
+    """The strings to mask for one secret value: a JSON credential contributes
+    its secret fields (the rest of it is addresses, not keys), anything else
+    contributes itself when it is long enough not to shred ordinary text."""
+    if not v:
+        return []
+    if v.startswith('{'):
+        try:
+            doc = json.loads(v)
+        except ValueError:
+            doc = None
+        if isinstance(doc, dict):
+            out = []
+            for field in JSON_SECRET_FIELDS:
+                fv = doc.get(field)
+                if isinstance(fv, str) and len(fv) >= MIN_SECRET_LEN:
+                    out += [fv, fv.replace('\n', '\\n')]   # the second as it prints inside JSON
+            return out
+    return [v] if len(v) >= MIN_SECRET_LEN else []
 
 
 _cache = {'key': None, 'vals': []}
@@ -136,8 +154,9 @@ def _process_secret_values() -> list:
         mtime = os.path.getmtime('.env')
     except OSError:
         mtime = None
-    key = (os.getcwd(), mtime, tuple(sorted((n, v) for n, v in os.environ.items()
-                                            if n in SECRET_ENV_NAMES or n in _registered or SECRET_NAME_SHAPE.search(n))))
+    key = (os.getcwd(), mtime, tuple(sorted(_registered_values)),
+           tuple(sorted((n, v) for n, v in os.environ.items()
+                        if n in SECRET_ENV_NAMES or n in _registered or SECRET_NAME_SHAPE.search(n))))
     if _cache['key'] != key:
         _cache['key'], _cache['vals'] = key, secret_values()
     return _cache['vals']

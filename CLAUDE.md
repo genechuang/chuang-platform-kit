@@ -28,7 +28,7 @@ every new secret in `redact.SECRET_ENV_NAMES`) still apply where they are used.
   `pyproject.toml` and `__init__.py` together, commit, `git tag v<version>`,
   `git push --tags`. A host pins
   `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<version>`
-  in its requirements; Cloud Build installs it from the public repo.
+  in its requirements; Cloud Build installs it from the public repo. A slim image has no `git`: pin the tag tarball (`.../archive/refs/tags/v<version>.tar.gz`) there.
 - A tag is cut only from a green `main` (`.github/workflows/tests.yml`, Python
   3.12 and 3.13).
 - **Breaking a function's signature is a minor-version bump and a line in
