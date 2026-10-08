@@ -81,3 +81,8 @@ request succeeds.
   the first of the month.
 - Put `--usage` and the Sentry DSN in the daily job on day one; the 5 GB is a month's budget, and
   a quiet first week says nothing about the first report run.
+- **An incremental sync by stamp cannot restore a row deleted from the middle of a table**
+  (ChuangFinance, 10/8/26, from a rehearsal on a copy): its stamp sits below the target's
+  high-water mark, so the day's-rows pass never sends it again. Compare counts (or a hash) per
+  table after the send, and let a mismatch trigger a full upsert of that one table; the daily
+  pass stays cheap and the repair stays bounded.
