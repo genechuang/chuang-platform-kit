@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.3.0 - 2026-10-07 PT
+
+Additive; no host call site changes.
+
+- `monitoring`: errors and traces to Sentry behind the kit's own functions, `init(dsn, environment, release, service,
+  traces_sample_rate)`, `capture(exc, **context)`, `span(name)`, `transaction(name)`, `flush()`. A no-op without a DSN.
+  Every event, transaction and breadcrumb is scrubbed (`redact()`, email addresses, phone numbers and WhatsApp ids),
+  `send_default_pii` off. The transport's loggers are quieted to ERROR, and hosts call `flush()` at the end of each
+  request or message: on Cloud Run, Sentry's transport once logged about 636 SSL-retry warnings a day.
+- The `monitoring` extra installs `sentry-sdk` (2.x).
+
 ## 0.2.0 - 2026-10-06 PT
 
 Additive; no host call site changes.

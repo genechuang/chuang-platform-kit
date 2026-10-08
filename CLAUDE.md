@@ -18,7 +18,7 @@ takes it as a parameter or reads a documented environment variable
 
 Modules: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
 `request_scope`, `whatsapp_message`, `whatsapp_publisher`, `greenapi`,
-`email_notify`, `clock`. The host projects' own rules about them (every
+`email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk). The host projects' own rules about them (every
 WhatsApp send through the publisher, every log line through `setup_logging()`,
 every new secret in `redact.SECRET_ENV_NAMES`) still apply where they are used.
 
