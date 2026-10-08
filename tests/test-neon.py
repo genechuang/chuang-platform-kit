@@ -58,7 +58,10 @@ BRANCH = {'id': 'br-1', 'name': 'main', 'default': True}
 ROLE = {'name': 'ledger_owner', 'protected': False}
 
 
-def fake(calls, projects=(), dbs=(), refuse=False):
+ORGS = [{'id': 'org-fake-1', 'name': 'Gene'}]
+
+
+def fake(calls, projects=(), dbs=(), refuse=False, orgs=ORGS, bad_request=None):
     state = {'projects': list(projects), 'dbs': list(dbs)}
 
     def opener(req, timeout=None):
@@ -67,7 +70,14 @@ def fake(calls, projects=(), dbs=(), refuse=False):
         calls.append((req.get_method(), path.split('?')[0], body, path))
         if refuse:
             raise urllib.error.HTTPError(req.full_url, 403, 'Forbidden', {}, io.BytesIO(b''))
+        if path == '/users/me/organizations':
+            return Resp({'organizations': orgs})
         if path.startswith('/projects?'):
+            if bad_request:
+                raise urllib.error.HTTPError(req.full_url, 400, 'Bad Request', {}, io.BytesIO(json.dumps(bad_request).encode()))
+            if 'org_id=' not in path:   # Neon with a personal key: a project call without org_id is a 400
+                raise urllib.error.HTTPError(req.full_url, 400, 'Bad Request', {},
+                                             io.BytesIO(b'{"code":"","message":"org_id is required"}'))
             return Resp({'projects': state['projects'], 'pagination': {}})
         if path == '/projects' and req.get_method() == 'POST':
             state['projects'].append(PROJECT)
@@ -95,6 +105,9 @@ create = next(c for c in calls if c[0] == 'POST' and c[1] == '/projects')
 check("provision creates the project with region, major and the database in the body",
       (create[2]['project']['region_id'], create[2]['project']['pg_version'], create[2]['project']['branch']['database_name']),
       ('aws-us-west-2', 18, 'ledger'))
+check("the organization is discovered from the key and sent on the list and the create (a personal key needs it)",
+      (calls[0][1], 'org_id=org-fake-1' in calls[1][3], create[2]['project'].get('org_id')),
+      ('/users/me/organizations', True, 'org-fake-1'))
 check("provision answers the ids, the host and the flags; the URL is the direct one",
       (made['project_id'], made['branch_id'], made['database'], made['role'], made['host'],
        made['created_project'], made['created_database'], made['connection_uri'] == URI),
@@ -127,6 +140,24 @@ try:
 except PermissionError as e:
     got = 'API key' in str(e) and 'organization' in str(e)
 check("a 403 is a PermissionError naming the key and the organization scope", got, True)
+
+# 4b. The organization: given, discovered, ambiguous, or none; and a 400 says why.
+calls = []
+N.provision('key', 'chuang-finance', org_id='org-given', opener=fake(calls, projects=[PROJECT], dbs=[{'name': 'neondb', 'owner_name': 'ledger_owner'}]))
+check("an org_id given is used as it is, nothing is asked", (calls[0][1], 'org_id=org-given' in calls[0][3]), ('/projects', True))
+try:
+    N.provision('key', 'x', opener=fake([], orgs=ORGS + [{'id': 'org-fake-2', 'name': 'Other'}]))
+    got = 'no error'
+except RuntimeError as e:
+    got = '2 organizations' in str(e) and 'org-fake-2' in str(e) and 'org_id' in str(e)
+check("two organizations in reach is a RuntimeError naming them, never a guess", got, True)
+check("no organization listed (an organization key) means none is sent", N.organization_id('key', opener=fake([], orgs=[])), None)
+try:
+    N.provision('key', 'x', org_id='org-given', opener=fake([], bad_request={'code': '', 'message': 'limit must be <= 400'}))
+    got = 'no error'
+except RuntimeError as e:
+    got = ('400' in str(e), 'limit must be <= 400' in str(e))
+check("a 400 is a RuntimeError carrying Neon's own message", got, (True, True))
 
 # 5. host_of is the printable part.
 check("host_of answers the host alone", N.host_of(URI), HOST)

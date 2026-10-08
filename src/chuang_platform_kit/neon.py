@@ -51,7 +51,13 @@ def _call(path, key, method='GET', body=None, opener=None, timeout=60):
         if e.code in (401, 403):
             raise PermissionError(f'Neon refused {method} {path} ({e.code}): the API key cannot do this '
                                   f'(an organization project needs a key issued for that organization)') from e
-        raise
+        # Neon says WHY in the body ({"code": ..., "message": ...}); a bare HTTPError hid it (10/8/26: a 400 on
+        # GET /projects with nothing to go on). The body is redacted before it is shown: it can echo request fields.
+        try:
+            detail = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            detail = ''
+        raise RuntimeError(f'Neon answered {e.code} to {method} {path}: {_redact.redact(detail) or e.reason}') from e
 
 
 def projects(key, org_id=None, opener=None):
@@ -69,6 +75,27 @@ def projects(key, org_id=None, opener=None):
         cursor = (page.get('pagination') or {}).get('cursor')
         if len(batch) < PAGE or not cursor:
             return found
+
+
+def organizations(key, opener=None):
+    """The organizations the key can see: every one of the user's for a personal key, the owning one for an
+    organization key. Each is Neon's own dict (`id`, `name`)."""
+    return (_call('/users/me/organizations', key, opener=opener) or {}).get('organizations') or []
+
+
+def organization_id(key, opener=None):
+    """The one organization a run is scoped to when the caller names none. Neon keeps every project inside an
+    organization, and a PERSONAL API key must say which (`org_id`) on every project call or the API answers
+    400 (10/8/26: the first run, with Gene's personal key, died there); an organization key infers its own.
+    One organization -> its id; none -> None (the key infers it); several -> RuntimeError naming them, so the
+    caller passes `org_id` rather than this guessing."""
+    found = organizations(key, opener=opener)
+    if len(found) == 1:
+        return found[0].get('id')
+    if not found:
+        return None
+    names = ', '.join(f"{o.get('name') or '?'} ({o.get('id')})" for o in found)
+    raise RuntimeError(f'the Neon key sees {len(found)} organizations - say which with org_id: {names}')
 
 
 def find_project(key, name, org_id=None, opener=None):
@@ -163,7 +190,8 @@ def provision(key, name, region_id=DEFAULT_REGION, pg_version=DEFAULT_PG_VERSION
     URL. Idempotent: a second run creates nothing. The answer's `connection_uri` is the
     secret; everything else (`project_id`, `project_name`, `region_id`, `pg_version`,
     `branch_id`, `database`, `role`, `host`, `created_project`, `created_database`) may
-    be printed."""
+    be printed. `org_id` is discovered from the key when not given (`organization_id`)."""
+    org_id = org_id or organization_id(key, opener=opener)
     project, created = ensure_project(key, name, region_id=region_id, pg_version=pg_version, database=database,
                                       role=role, org_id=org_id, opener=opener)
     project_id = project['id']

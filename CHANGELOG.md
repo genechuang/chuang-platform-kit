@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.2 - unreleased
+
+Additive; no host call site changes.
+
+- `neon` (ChuangFinance): a personal API key must name the organization on every project call - Neon answered 400 to
+  the first real run (Gene, 10/8/26 2:2x PM PT) because `org_id` was never sent. `organizations(key)` reads
+  `/users/me/organizations`; `organization_id(key)` is the one it finds (several -> RuntimeError naming them, so the
+  caller passes `org_id`; none -> None, an organization key infers its own); `provision()` discovers it when not
+  given and sends it on the list and the create. A non-auth HTTP error now carries Neon's own message (redacted)
+  instead of a bare HTTPError.
+
 ## 0.5.1 - 2026-10-08 PT
 
 Additive; no host call site changes.
