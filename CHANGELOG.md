@@ -2,6 +2,12 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.3 - 2026-10-08 PT
+
+The same code as 0.5.2 with its suites green: 0.5.2 was tagged while `test-timecheck.py` failed on the
+new usage suite's UTC fixture stamp (the push chain gated on `tail -1`, not pytest's exit code). Pin
+0.5.3.
+
 ## 0.5.2 - 2026-10-08 PT
 
 Additive; no host call site changes.

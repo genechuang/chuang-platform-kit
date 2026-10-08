@@ -105,7 +105,7 @@ check("one endpoint when named, no listing", [c[1].rsplit('/', 1)[-1] for c in c
 
 # 4. month_to_date asks from the first of the UTC month.
 calls = []
-N.month_to_date('k', 'proj-1', now=datetime(2026, 10, 8, 21, 30, tzinfo=timezone.utc), opener=fake(calls))
+N.month_to_date('k', 'proj-1', now=datetime(2026, 10, 8, 21, 30, tzinfo=timezone.utc), opener=fake(calls))   # utc-ok: Neon meters the UTC month
 check("from the 1st at midnight UTC to now", ('from=2026-10-01T00%3A00%3A00Z' in calls[0][1], 'to=2026-10-08T21%3A30%3A00Z' in calls[0][1]), (True, True))
 
 # 5. The CLI: --usage prints the month and the budget line, provisions nothing; --cap-cu caps after a provision.
