@@ -2,7 +2,7 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
-## 0.5.4 - unreleased
+## 0.5.4 - 2026-10-08 PT
 
 Additive; no host call site changes. Both from the ledger project's first real run of 0.5.3 (ChuangFinance, 10/8/26 PT).
 
