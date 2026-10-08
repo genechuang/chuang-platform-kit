@@ -23,8 +23,10 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   google_auth        a Gmail / Drive / Sheets / People service from a token in a file, the environment or Secret
                      Manager, refreshed and written back (the `gmail` extra)
   gitguardian        a repository's GitGuardian incidents listed with their occurrences, ignored or resolved with a note
+  neon               a Neon project as code: found or created with its database, the direct connection URL read
+                     and stored as a secret version, never printed
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.5.0'
+__version__ = '0.5.1'

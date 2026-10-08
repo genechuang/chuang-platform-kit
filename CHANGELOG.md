@@ -2,6 +2,21 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.1 - 2026-10-08 PT
+
+Additive; no host call site changes.
+
+- `neon` (Snow White, for ChuangFinance's ledger; Gene: "infra as code" before a console click): a Neon project as
+  code over the REST API v2 — `provision(key, name, region_id=, pg_version=, database=, role=, org_id=, pooled=)`
+  finds or creates the project (AWS Oregon `aws-us-west-2`, Postgres 18 by default), finds or creates the database
+  on the default branch, reads the DIRECT connection URL (pooled on request), registers it with `redact` and answers
+  ids, host and flags beside it; `ensure_project()`, `ensure_database()`, `connection_uri()`, `host_of()` on their
+  own; `python -m chuang_platform_kit.neon --name X --database Y --key-secret p/NEON_API_KEY --store p/DATABASE_URL`
+  provisions and stores the URL as a secret version, printing ids and host only. Idempotent: a second run creates
+  nothing. `opener` is the seam.
+- `secrets.ensure(project, name)`: the secret exists (created with automatic replication when missing), since
+  `add_version()` answers 404 to a secret never created.
+
 ## 0.5.0 - 2026-10-08 PT
 
 Additive; no host call site changes. Gene's call, 10/8/26: PickleBot's working patterns move into the kit so

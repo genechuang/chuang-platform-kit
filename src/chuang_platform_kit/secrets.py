@@ -73,6 +73,22 @@ def add_version(project: str, name: str, data, session=None) -> str:
     return resp.json().get('name', '')
 
 
+def ensure(project: str, name: str, session=None) -> bool:
+    """The secret `name` exists in `project` (automatic replication, no versions yet):
+    True when this call created it, False when it was there. `add_version()` answers
+    404 to a secret that was never created, so a provisioning script calls this first."""
+    session = session or default_session()
+    resp = session.get(f'{API}/projects/{project}/secrets/{name}', timeout=20)
+    if resp.status_code == 200:
+        return False
+    if resp.status_code != 404:
+        resp.raise_for_status()
+    q = f'?secretId={name}'
+    resp = session.post(f'{API}/projects/{project}/secrets{q}', json={'replication': {'automatic': {}}}, timeout=20)
+    resp.raise_for_status()
+    return True
+
+
 def write_file(env, var: str, path: str, mode: int = 0o600) -> bool:
     """The secret in env[var] written as the file at `path`, readable by this user
     alone, so a script that reads a file (a credentials JSON, an OAuth token) finds
