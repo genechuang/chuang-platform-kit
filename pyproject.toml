@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.3.0"
+version = "0.4.0"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -26,6 +26,8 @@ gmail = ["google-api-python-client>=2.100", "google-auth>=2.23", "google-auth-oa
 dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3"]
 # Errors and traces to Sentry (monitoring.py); without it monitoring.init() is a no-op.
 monitoring = ["sentry-sdk>=2.20,<3"]
+# The OpenFeature provider over a Config (config.provider()); Config itself needs nothing.
+config = ["openfeature-sdk>=0.7,<1"]
 
 [project.urls]
 Homepage = "https://github.com/genechuang/chuang-platform-kit"

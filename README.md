@@ -17,6 +17,7 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `email_notify` | Send mail through Gmail, redacted, with a throttle for repeated notices and dated subjects. `send_message(service, to, subject, text)` sends through a Gmail service the host built and returns the message id, for hosts that keep their own OAuth token and record delivery. |
 | `clock` | The kit's time zone: `CHUANG_PLATFORM_TZ`, Pacific by default. |
 | `monitoring` | Errors and traces to Sentry behind our own functions: `init(dsn, environment, release, service)` (a no-op without a DSN), `capture()`, `span()`, `transaction()`, `flush()`. Every event and breadcrumb is scrubbed (`redact()`, emails, phone numbers), PII off. Install with the `monitoring` extra. |
+| `config` | A versioned configuration document read at runtime from one source: `Config(fetch, defaults, fallback, ttl)` with `get('a.b')`, `typed()`, `version`, `mark_dirty()` (the change signal), `on_change()`; a failed read keeps the last document and waits before retrying; a fallback (the host's environment) answers before any document and disagrees at WARNING. `etag()` / `unchanged()` for a conditional GET. `provider(cfg)` is an OpenFeature provider over it (the `config` extra), so a flag service can replace the document later without touching call sites. |
 
 ## Install
 

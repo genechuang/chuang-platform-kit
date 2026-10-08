@@ -2,6 +2,20 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.4.0 - 2026-10-08 PT
+
+Additive; no host call site changes.
+
+- `config`: a versioned configuration document read at runtime from one source — `Config(fetch, defaults=, fallback=,
+  ttl=, retry_after=)` with `get('a.b')`, `typed()`, `snapshot()`, `version`, `mark_dirty()` (the change signal) and
+  `on_change()`. `fetch(version)` answers a `Document`, `None` for unchanged, or raises; a failed read keeps the last
+  document, marks `stale` and waits `retry_after`. A `fallback` (a host's environment) answers before any document and
+  a disagreement with the document is a WARNING once per key. `etag()` and `unchanged()` for a conditional GET.
+  `provider(cfg)` is an OpenFeature provider over it (SMAD PickleBot's `docs/config-audit.md` §6–7: environment
+  holds wiring, the document holds the rules an operator changes at runtime; a flag service drops in later as another
+  provider).
+- The `config` extra installs `openfeature-sdk`; `Config` itself needs nothing.
+
 ## 0.3.0 - 2026-10-07 PT
 
 Additive; no host call site changes.
