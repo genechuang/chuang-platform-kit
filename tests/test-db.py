@@ -63,7 +63,8 @@ class Log(logging.Handler):
         self.lines.append((record.levelname, record.getMessage()))
 
 
-URL = 'postgresql://app:s3cretpassw0rd@ep-cold-1234.us-west-2.aws.neon.tech/ledger?sslmode=require'
+# A fixture, never a database: FAKE- names and an .example.test host, so a secret scanner reads it as one too.
+URL = 'postgresql://FAKE-app:FAKE-s3cretpassw0rd@db.example.test/ledger?sslmode=require'
 handler = Log()
 db.log.addHandler(handler)
 db.log.setLevel(logging.DEBUG)
@@ -82,14 +83,14 @@ check("timeout, autocommit and extra driver keywords pass through; no applicatio
 print("\n-- the cold-start retry")
 handler.lines.clear()
 slept = []
-d = Driver(refuse=2, error=OperationalError('connection to server failed: the database system is starting up; password s3cretpassw0rd'))
+d = Driver(refuse=2, error=OperationalError('connection to server failed: the database system is starting up; password FAKE-s3cretpassw0rd'))
 conn = db.connect(URL, connector=d, sleep=slept.append)
 check("two refusals from a waking endpoint, then the connection: three driver calls, the wait doubling",
       (conn[0], len(d.calls), slept), ('conn', 3, [1.0, 2.0]))
 check("each retry is one WARNING naming the try and the error",
       [(lvl, 'try 1 of 3' in msg, 'try 2 of 3' in msg, 'OperationalError' in msg) for lvl, msg in handler.lines],
       [('WARNING', True, False, True), ('WARNING', False, True, True)])
-check("the password in the driver's error is masked in the log line", any('s3cretpassw0rd' in msg for _, msg in handler.lines), False)
+check("the password in the driver's error is masked in the log line", any('FAKE-s3cretpassw0rd' in msg for _, msg in handler.lines), False)
 d = Driver(refuse=5)
 try:
     db.connect(URL, retries=2, connector=d, sleep=slept.append)
@@ -195,10 +196,10 @@ check("engine() with no URL anywhere is NoDatabaseUrl", raised, 'no url')
 print("\n-- the secret name and the imports")
 check("DATABASE_URL is a secret name: its value, and its password on its own, are masked by redact()",
       ('DATABASE_URL' in redact.secret_names({'DATABASE_URL': URL}), redact.redact('url is ' + URL, {'DATABASE_URL': URL}),
-       redact.redact('password authentication failed for s3cretpassw0rd', {'DATABASE_URL': URL})),
+       redact.redact('password authentication failed for FAKE-s3cretpassw0rd', {'DATABASE_URL': URL})),
       (True, 'url is ***', 'password authentication failed for ***'))
 check("a URL given to connect() is masked from then on, wherever it came from",
-      redact.redact('dsn postgresql://app:s3cretpassw0rd@ep-cold-1234.us-west-2.aws.neon.tech/ledger?sslmode=require and s3cretpassw0rd'),
+      redact.redact('dsn ' + URL + ' and FAKE-s3cretpassw0rd'),
       'dsn *** and ***')
 check("the module imported without psycopg or SQLAlchemy (both the host's extras)", DRIVERS_AT_IMPORT, {'psycopg': False, 'sqlalchemy': False})
 src = open(os.path.join(ROOT, 'src', 'chuang_platform_kit', 'db.py'), encoding='utf-8').read()

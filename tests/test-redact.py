@@ -143,10 +143,10 @@ check("python -m chuang_platform_kit.redact scrubs stdin to stdout", (FAKE_TOKEN
 # own mail sender, its WhatsApp sender's retry -- is that host's suite.)
 
 print("\n-- a connection URL (DATABASE_URL, kit 0.5.0 db.py): the URL and its password on its own")
-DSN = 'postgresql://app:p%40ssw0rd-long-one@ep-1.us-west-2.aws.neon.tech/ledger?sslmode=require'
+DSN = 'postgresql://FAKE-app:FAKE-p%40ssw0rd-long@db.example.test/ledger?sslmode=require'   # a fixture, never a database
 check("DATABASE_URL is a secret name", 'DATABASE_URL' in R.secret_names({'DATABASE_URL': DSN}), True)
 check("the whole URL is masked, and the password as the driver quotes it (decoded) and as the URL spells it",
-      R.redact('dsn ' + DSN + ' failed for p@ssw0rd-long-one / p%40ssw0rd-long-one', {'DATABASE_URL': DSN}),
+      R.redact('dsn ' + DSN + ' failed for FAKE-p@ssw0rd-long / FAKE-p%40ssw0rd-long', {'DATABASE_URL': DSN}),
       'dsn *** failed for *** / ***')
 check("a short password is not masked on its own (it would shred ordinary text); the URL still is",
       R.redact('x postgresql://u:short@h/d y short', {'DATABASE_URL': 'postgresql://u:short@h/d'}), 'x *** y short')
