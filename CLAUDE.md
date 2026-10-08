@@ -41,3 +41,11 @@ Hand-rolled suites in `tests/test-*.py` (one `PASS`/`FAIL` line per check,
 a final `N failure(s)` line, the positive case first), run by
 `python -m pytest -n auto` through `tests/conftest.py`. Offline and stdlib
 fakes only; a suite that needs a project's files belongs in that project.
+
+**A test never writes a `scheme://user:password@host` literal, whatever the
+names say** (Mr Sandman, 10/8/26): GitGuardian's detector matches the shape,
+not the words, so `FAKE-app:FAKE-password@db.example.test` raised two
+"PostgreSQL Credentials" incidents (1edaf48) exactly as an invented Neon
+endpoint had. Build the fixture from parts at runtime, as `tests/test-db.py`
+and `tests/test-redact.py` do since 21a7541; the one-letter `u:p@h/d` shape
+never matched and may stay. The same goes for a session note quoting one.
