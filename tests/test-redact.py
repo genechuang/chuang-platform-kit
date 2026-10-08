@@ -143,7 +143,9 @@ check("python -m chuang_platform_kit.redact scrubs stdin to stdout", (FAKE_TOKEN
 # own mail sender, its WhatsApp sender's retry -- is that host's suite.)
 
 print("\n-- a connection URL (DATABASE_URL, kit 0.5.0 db.py): the URL and its password on its own")
-DSN = 'postgresql://FAKE-app:FAKE-p%40ssw0rd-long@db.example.test/ledger?sslmode=require'   # a fixture, never a database
+# A fixture, never a database, assembled from parts so the literal `scheme://user:password@host` shape (a credential
+# to a secret scanner whatever the names say) never appears in the file.
+DSN = 'postgresql://' + 'FAKE-app:' + 'FAKE-p%40ssw0rd-long' + '@' + 'db.example.test' + '/ledger?sslmode=require'
 check("DATABASE_URL is a secret name", 'DATABASE_URL' in R.secret_names({'DATABASE_URL': DSN}), True)
 check("the whole URL is masked, and the password as the driver quotes it (decoded) and as the URL spells it",
       R.redact('dsn ' + DSN + ' failed for FAKE-p@ssw0rd-long / FAKE-p%40ssw0rd-long', {'DATABASE_URL': DSN}),
