@@ -19,7 +19,6 @@ which project is sending.
 """
 
 import base64
-import json
 import os
 import re
 import logging
@@ -72,112 +71,19 @@ def subject_date() -> str:
 def _get_gmail_service():
     """Get authenticated Gmail API service.
 
-    Tries gmail-token.json file first (CLI / GitHub Actions),
-    falls back to GMAIL_OAUTH_TOKEN_JSON env var (Cloud Functions).
+    Tries gmail-token.json file first (CLI / GitHub Actions), falls back to the
+    GMAIL_OAUTH_TOKEN_JSON env var (Cloud Functions): `google_auth.service`, the
+    one token chain since kit 0.5.0, its warnings on this module's logger.
     """
-    try:
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError:
-        logger.debug("Google API libraries not available, skipping email")
-        return None
-
-    creds = None
-
-    # Try file-based token first
-    if os.path.exists(TOKEN_FILE):
-        try:
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-        except Exception:
-            pass
-
-    # Fall back to env var (Cloud Functions)
-    if not creds:
-        token_json = os.environ.get('GMAIL_OAUTH_TOKEN_JSON', '')
-        if token_json:
-            try:
-                token_data = json.loads(token_json)
-                creds = Credentials.from_authorized_user_info(token_data, SCOPES)
-            except Exception:
-                pass
-
-    if not creds:
-        return None
-
-    # Refresh if expired
-    try:
-        if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Save refreshed token to file if possible (not in Cloud Functions)
-            if os.path.exists(TOKEN_FILE):
-                try:
-                    with open(TOKEN_FILE, 'w') as f:
-                        f.write(creds.to_json())
-                except Exception:
-                    pass
-    except Exception as e:
-        logger.warning(f"[Email] Gmail token refresh failed: {e}")
-
-    if not creds.valid:
-        logger.warning("[Email] Gmail credentials not valid after refresh attempt")
-        return None
-
-    try:
-        return build('gmail', 'v1', credentials=creds)
-    except Exception:
-        return None
+    from . import google_auth
+    return google_auth.service('gmail', 'v1', SCOPES, token_file=TOKEN_FILE, token_env='GMAIL_OAUTH_TOKEN_JSON', logger=logger)
 
 
 def _get_people_service():
-    """Get authenticated Google People API service (reuses gmail OAuth token)."""
-    try:
-        from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError:
-        return None
-
-    creds = None
-
-    if os.path.exists(TOKEN_FILE):
-        try:
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-        except Exception:
-            pass
-
-    if not creds:
-        token_json = os.environ.get('GMAIL_OAUTH_TOKEN_JSON', '')
-        if token_json:
-            try:
-                token_data = json.loads(token_json)
-                creds = Credentials.from_authorized_user_info(token_data, SCOPES)
-            except Exception:
-                pass
-
-    if not creds:
-        return None
-
-    try:
-        if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            if os.path.exists(TOKEN_FILE):
-                try:
-                    with open(TOKEN_FILE, 'w') as f:
-                        f.write(creds.to_json())
-                except Exception:
-                    pass
-    except Exception as e:
-        logger.warning(f"[People API] Google token refresh failed: {e}")
-
-    if not creds.valid:
-        logger.warning("[People API] Google credentials not valid after refresh attempt")
-        return None
-
-    try:
-        return build('people', 'v1', credentials=creds)
-    except Exception:
-        return None
+    """Get authenticated Google People API service (reuses the Gmail OAuth token
+    through the same chain)."""
+    from . import google_auth
+    return google_auth.service('people', 'v1', SCOPES, token_file=TOKEN_FILE, token_env='GMAIL_OAUTH_TOKEN_JSON', logger=logger)
 
 
 def lookup_contact_by_phone(phone: str) -> tuple:

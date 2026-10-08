@@ -4,9 +4,11 @@ A change that breaks a function's signature is a minor-version bump and names th
 
 ## 0.5.0 - unreleased
 
-Additive; no host call site changes.
+Additive; no host call site changes. Gene's call, 10/8/26: PickleBot's working patterns move into the kit so
+ChuangFinance can put its ledger and jobs in the cloud on the same ones. Each module is lifted by the session that
+owns its source (SMAD PickleBot's `docs/config-audit.md` is the config half; this is the operations half).
 
-- `db`: Postgres on a serverless host (Neon) — `connect(url)` opens one psycopg 3 connection with a connect timeout and
+- `db` (Mr Sandman, from PickleBot's API): Postgres on a serverless host (Neon) — `connect(url)` opens one psycopg 3 connection with a connect timeout and
   retries an OperationalError while a sleeping endpoint wakes (`retries`, `wait` doubling, each at WARNING, redacted);
   `engine(url)` is a SQLAlchemy engine (the host's dependency, imported on the call) over a small pre-ping pool whose
   every connection is made by `connect()`; `sqlalchemy_url(url)` names the psycopg 3 driver. The URL is the argument or
@@ -14,6 +16,16 @@ Additive; no host call site changes.
 - `redact`: `DATABASE_URL` is a secret name, and a connection URL's password is masked on its own as well as inside the
   URL (a driver's error quotes it alone); `db.connect()` registers the URL it is given as a secret value.
 - The `db` extra installs `psycopg[binary]`.
+- `secrets` (Snow White, from PickleBot's daily job): `access(project, name)`, `load_json(project, name, into_env=)`,
+  `add_version(project, name, data)`, `write_file(env, var, path)`, `renew_if_changed(project, name, before, path)`
+  — Secret Manager over REST with google-auth's default credentials; `session` is the seam.
+- `google_auth` (Snow White, from PickleBot's Gmail chain): `credentials(scopes, token_json=, token_file=, token_env=,
+  secret=(project, name))` and `service(api, version, scopes, ...)` for Gmail, Drive, Sheets, People — the first
+  token source that parses wins, an expired token is refreshed, and the refresh is written back to the file and to
+  Secret Manager. `email_notify` reads its Gmail service through it.
+- `gitguardian` (Snow White, from PickleBot's watchdog script): `incidents()`, `open_incidents()`, `with_occurrences()`,
+  `detector()`, `files()`, and `ignore(key, id, reason, note)` / `resolve(key, id, note)` — the last two need a key
+  with `incidents:write`, refused as PermissionError otherwise.
 
 ## 0.4.0 - 2026-10-08 PT
 

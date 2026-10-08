@@ -19,6 +19,10 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      OpenFeature provider over it (the `config` extra)
   db                 Postgres on a serverless host: a connection retried while the endpoint wakes, a pooled SQLAlchemy
                      engine over it (the `db` extra installs psycopg 3)
+  secrets            Secret Manager: a JSON secret read into the environment, a new version written back
+  google_auth        a Gmail / Drive / Sheets / People service from a token in a file, the environment or Secret
+                     Manager, refreshed and written back (the `gmail` extra)
+  gitguardian        a repository's GitGuardian incidents listed with their occurrences, ignored or resolved with a note
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
