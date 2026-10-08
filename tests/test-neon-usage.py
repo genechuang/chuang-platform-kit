@@ -15,6 +15,7 @@ import io
 import json
 import os
 import sys
+import urllib.error
 from datetime import datetime, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -56,17 +57,29 @@ HISTORY = {'projects': [{'project_id': 'proj-1', 'periods': [{'period_id': 'p', 
 ]}]}, {'project_id': 'other', 'periods': [{'consumption': [{'data_transfer_bytes': 99 * GB}]}]}]}
 
 
-def fake(calls, history=HISTORY):
+def fake(calls, history=HISTORY, personal_key=False, endpoint_min=None):
+    """`personal_key`: consumption history answers 403 and the project object carries the counters, as Neon does for a
+    personal API key. `endpoint_min`: the endpoints' current floor; a PATCH whose max is below it answers Neon's 400."""
     def opener(req, timeout=None):
         path = req.full_url[len(N.API):]
         body = json.loads(req.data.decode('utf-8')) if req.data else None
         calls.append((req.get_method(), path, body))
         if path.startswith('/consumption_history/projects?'):
+            if personal_key:
+                raise urllib.error.HTTPError(req.full_url, 403, 'Forbidden', {}, io.BytesIO(b''))
             return Resp(history)
+        if path == '/projects/proj-1':
+            return Resp({'project': {'id': 'proj-1', 'data_transfer_bytes': 2 * GB, 'written_data_bytes': 7,
+                                     'compute_time_seconds': 600, 'active_time_seconds': 900, 'pg_version': 18}})
         if path.endswith('/endpoints') and req.get_method() == 'GET':
             return Resp({'endpoints': [{'id': 'ep-a'}, {'id': 'ep-b'}]})
         if '/endpoints/' in path and req.get_method() == 'PATCH':
-            return Resp({'endpoint': {'id': path.rsplit('/', 1)[-1], **body['endpoint']}})
+            ep = body['endpoint']
+            if endpoint_min is not None and ep.get('autoscaling_limit_min_cu', endpoint_min) > ep['autoscaling_limit_max_cu']:
+                msg = ('{"code":"","message":"autoscaling limit min is larger than max; min:\\"%s\\", max:\\"%s\\""}'
+                       % (endpoint_min, ep['autoscaling_limit_max_cu'])).encode()
+                raise urllib.error.HTTPError(req.full_url, 400, 'Bad Request', {}, io.BytesIO(msg))
+            return Resp({'endpoint': {'id': path.rsplit('/', 1)[-1], **ep}})
         if path.startswith('/users/me/organizations'):
             return Resp({'organizations': [{'id': 'org-1', 'name': 'Gene'}]})
         if path.startswith('/projects?'):
@@ -102,11 +115,32 @@ check("both endpoints capped at 0.25 CU, floor 0.25",
 calls = []
 N.cap_compute('k', 'proj-1', 1, endpoint_id='ep-b', opener=fake(calls))
 check("one endpoint when named, no listing", [c[1].rsplit('/', 1)[-1] for c in calls], ['ep-b'])
+calls = []
+capped = N.cap_compute('k', 'proj-1', 0.25, opener=fake(calls, endpoint_min=1.0))
+patches = [c for c in calls if c[0] == 'PATCH']
+check("a max below the endpoint's floor is refused once, then sent again with the floor lowered to it (the 1-1 CU default, 10/8/26)",
+      (len(patches), patches[0][2]['endpoint'], patches[1][2]['endpoint'], [e['autoscaling_limit_min_cu'] for e in capped]),
+      (4, {'autoscaling_limit_max_cu': 0.25}, {'autoscaling_limit_max_cu': 0.25, 'autoscaling_limit_min_cu': 0.25}, [0.25, 0.25]))
+try:
+    N.cap_compute('k', 'proj-1', 0.25, min_cu=0.5, opener=fake([], endpoint_min=1.0))
+    got = 'no error'
+except RuntimeError as e:
+    got = 'min is larger than max' in str(e)
+check("a floor the caller set above the ceiling is Neon's error, not retried", got, True)
 
 # 4. month_to_date asks from the first of the UTC month.
 calls = []
-N.month_to_date('k', 'proj-1', now=datetime(2026, 10, 8, 21, 30, tzinfo=timezone.utc), opener=fake(calls))   # utc-ok: Neon meters the UTC month
+totals = N.month_to_date('k', 'proj-1', now=datetime(2026, 10, 8, 21, 30, tzinfo=timezone.utc), opener=fake(calls))   # utc-ok: Neon meters the UTC month
 check("from the 1st at midnight UTC to now", ('from=2026-10-01T00%3A00%3A00Z' in calls[0][1], 'to=2026-10-08T21%3A30%3A00Z' in calls[0][1]), (True, True))
+check("tagged with its source", totals['source'], 'consumption_history')
+calls = []
+totals = N.month_to_date('k', 'proj-1', now=datetime(2026, 10, 8, 21, 30, tzinfo=timezone.utc), opener=fake(calls, personal_key=True))   # utc-ok: fixed instant
+check("a personal key (403 on consumption history) falls back to the project's own period counters",
+      (totals, [c[1] for c in calls]),
+      ({'data_transfer_bytes': 2 * GB, 'written_data_bytes': 7, 'compute_time_seconds': 600, 'active_time_seconds': 900, 'source': 'project'},
+       ['/consumption_history/projects?project_ids=proj-1&from=2026-10-01T00%3A00%3A00Z&to=2026-10-08T21%3A30%3A00Z&granularity=daily', '/projects/proj-1']))
+used, pct, line = N.transfer_budget(totals)
+check("the fallback's transfer still reads against the budget", (round(pct), '2.00 GB of 5 GB (40%)' in line), (40, True))
 
 # 5. The CLI: --usage prints the month and the budget line, provisions nothing; --cap-cu caps after a provision.
 keep = (N._call, N.provision)

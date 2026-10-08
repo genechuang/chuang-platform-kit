@@ -227,8 +227,19 @@ def cap_compute(key, project_id, max_cu, min_cu=None, endpoint_id=None, opener=N
     body = {'autoscaling_limit_max_cu': float(max_cu)}
     if min_cu is not None:
         body['autoscaling_limit_min_cu'] = float(min_cu)
-    return [(_call(f'/projects/{project_id}/endpoints/{eid}', key, 'PATCH', {'endpoint': body}, opener=opener) or {}).get('endpoint') or {}
-            for eid in targets]
+    out = []
+    for eid in targets:
+        path = f'/projects/{project_id}/endpoints/{eid}'
+        try:
+            answer = _call(path, key, 'PATCH', {'endpoint': body}, opener=opener)
+        except RuntimeError as e:
+            if min_cu is not None or 'min is larger than max' not in str(e):
+                raise
+            # Neon refuses a max below the endpoint's current min ("autoscaling limit min is larger than max"; a fresh
+            # free-plan endpoint sits at 1-1 CU, 10/8/26): the floor comes down with the ceiling unless the caller set it.
+            answer = _call(path, key, 'PATCH', {'endpoint': dict(body, autoscaling_limit_min_cu=float(max_cu))}, opener=opener)
+        out.append((answer or {}).get('endpoint') or {})
+    return out
 
 
 def consumption(key, project_id, since, until, org_id=None, granularity='daily', opener=None):
@@ -260,14 +271,34 @@ def consumption(key, project_id, since, until, org_id=None, granularity='daily',
     return totals
 
 
+PROJECT_METRICS = ('data_transfer_bytes', 'written_data_bytes', 'compute_time_seconds', 'active_time_seconds')
+"""The consumption counters Neon keeps on the project object itself, for the current billing period."""
+
+
+def project_usage(key, project_id, opener=None):
+    """The project's own period counters (`GET /projects/{id}`): the same metrics as `consumption()` for the current
+    billing period, readable with any key that can see the project. Tagged `source: 'project'`."""
+    project = (_call(f'/projects/{project_id}', key, opener=opener) or {}).get('project') or {}
+    totals = {m: project[m] for m in PROJECT_METRICS if isinstance(project.get(m), (int, float)) and not isinstance(project.get(m), bool)}
+    totals['source'] = 'project'
+    return totals
+
+
 def month_to_date(key, project_id, org_id=None, now=None, opener=None):
     """This calendar month's consumption so far (UTC month, which is what Neon meters):
-    `consumption()` from the first of the month to `now`."""
+    `consumption()` from the first of the month to `now`, tagged `source: 'consumption_history'`. That endpoint answers
+    403 to a personal API key (10/8/26, the ledger's project); then the project object's own period counters
+    (`project_usage`) stand in - the same four metrics for the current billing period."""
     from datetime import datetime, timezone
     now = now or datetime.now(timezone.utc)   # utc-ok: Neon meters the calendar month in UTC, not a Pacific day
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     fmt = '%Y-%m-%dT%H:%M:%SZ'
-    return consumption(key, project_id, start.strftime(fmt), now.strftime(fmt), org_id=org_id, opener=opener)
+    try:
+        totals = consumption(key, project_id, start.strftime(fmt), now.strftime(fmt), org_id=org_id, opener=opener)
+    except PermissionError:
+        return project_usage(key, project_id, opener=opener)
+    totals['source'] = 'consumption_history'
+    return totals
 
 
 def transfer_budget(totals, budget_bytes=FREE_TRANSFER_BYTES):
@@ -325,8 +356,10 @@ def main(argv=None):
         if not project:
             raise SystemExit(f'no Neon project named {args.name}')
         totals = month_to_date(key, project['id'], org_id=org_id)
-        print(f"project {project['id']} ({project.get('name')}), this month to now (UTC):")
-        for metric in sorted(k for k in totals if k != 'periods'):
+        period = 'this month to now (UTC)' if totals.get('source') == 'consumption_history' else \
+            "the current billing period, from the project's own counters (consumption history needs an organization key)"
+        print(f"project {project['id']} ({project.get('name')}), {period}:")
+        for metric in sorted(k for k in totals if k not in ('periods', 'source')):
             value = totals[metric]
             shown = f"{value / 1024 ** 2:.1f} MB" if metric.endswith('_bytes') else f"{value / 3600:.2f} h"
             print(f"  {metric}: {shown}")

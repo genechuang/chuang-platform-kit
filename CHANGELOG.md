@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.4 - unreleased
+
+Additive; no host call site changes. Both from the ledger project's first real run of 0.5.3 (ChuangFinance, 10/8/26 PT).
+
+- `neon.cap_compute()`: a fresh free-plan endpoint sits at 1-1 CU, so `--cap-cu 0.25` was refused ("autoscaling limit
+  min is larger than max"); when the caller set no floor, the refused PATCH is sent once more with the floor lowered to
+  the ceiling. A floor the caller did set is never second-guessed.
+- `neon.month_to_date()`: `/consumption_history` answers 403 to a personal API key; it then falls back to the project
+  object's own period counters (`project_usage()`: the same four metrics for the current billing period) and tags the
+  answer `source`; `--usage` says which it printed.
+
 ## 0.5.3 - 2026-10-08 PT
 
 The same code as 0.5.2 with its suites green: 0.5.2 was tagged while `test-timecheck.py` failed on the
