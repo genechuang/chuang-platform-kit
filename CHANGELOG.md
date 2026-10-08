@@ -26,6 +26,22 @@ owns its source (SMAD PickleBot's `docs/config-audit.md` is the config half; thi
 - `gitguardian` (Snow White, from PickleBot's watchdog script): `incidents()`, `open_incidents()`, `with_occurrences()`,
   `detector()`, `files()`, and `ignore(key, id, reason, note)` / `resolve(key, id, note)` — the last two need a key
   with `incidents:write`, refused as PermissionError otherwise.
+- `gmail_codes` (ChuangFinance, from its portal sign-ins): `wait_for_code(service, query, since_epoch, pattern, attempts=24, pause=5.0)` — the one-time code a
+  portal emails during a sign-in, read from Gmail: polls newest-first for a mail matching `query` stamped after the
+  sign-in started (a minute of grace), answers the pattern's first group or whole match, None after the attempts. The
+  body is the text/plain part, else the HTML stripped (entities decoded, script/style dropped), else the snippet; `sleep`
+  is injectable. Standard library only; the Gmail service is the host's. Lifted from ChuangFinance's four copies (SCE,
+  State Farm, Monarch, the Jacobson portal).
+- `clock` (ChuangFinance): `human_day(day)` -> `10/5/26`, `human_time(d, weekday=True, tz_word=False)` -> `Wed 10/7/26 7:00 AM PT`
+  (a naive datetime is UTC), `day_of(stamp)` -> the kit-zone calendar day of a machine timestamp, `tz_label()` -> `PT`
+  in either season (US zones; others keep their own name). Each takes `tz=`; `CHUANG_PLATFORM_TZ` stays the default.
+  Lifted from ChuangFinance's `config.py` (`human_pt` / `human_day` / `pt_day`).
+- `timecheck` (ChuangFinance): `scan(paths)` finds UTC days in disguise — `date.today()`, `datetime.today()`, a zoneless
+  `datetime.now()`, `utcnow()`, a UTC midnight, `.date()` off a UTC instant, a fixed `timedelta(hours=7)` — and any UTC
+  use on a line without `# utc-ok:` / `# local-ok:`; strings and comments are not code (tokenized). `python -m
+  chuang_platform_kit.timecheck src tests` from a shell or CI, exit 1 on findings. From ChuangFinance's
+  `tests/test_time_rules.py` and SMAD PickleBot's `tests/test-pacific-days.py`; the kit's own tree passes it (one
+  `utc-ok:` added in `whatsapp_publisher`).
 
 ## 0.4.0 - 2026-10-08 PT
 

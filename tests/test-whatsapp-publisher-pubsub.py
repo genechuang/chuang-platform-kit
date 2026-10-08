@@ -58,7 +58,7 @@ class Cap(logging.Handler):
 
 class FixedDT(datetime):
     @classmethod
-    def utcnow(cls):
+    def utcnow(cls):  # utc-ok: the fake the publisher's instant stamp reads
         return datetime(2026, 10, 2, 16, 0, 0)
 
 

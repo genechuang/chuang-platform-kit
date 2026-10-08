@@ -69,7 +69,7 @@ def publish_whatsapp_message(message: WhatsAppMessage) -> str:
     if not message.correlation_id:
         message.correlation_id = str(uuid.uuid4())
     if not message.timestamp:
-        message.timestamp = datetime.utcnow().isoformat()
+        message.timestamp = datetime.utcnow().isoformat()  # utc-ok: an instant on the record, never a calendar day
 
     # Import here to allow module to load without google-cloud-pubsub
     # (useful for local development/testing)
