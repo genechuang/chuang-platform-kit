@@ -2,7 +2,7 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
-## 0.5.0 - unreleased
+## 0.5.0 - 2026-10-08 PT
 
 Additive; no host call site changes. Gene's call, 10/8/26: PickleBot's working patterns move into the kit so
 ChuangFinance can put its ledger and jobs in the cloud on the same ones. Each module is lifted by the session that

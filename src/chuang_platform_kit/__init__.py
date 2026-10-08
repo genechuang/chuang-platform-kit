@@ -27,4 +27,4 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.4.0'
+__version__ = '0.5.0'
