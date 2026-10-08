@@ -28,6 +28,8 @@ dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3"]
 monitoring = ["sentry-sdk>=2.20,<3"]
 # The OpenFeature provider over a Config (config.provider()); Config itself needs nothing.
 config = ["openfeature-sdk>=0.7,<1"]
+# Postgres (db.py): psycopg 3 with the bundled libpq. SQLAlchemy, for db.engine(), is the host's own pin.
+db = ["psycopg[binary]>=3.1"]
 
 [project.urls]
 Homepage = "https://github.com/genechuang/chuang-platform-kit"

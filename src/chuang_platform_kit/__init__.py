@@ -17,6 +17,8 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   monitoring         errors and traces to Sentry, scrubbed, a no-op without a DSN (the `monitoring` extra)
   config             a versioned configuration document read at runtime, cached, with a change signal, and an
                      OpenFeature provider over it (the `config` extra)
+  db                 Postgres on a serverless host: a connection retried while the endpoint wakes, a pooled SQLAlchemy
+                     engine over it (the `db` extra installs psycopg 3)
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.

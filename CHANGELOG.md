@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.0 - unreleased
+
+Additive; no host call site changes.
+
+- `db`: Postgres on a serverless host (Neon) — `connect(url)` opens one psycopg 3 connection with a connect timeout and
+  retries an OperationalError while a sleeping endpoint wakes (`retries`, `wait` doubling, each at WARNING, redacted);
+  `engine(url)` is a SQLAlchemy engine (the host's dependency, imported on the call) over a small pre-ping pool whose
+  every connection is made by `connect()`; `sqlalchemy_url(url)` names the psycopg 3 driver. The URL is the argument or
+  `DATABASE_URL`; `NoDatabaseUrl` when neither. Lifted from SMAD PickleBot's `services/api/db.py`.
+- `redact`: `DATABASE_URL` is a secret name, and a connection URL's password is masked on its own as well as inside the
+  URL (a driver's error quotes it alone); `db.connect()` registers the URL it is given as a secret value.
+- The `db` extra installs `psycopg[binary]`.
+
 ## 0.4.0 - 2026-10-08 PT
 
 Additive; no host call site changes.

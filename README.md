@@ -18,6 +18,7 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `clock` | The kit's time zone: `CHUANG_PLATFORM_TZ`, Pacific by default. |
 | `monitoring` | Errors and traces to Sentry behind our own functions: `init(dsn, environment, release, service)` (a no-op without a DSN), `capture()`, `span()`, `transaction()`, `flush()`. Every event and breadcrumb is scrubbed (`redact()`, emails, phone numbers), PII off. Install with the `monitoring` extra. |
 | `config` | A versioned configuration document read at runtime from one source: `Config(fetch, defaults, fallback, ttl)` with `get('a.b')`, `typed()`, `version`, `mark_dirty()` (the change signal), `on_change()`; a failed read keeps the last document and waits before retrying; a fallback (the host's environment) answers before any document and disagrees at WARNING. `etag()` / `unchanged()` for a conditional GET. `provider(cfg)` is an OpenFeature provider over it (the `config` extra), so a flag service can replace the document later without touching call sites. |
+| `db` | Postgres on a serverless host (Neon): `connect(url)` (psycopg 3, a connect timeout, an OperationalError retried while the endpoint wakes), `engine(url)` (a SQLAlchemy engine over a small pre-ping pool that connects through `connect()`), `sqlalchemy_url()`. The URL or `DATABASE_URL`, masked by `redact` with its password. Install with the `db` extra; SQLAlchemy is the host's. |
 
 ## Install
 

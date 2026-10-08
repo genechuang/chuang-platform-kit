@@ -36,6 +36,7 @@ from its own config module.
 import json
 import os
 import re
+from urllib.parse import unquote
 
 MASK = '***'
 
@@ -46,6 +47,7 @@ SECRET_ENV_NAMES = (
     'GREENAPI_API_TOKEN', 'GREENAPI_WEBHOOK_TOKEN', 'ANTHROPIC_API_KEY',
     'GITHUB_TOKEN', 'GITHUB_PAT', 'GH_TOKEN', 'GH_PAT_TOKEN', 'GH_BILLING_TOKEN', 'GCP_ACCESS_TOKEN',
     'GMAIL_OAUTH_TOKEN_JSON', 'GMAIL_OAUTH_CLIENT_JSON', 'GOOGLE_CREDENTIALS_JSON',
+    'DATABASE_URL',   # a connection URL carries its password (db.py); the password alone is masked too
 )
 # ...and any variable whose name has this shape (a host's VENMO_ACCESS_TOKEN,
 # ATHENAEUM_PASSWORD, SMAD_GOOGLE_CREDENTIALS_JSON, GOOGLE_GEOCODER_KEY are all
@@ -123,12 +125,21 @@ def secret_values(env: dict = None) -> list:
     return sorted(vals, key=len, reverse=True)
 
 
+_URL_PASSWORD = re.compile(r'^[a-z][a-z0-9+.-]*://[^/?#@]*?:([^/?#@]+)@', re.I)
+
+
 def _secret_strings(v: str) -> list:
     """The strings to mask for one secret value: a JSON credential contributes
-    its secret fields (the rest of it is addresses, not keys), anything else
-    contributes itself when it is long enough not to shred ordinary text."""
+    its secret fields (the rest of it is addresses, not keys), a URL with a
+    password (postgresql://user:password@host/db) contributes the password on
+    its own as well, since a driver's error quotes it without the URL, anything
+    else contributes itself when it is long enough not to shred ordinary text."""
     if not v:
         return []
+    m = _URL_PASSWORD.match(v)
+    if m:
+        password = unquote(m.group(1))
+        return [v] + [pw for pw in {m.group(1), password} if len(pw) >= MIN_SECRET_LEN]
     if v.startswith('{'):
         try:
             doc = json.loads(v)
