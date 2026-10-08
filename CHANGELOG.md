@@ -2,9 +2,21 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
-## 0.5.2 - unreleased
+## 0.5.2 - 2026-10-08 PT
 
 Additive; no host call site changes.
+
+- `cache` (Snow White, from PickleBot's API; Gene, 10/8/26: the Neon near-miss safeguards in the kit for
+  ChuangFinance's ledger): answers kept for a TTL (`get`/`put`/`cached`), dropped by a write (`clear()`,
+  `clear(prefix)`), a per-caller `throttle(key, limit, window)` answering the seconds to wait, and `once(key,
+  window)` for a warning said once a minute. Standard library; `clock` is the seam.
+- `neon`, the metering half: `consumption(key, project_id, since, until)` sums the period's `*_bytes` and
+  `*_seconds` metrics (the storage gauge's latest), `month_to_date()` from the first of the UTC month,
+  `transfer_budget(totals, budget_bytes)` the month's transfer against a budget (the free plan's 5 GB by default,
+  warned from 80%, 'not reported' when Neon gave no transfer metric), `endpoints()` and `cap_compute(key,
+  project_id, max_cu)` the compute ceiling that bounds a paid plan's bill. CLI: `--usage [--budget-gb]` prints the
+  month and provisions nothing; `--cap-cu` caps after a provision.
+- `docs/metered-database.md`: the rules from the near-miss, each with its kit piece, and the ledger port's own.
 
 - `neon` (ChuangFinance): a personal API key must name the organization on every project call - Neon answered 400 to
   the first real run (Gene, 10/8/26 2:2x PM PT) because `org_id` was never sent. `organizations(key)` reads

@@ -209,6 +209,82 @@ def provision(key, name, region_id=DEFAULT_REGION, pg_version=DEFAULT_PG_VERSION
             'host': host_of(uri), 'created_project': created, 'created_database': made_db, 'connection_uri': uri}
 
 
+FREE_TRANSFER_BYTES = 5 * 1024 ** 3   # the free plan's monthly public network transfer; past it the database suspends
+
+
+def endpoints(key, project_id, opener=None):
+    """The project's compute endpoints (one read-write per branch)."""
+    return (_call(f'/projects/{project_id}/endpoints', key, opener=opener) or {}).get('endpoints') or []
+
+
+def cap_compute(key, project_id, max_cu, min_cu=None, endpoint_id=None, opener=None):
+    """Cap the project's compute at `max_cu` (and floor it at `min_cu`) on `endpoint_id`,
+    or on every endpoint when None: the answer is the endpoints as Neon shows them
+    afterwards. Neon's paid plans have spending notifications but no hard cap, so the
+    compute ceiling is what bounds the bill: SMAD PickleBot's Launch upgrade raised it to
+    8 CU (~$620 a month worst case) and was capped back to 0.25 CU the same hour (10/6/26)."""
+    targets = [endpoint_id] if endpoint_id else [e['id'] for e in endpoints(key, project_id, opener=opener)]
+    body = {'autoscaling_limit_max_cu': float(max_cu)}
+    if min_cu is not None:
+        body['autoscaling_limit_min_cu'] = float(min_cu)
+    return [(_call(f'/projects/{project_id}/endpoints/{eid}', key, 'PATCH', {'endpoint': body}, opener=opener) or {}).get('endpoint') or {}
+            for eid in targets]
+
+
+def consumption(key, project_id, since, until, org_id=None, granularity='daily', opener=None):
+    """The project's metered consumption between `since` and `until` (RFC 3339 UTC stamps),
+    summed over the period: every `*_bytes` and `*_seconds` metric Neon reports
+    (`data_transfer_bytes`, `written_data_bytes`, `compute_time_seconds`, `active_time_seconds`;
+    `synthetic_storage_size_bytes` is a gauge and answers its latest value), plus `periods`,
+    the raw answer, for anything else. A metric Neon did not report is absent, never zero."""
+    q = {'project_ids': project_id, 'from': since, 'to': until, 'granularity': granularity}
+    if org_id:
+        q['org_id'] = org_id
+    answer = _call(f'/consumption_history/projects?{urllib.parse.urlencode(q)}', key, opener=opener) or {}
+    totals = {}
+    for project in answer.get('projects') or []:
+        if project.get('project_id') not in (None, project_id):
+            continue
+        for period in project.get('periods') or []:
+            for entry in period.get('consumption') or []:
+                for metric, value in entry.items():
+                    if not isinstance(value, (int, float)) or isinstance(value, bool):
+                        continue
+                    if not (metric.endswith('_bytes') or metric.endswith('_seconds')):
+                        continue
+                    if metric == 'synthetic_storage_size_bytes':
+                        totals[metric] = value
+                    else:
+                        totals[metric] = totals.get(metric, 0) + value
+    totals['periods'] = answer.get('projects') or []
+    return totals
+
+
+def month_to_date(key, project_id, org_id=None, now=None, opener=None):
+    """This calendar month's consumption so far (UTC month, which is what Neon meters):
+    `consumption()` from the first of the month to `now`."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)   # utc-ok: Neon meters the calendar month in UTC, not a Pacific day
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    fmt = '%Y-%m-%dT%H:%M:%SZ'
+    return consumption(key, project_id, start.strftime(fmt), now.strftime(fmt), org_id=org_id, opener=opener)
+
+
+def transfer_budget(totals, budget_bytes=FREE_TRANSFER_BYTES):
+    """(used_bytes, percent, line) for the month's `data_transfer_bytes` against a budget
+    (the free plan's 5 GB by default): the line is printable, and `percent` is None when
+    Neon reported no transfer metric, so a sweep says 'not measured', never 0%."""
+    used = totals.get('data_transfer_bytes')
+    if used is None:
+        return None, None, 'network transfer: not reported by Neon for this period'
+    percent = 100.0 * used / budget_bytes if budget_bytes else None
+    gb = used / 1024 ** 3
+    line = f"network transfer: {gb:.2f} GB of {budget_bytes / 1024 ** 3:.0f} GB ({percent:.0f}%)"
+    if percent is not None and percent >= 80:
+        line += ' - WARNING: the free plan suspends the database at 100%'
+    return used, percent, line
+
+
 def _key(args):
     value = os.environ.get(args.key_env, '').strip() if args.key_env else ''
     if value:
@@ -238,14 +314,33 @@ def main(argv=None):
     ap.add_argument('--key-env', default='NEON_API_KEY', help='environment variable holding the Neon API key')
     ap.add_argument('--key-secret', default=None, help='Secret Manager project/NAME holding the key, when the variable is empty')
     ap.add_argument('--store', default=None, help='Secret Manager project/NAME to write the URL to (created when missing)')
+    ap.add_argument('--cap-cu', type=float, default=None, help='cap every endpoint of the project at this many compute units (0.25 is the smallest)')
+    ap.add_argument('--usage', action='store_true', help="print this month's metered consumption and the transfer against --budget-gb; provisions nothing")
+    ap.add_argument('--budget-gb', type=float, default=FREE_TRANSFER_BYTES / 1024 ** 3, help='the monthly transfer budget for --usage (default: the free plan, 5)')
     args = ap.parse_args(argv)
     key = _key(args)
+    if args.usage:
+        org_id = args.org or organization_id(key)
+        project = find_project(key, args.name, org_id=org_id)
+        if not project:
+            raise SystemExit(f'no Neon project named {args.name}')
+        totals = month_to_date(key, project['id'], org_id=org_id)
+        print(f"project {project['id']} ({project.get('name')}), this month to now (UTC):")
+        for metric in sorted(k for k in totals if k != 'periods'):
+            value = totals[metric]
+            shown = f"{value / 1024 ** 2:.1f} MB" if metric.endswith('_bytes') else f"{value / 3600:.2f} h"
+            print(f"  {metric}: {shown}")
+        print('  ' + transfer_budget(totals, int(args.budget_gb * 1024 ** 3))[2])
+        return 0
     made = provision(key, args.name, region_id=args.region, pg_version=args.pg, database=args.database,
                      role=args.role, org_id=args.org, pooled=args.pooled)
     verb = 'created' if made['created_project'] else 'reused'
     print(f"project {made['project_id']} ({made['project_name']}, {made['region_id']}, Postgres {made['pg_version']}): {verb}")
     print(f"database {made['database']} owned by {made['role']}: {'created' if made['created_database'] else 'reused'}")
     print(f"host {made['host']} ({'pooled' if args.pooled else 'direct'})")
+    if args.cap_cu is not None:
+        capped = cap_compute(key, made['project_id'], args.cap_cu)
+        print(f"compute capped at {args.cap_cu} CU on {len(capped)} endpoint(s)")
     if args.store:
         from . import secrets
         project, _, name = args.store.partition('/')
