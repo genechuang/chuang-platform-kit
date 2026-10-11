@@ -17,12 +17,29 @@ requests = lazy('requests')   # imported on the first call (lazy_import.py)
 
 logger = logging.getLogger(__name__)
 
+# The shared host, kept only as a name for what was retired: on 10/10/26 PT (6:30 PM onward) it
+# timed out on every call for hours while the instance's own host answered in half a second.
+# GREEN-API gives every instance its own API host (the console's "apiUrl"), named by the first
+# four digits of the instance id: https://7105.api.greenapi.com for 7105xxxxxx.
 BASE_URL = "https://api.green-api.com"
+API_URL_ENV = "GREENAPI_API_URL"
 REQUEST_TIMEOUT = 10
 
 
+def api_host(instance_id: str, env=None) -> str:
+    """The instance's API host: the GREENAPI_API_URL variable when set (the console's apiUrl, for an
+    instance whose host does not follow the pattern), else https://<first four digits>.api.greenapi.com.
+    Never the shared api.green-api.com, which went dark on 10/10/26 while the instance host worked."""
+    import os
+    override = ((env if env is not None else os.environ).get(API_URL_ENV) or '').strip().rstrip('/')
+    if override:
+        return override
+    digits = ''.join(ch for ch in str(instance_id or '') if ch.isdigit())
+    return f"https://{digits[:4]}.api.greenapi.com" if len(digits) >= 4 else BASE_URL
+
+
 def get_api_url(instance_id: str, api_token: str, method: str) -> str:
-    """Build a GREEN-API endpoint URL.
+    """Build a GREEN-API endpoint URL on the instance's own host (api_host()).
 
     Args:
         instance_id: GREEN-API instance ID
@@ -32,7 +49,7 @@ def get_api_url(instance_id: str, api_token: str, method: str) -> str:
     Returns:
         Full URL string
     """
-    return f"{BASE_URL}/waInstance{instance_id}/{method}/{api_token}"
+    return f"{api_host(instance_id)}/waInstance{instance_id}/{method}/{api_token}"
 
 
 def get_state_instance(instance_id: str, api_token: str,

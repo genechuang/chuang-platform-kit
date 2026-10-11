@@ -107,7 +107,7 @@ try:
     got = G.send_message(IID, FAKE_TOKEN, '16265551111@c.us', 'Courts booked')
     check("the positive case: sendMessage returns the API's JSON", got, {'idMessage': 'BAE5'})
     check("  posted to waInstance<id>/sendMessage/<token> with chatId and message, 10 s",
-          posts[-1], (f"https://api.green-api.com/waInstance{IID}/sendMessage/{FAKE_TOKEN}",
+          posts[-1], (f"https://7105.api.greenapi.com/waInstance{IID}/sendMessage/{FAKE_TOKEN}",
                       {'chatId': '16265551111@c.us', 'message': 'Courts booked'}, 10))
     G.send_poll(IID, FAKE_TOKEN, 'g@g.us', 'Which nights?', ['Tue', 'Thu'], multiple_answers=False, timeout=20)
     check("sendPoll: options wrapped as optionName, single answer, its timeout",
@@ -179,7 +179,13 @@ try:
     plan['get'] = [Resp(200, {'stateInstance': 'authorized'})]
     check("the positive case: the raw answer, by GET",
           (G.get_state_instance(IID, FAKE_TOKEN), gets[-1]),
-          ({'stateInstance': 'authorized'}, (f"https://api.green-api.com/waInstance{IID}/getStateInstance/{FAKE_TOKEN}", 10)))
+          ({'stateInstance': 'authorized'}, (f"https://7105.api.greenapi.com/waInstance{IID}/getStateInstance/{FAKE_TOKEN}", 10)))
+
+    print("\n-- api_host(): the instance's own host, never the shared one (10/10/26)")
+    check("the instance host from the id's first four digits; the GREENAPI_API_URL override wins; no id falls back",
+          (G.api_host('7105482623', env={}), G.api_host('7105482623', env={'GREENAPI_API_URL': 'https://1101.api.greenapi.com/'}),
+           G.api_host('', env={})),
+          ('https://7105.api.greenapi.com', 'https://1101.api.greenapi.com', G.BASE_URL))
     cap.recs.clear()
     plan['get'] = [Resp(502, text='Bad Gateway'), Resp(403, text='Forbidden'), requests.exceptions.ReadTimeout('timed out')]
     got = (G.get_state_instance(IID, FAKE_TOKEN), G.get_state_instance('', ''), G.get_state_instance(IID, FAKE_TOKEN, timeout=3))

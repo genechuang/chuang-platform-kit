@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.5 - 2026-10-11 PT
+
+Additive; no host call site changes.
+
+- `greenapi`: every call goes to the instance's own API host (`api_host()`: `https://<first four digits of the
+  instance id>.api.greenapi.com`, or the `GREENAPI_API_URL` variable when set), never the shared
+  `api.green-api.com`. From 6:30 PM PT on 10/10/26 the shared host timed out on every call for hours while the
+  instance host answered in half a second and said "authorized" (SMAD PickleBot, measured from the desktop).
+
 ## 0.5.4 - 2026-10-08 PT
 
 Additive; no host call site changes. Both from the ledger project's first real run of 0.5.3 (ChuangFinance, 10/8/26 PT).
