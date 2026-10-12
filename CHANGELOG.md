@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.5.6 - 2026-10-12 PT
+
+No host call site changes. The two items promised to ChuangFinance on 10/8/26 for the next kit change.
+
+- `timecheck`: the "fixed Pacific offset" rule no longer flags every `timedelta(hours=7|8)`. It flags one only when it
+  is a zone (`timezone(timedelta(hours=-8))`) or is added to or taken from a now or a UTC instant on the same line; a
+  seven- or eight-hour duration on its own, such as ChuangFinance's `STALE_INGEST = timedelta(hours=8)`, passes.
+- `whatsapp_publisher`: the envelope's `timestamp` comes from `datetime.now(timezone.utc)`, not the deprecated
+  `utcnow()`, so it now carries its offset (`2026-10-02T16:00:00+00:00`). Nothing reads the field but logs; a host test
+  that fakes the publisher's clock fakes `now(tz)` instead of `utcnow()`.
+
 ## 0.5.5 - 2026-10-11 PT
 
 Additive; no host call site changes.

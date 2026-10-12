@@ -58,8 +58,8 @@ class Cap(logging.Handler):
 
 class FixedDT(datetime):
     @classmethod
-    def utcnow(cls):  # utc-ok: the fake the publisher's instant stamp reads
-        return datetime(2026, 10, 2, 16, 0, 0)
+    def now(cls, tz=None):  # utc-ok: the fake the publisher's instant stamp reads
+        return datetime(2026, 10, 2, 16, 0, 0, tzinfo=tz)
 
 
 published, built = [], []
@@ -98,7 +98,7 @@ try:
     check("  the JSON envelope carries the text, flags and a pinned UTC timestamp",
           (body['recipient_id'], body['content'], body['include_signature'], body['include_joke'],
            body['message_type'], body['timestamp'], body['correlation_id']),
-          ('16265551111@c.us', 'Your balance is $12', True, True, 'text_dm', '2026-10-02T16:00:00',
+          ('16265551111@c.us', 'Your balance is $12', True, True, 'text_dm', '2026-10-02T16:00:00+00:00',
            'pay-rem-2026-10-02-16265551111'))
     check("  the envelope round-trips into the sender's dataclass",
           WM.WhatsAppMessage.from_json(json.dumps(body)).message_type, WM.MessageType.TEXT_DM)

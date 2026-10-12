@@ -27,8 +27,13 @@ FORBIDDEN = (
     ('utcnow()', re.compile(r'\butcnow\(')),
     ('a UTC midnight', re.compile(r'combine\([^\n]*tzinfo\s*=\s*(timezone\.utc|UTC)')),
     ('a day taken from a UTC instant', re.compile(r'now\(\s*(timezone\.utc|UTC)\s*\)\.date\(')),
-    ('a fixed Pacific offset (DST breaks it)', re.compile(r'timedelta\(\s*hours\s*=\s*-?[78]\s*\)')),
+    ('a fixed Pacific offset (DST breaks it)', re.compile(
+        r'timezone\(\s*timedelta\(\s*hours\s*=\s*-?[78]\s*\)'
+        r'|^(?=.*(\bnow\b|(?i:utc)))(?=.*[-+]\s*timedelta\(\s*hours\s*=\s*-?[78]\s*\))')),
 )
+"""A seven- or eight-hour timedelta is an offset only when it is a zone (`timezone(timedelta(hours=-8))`) or is added to or
+taken from a now or a UTC instant on the same line; on its own it is a duration, such as an age limit
+(`STALE_INGEST = timedelta(hours=8)`, ChuangFinance 10/8/26), and passes."""
 NEEDS_REASON = re.compile(
     r'\bnow\(\s*(timezone\.utc|UTC)\s*\)|\btz\s*=\s*(timezone\.utc|UTC)\b|\btzinfo\s*=\s*(timezone\.utc|UTC)\b'
     r'|\bastimezone\(\s*(timezone\.utc|UTC)\s*\)|\btimezone\.utc\b')

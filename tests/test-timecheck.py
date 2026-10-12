@@ -52,6 +52,15 @@ check('a UTC midnight', rules('m = datetime.combine(d, time.min, tzinfo=timezone
 check('a day off a UTC instant', rules('d = datetime.now(timezone.utc).date()\n'), ['a day taken from a UTC instant'])
 check('a day off a UTC instant, UTC spelling', rules('d = datetime.now(UTC).date()\n'), ['a day taken from a UTC instant'])
 check('a fixed Pacific offset', rules('pt = now - timedelta(hours=7)\n'), ['a fixed Pacific offset (DST breaks it)'])
+check('a fixed offset off now() is caught', rules('pt = datetime.now(ZONE) + timedelta(hours=-8)\n'),
+      ['a fixed Pacific offset (DST breaks it)'])
+check('a fixed offset off a UTC instant is caught', rules('pt = event_utc - timedelta( hours = 8 )\n'),
+      ['a fixed Pacific offset (DST breaks it)'])
+check('a fixed-offset zone is caught', rules('PT = timezone(timedelta(hours=-8))\n'),
+      ['a fixed Pacific offset (DST breaks it)'])
+check('an eight-hour age on its own is a duration, not a finding', rules('STALE_INGEST = timedelta(hours=8)\n'), [])
+check('an age applied through its name is not a finding', rules('cutoff = stamp - STALE_INGEST\n'), [])
+check('a seven-hour sleep budget is not a finding', rules('budget = timedelta(hours=7)\n'), [])
 check('one finding per line, the forbidden one first', rules('d = datetime.now(UTC).date()  # x\n'), ['a day taken from a UTC instant'])
 
 print('UTC needs a reason')
