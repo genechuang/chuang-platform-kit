@@ -60,6 +60,39 @@ The same settings are read from the environment when a host prefers that: `GCS_P
 and `WHATSAPP_PUBSUB_TOPIC`, `EMAIL_SUBJECT_PREFIX` and `EMAIL_FOOTER`, `CHUANG_PLATFORM_TZ`.
 `python -m chuang_platform_kit.redact` is the same scrub as a stdin filter, for a CI step that posts text.
 
+## Claude Code hooks: the `gene-hooks` plugin
+
+This repo is also a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) with one plugin,
+`plugins/gene-hooks/`: the hooks every Claude Code session of Gene's runs. It is public so a cloud session can
+install it before it has any GitHub access.
+
+```bash
+claude plugin marketplace add genechuang/chuang-platform-kit
+claude plugin install gene-hooks@gene-hooks
+```
+
+or, committed in a project's `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": { "gene-hooks": { "source": { "source": "github", "repo": "genechuang/chuang-platform-kit" } } },
+  "enabledPlugins": { "gene-hooks@gene-hooks": true }
+}
+```
+
+| Event | Hook | What it does |
+|---|---|---|
+| every hook | `boot.sh` | runs the named script from the newest installed version, so a release reaches open sessions at their next hook |
+| UserPromptSubmit, PostToolUse | `pacific-clock.sh` | puts `Pacific clock: <day date time> PT` into context, so a time is copied, never estimated |
+| PreToolUse | `stamp-gate.sh` | refuses a tool call when the line written before it does not open with the Pacific stamp |
+| Stop | `stamp-reply.sh` / `.py` | blocks a turn whose last reply does not open and close with the stamp |
+| SessionStart, UserPromptSubmit | `unpushed-commits.sh` | names sibling repos with unpushed commits and whose they are to push |
+| SessionStart | `plugin-version.sh` | says when the install is behind a checkout of this repo beside the project |
+
+Every hook exits 0 on anything unexpected, so a broken hook never traps a session. Their suites are
+`tests/test-hooks-*.py`. The plugin has its own version (`plugins/gene-hooks/.claude-plugin/plugin.json`), bumped with
+every change under `plugins/gene-hooks/`; it needs no package tag, since no host imports it.
+
 ## Develop
 
 ```

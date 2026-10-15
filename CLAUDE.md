@@ -22,6 +22,17 @@ Modules: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
 WhatsApp send through the publisher, every log line through `setup_logging()`,
 every new secret in `redact.SECRET_ENV_NAMES`) still apply where they are used.
 
+## The `gene-hooks` plugin
+
+The repo is also a Claude Code marketplace (`.claude-plugin/marketplace.json`) holding `plugins/gene-hooks/`, the
+hooks every session of Gene's runs (Gene, 10/15/26 12:27 PM PT: the public home for the hooks, so a cloud session
+installs them at its first start; they lived in the private `claude-shared` until then, which keeps the rules, the
+skills and the agent). The kit's rule holds for it too: no project, group or session is named in it. **Every change
+under `plugins/gene-hooks/` bumps `version` in its `plugin.json` in the same commit** (installs update by version),
+and the session that bumps it installs it on the desktop at once (`claude plugin marketplace update gene-hooks`, then
+`claude plugin update gene-hooks@gene-hooks`). It needs no package tag: no host imports it. Its suites are
+`tests/test-hooks-*.py`, which CI runs with the rest.
+
 ## Releases
 
 - **Every change the hosts should pick up is a tag.** Bump `version` in

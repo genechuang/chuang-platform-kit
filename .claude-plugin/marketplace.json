@@ -1,0 +1,11 @@
+{
+  "name": "gene-hooks",
+  "owner": { "name": "Gene Chuang" },
+  "plugins": [
+    {
+      "name": "gene-hooks",
+      "source": "./plugins/gene-hooks",
+      "description": "Claude Code hooks: the Pacific clock on every prompt and tool result, stamped replies, and a check for unpushed commits."
+    }
+  ]
+}

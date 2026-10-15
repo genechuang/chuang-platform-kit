@@ -1,0 +1,4 @@
+# The gene-hooks plugin's scripts run under bash on every box, Windows included: a CRLF checkout (core.autocrlf=true)
+# breaks bash on the carriage return, so they are always checked out with LF.
+*.sh text eol=lf
+plugins/gene-hooks/** text eol=lf
