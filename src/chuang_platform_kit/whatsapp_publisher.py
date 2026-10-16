@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
+from . import pubsub
 from .whatsapp_message import (
     WhatsAppMessage,
     create_dm,
@@ -60,7 +61,7 @@ def publish_whatsapp_message(message: WhatsAppMessage) -> str:
 
     Raises:
         ValueError: If required fields are missing
-        google.api_core.exceptions.GoogleAPIError: On Pub/Sub errors
+        pubsub.PublishFailed: On Pub/Sub errors (since 0.6.0; the client library's GoogleAPIError before)
     """
     # Validate message
     message.validate()
@@ -71,28 +72,15 @@ def publish_whatsapp_message(message: WhatsAppMessage) -> str:
     if not message.timestamp:
         message.timestamp = datetime.now(timezone.utc).isoformat()  # utc-ok: an instant on the record, never a calendar day
 
-    # Import here to allow module to load without google-cloud-pubsub
-    # (useful for local development/testing)
-    from google.cloud import pubsub_v1
-
-    publisher = pubsub_v1.PublisherClient()
-    topic_path = publisher.topic_path(GCP_PROJECT_ID, WHATSAPP_TOPIC)
-
-    # Serialize message
-    data = message.to_json().encode('utf-8')
-
-    # Publish with attributes for filtering/debugging
-    future = publisher.publish(
-        topic_path,
-        data,
-        message_type=message.message_type.value,
-        source=message.source or "unknown",
-        dry_run=str(message.dry_run).lower(),
-        correlation_id=message.correlation_id
+    # Published over REST (pubsub.py, 0.6.0): no google-cloud-pubsub, no gRPC. The attributes are for
+    # filtering and debugging, as before.
+    message_id = pubsub.publish(
+        WHATSAPP_TOPIC,
+        message.to_json().encode('utf-8'),
+        project=GCP_PROJECT_ID,
+        attributes={'message_type': message.message_type.value, 'source': message.source or "unknown",
+                    'dry_run': str(message.dry_run).lower(), 'correlation_id': message.correlation_id},
     )
-
-    # Wait for publish to complete and get message ID
-    message_id = future.result()
 
     logger.info(
         f"Published WhatsApp message: type={message.message_type.value}, "

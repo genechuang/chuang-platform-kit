@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.6.0 - 2026-10-16 PT
+
+One bus for every host's Pub/Sub (Gene, 10/16/26: "build a better/generic one for all to use"). No call site has
+to change: `whatsapp_publisher`'s functions keep their signatures and return the message id as before.
+
+- `pubsub` (new): `publish()` over REST, `access_token()` (metadata server, then ADC, then gcloud, kept until a
+  minute before expiry), `envelope()` for an event, `decode()` for a delivery, `PublishFailed`. Standard library.
+- `whatsapp_publisher` publishes through `pubsub.publish`, with the same topic, body and attributes. It no longer
+  imports `google-cloud-pubsub`, and a failure is `pubsub.PublishFailed`, not the library's `GoogleAPIError`.
+- The `gcp` extra is empty: a host can drop `google-cloud-pubsub` unless it uses the library itself.
+
 ## 0.5.6 - 2026-10-12 PT
 
 No host call site changes. The two items promised to ChuangFinance on 10/8/26 for the next kit change.

@@ -4,8 +4,8 @@
 CLAUDE.md: "Every outgoing WhatsApp message goes through whatsapp_publisher
 with a deterministic correlation_id per target and part" -- the sender dedups
 on it, so a Pub/Sub retry or a re-run cannot double-post. The publisher was
-41% covered and the envelope 58% (2026-10-02 PT). With a fake pubsub_v1 (no
-Pub/Sub client is ever built), this pins:
+41% covered and the envelope 58% (2026-10-02 PT). With a fake pubsub.publish (the REST publish of 0.6.0;
+nothing reaches Pub/Sub), this pins:
   - the topic (whatsapp-messages in smad-pickleball), the JSON envelope, and
     the attributes the sender filters on: message_type, source ('unknown' when
     none), dry_run as 'true'/'false', and the correlation_id passed through
@@ -22,7 +22,6 @@ import json
 import logging
 import os
 import sys
-import types
 import uuid
 from datetime import datetime
 
@@ -62,27 +61,17 @@ class FixedDT(datetime):
         return datetime(2026, 10, 2, 16, 0, 0, tzinfo=tz)
 
 
-published, built = [], []
+published = []
 
 
-class FakePublisher:
-    def __init__(self):
-        built.append(self)
-
-    def topic_path(self, project, topic):
-        return f"projects/{project}/topics/{topic}"
-
-    def publish(self, topic, data, **attrs):
-        published.append((topic, json.loads(data.decode('utf-8')), attrs))
-        return types.SimpleNamespace(result=lambda: f"msg-{len(published)}")
+def fake_publish(topic, data, *, project, attributes=None, **kw):
+    """pubsub.publish's shape (0.6.0: REST, no client library)."""
+    published.append((f"projects/{project}/topics/{topic}", json.loads(data.decode('utf-8')), attributes, kw))
+    return f"msg-{len(published)}"
 
 
-fake_pubsub = types.ModuleType('google.cloud.pubsub_v1')
-fake_pubsub.PublisherClient = FakePublisher
-import google.cloud as _gc  # noqa: E402
-_saved_mod, _saved_attr = sys.modules.get('google.cloud.pubsub_v1'), getattr(_gc, 'pubsub_v1', None)
-sys.modules['google.cloud.pubsub_v1'] = fake_pubsub
-_gc.pubsub_v1 = fake_pubsub
+_keep_publish = WP.pubsub.publish
+WP.pubsub.publish = fake_publish
 _keep_dt = WP.datetime
 WP.datetime = FixedDT
 TOPIC = 'projects/smad-pickleball/topics/whatsapp-messages'
@@ -90,7 +79,7 @@ try:
     print("\n-- send_dm(): the envelope and attributes on the topic")
     mid = WP.send_dm('16265551111@c.us', 'Your balance is $12', source='payment-reminder',
                      include_signature=True, include_joke=True, correlation_id='pay-rem-2026-10-02-16265551111')
-    topic, body, attrs = published[0]
+    topic, body, attrs = published[0][:3]
     check("the positive case: published to whatsapp-messages, the Pub/Sub id returned", (mid, topic), ('msg-1', TOPIC))
     check("  the attributes the sender filters and dedups on, correlation_id untouched",
           attrs, {'message_type': 'text_dm', 'source': 'payment-reminder', 'dry_run': 'false',
@@ -104,7 +93,7 @@ try:
           WM.WhatsAppMessage.from_json(json.dumps(body)).message_type, WM.MessageType.TEXT_DM)
 
     WP.send_group_message('120363000000@g.us', 'Courts booked', dry_run=True, correlation_id='book-1')
-    _, body, attrs = published[-1]
+    _, body, attrs = published[-1][:3]
     check("a group message: type text_group, dry_run 'true', no source -> 'unknown'",
           (attrs['message_type'], attrs['dry_run'], attrs['source'], body['recipient_id']),
           ('text_group', 'true', 'unknown', '120363000000@g.us'))
@@ -113,13 +102,13 @@ try:
     check("no correlation_id -> a fresh UUID4 in attribute and body alike",
           (str(uuid.UUID(cid)) == cid, uuid.UUID(cid).version, published[-1][1]['correlation_id'] == cid), (True, 4, True))
     WP.send_poll('120363000000@g.us', 'Which nights?', ['Tue', 'Thu'], multiple_answers=False, source='poll')
-    _, body, attrs = published[-1]
+    _, body, attrs = published[-1][:3]
     check("a poll: question, options and single-answer flag in the envelope",
           (attrs['message_type'], body['content'], body['poll_options'], body['poll_multiple_answers']),
           ('poll', 'Which nights?', ['Tue', 'Thu'], False))
     WP.send_image('120363000000@g.us', 'https://example.com/h.png', caption='Heatmap', source='survey',
                   correlation_id='heatmap-2026-10-02')
-    _, body, attrs = published[-1]
+    _, body, attrs = published[-1][:3]
     check("an image: URL and caption, its correlation_id kept (a re-run must not re-send)",
           (attrs['message_type'], body['image_url'], body['image_caption'], body['content'], attrs['correlation_id']),
           ('image', 'https://example.com/h.png', 'Heatmap', 'Heatmap', 'heatmap-2026-10-02'))
@@ -127,7 +116,8 @@ try:
     msg.timestamp = '2026-01-01T00:00:00'
     WP.publish_raw(msg)
     check("publish_raw(): a caller's own timestamp is kept", published[-1][1]['timestamp'], '2026-01-01T00:00:00')
-    check("one client per publish", len(built), len(published))
+    check("no ordering key: the global endpoint, as the client library used", [p[3] for p in published], [{}] * len(published))
+    check("no client library is imported", 'google.cloud.pubsub_v1' in sys.modules, False)
 
     print("\n-- validate(): a bad message never reaches Pub/Sub")
     n = len(published)
@@ -148,15 +138,7 @@ try:
     check("  none of them published", len(published), n)
 finally:
     WP.datetime = _keep_dt
-    if _saved_mod is None:
-        sys.modules.pop('google.cloud.pubsub_v1', None)
-    else:
-        sys.modules['google.cloud.pubsub_v1'] = _saved_mod
-    if _saved_attr is None:
-        if hasattr(_gc, 'pubsub_v1'):
-            delattr(_gc, 'pubsub_v1')
-    else:
-        _gc.pubsub_v1 = _saved_attr
+    WP.pubsub.publish = _keep_publish
 
 print("\n-- the envelope: to_dict / from_dict")
 d = WM.create_poll('g@g.us', 'Q?', ['a', 'b'], source='s').to_dict()

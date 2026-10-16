@@ -11,6 +11,8 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   request_scope      a per-request cache that is dropped when the request ends
   whatsapp_message   the message shape every WhatsApp send is built from
   whatsapp_publisher publish a WhatsApp message to Pub/Sub with a deterministic correlation id
+  pubsub             Pub/Sub without the client library: a REST publish, one token chain, an event envelope, a
+                     delivery decoder
   greenapi           the GREEN-API transport: send, poll the instance state, retry a connect timeout
   email_notify       send mail through Gmail, redacted, with a throttle for repeated notices
   clock              the kit's time zone (CHUANG_PLATFORM_TZ, Pacific by default)
@@ -32,4 +34,4 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.5.6'
+__version__ = '0.6.0'

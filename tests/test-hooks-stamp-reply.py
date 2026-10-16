@@ -32,7 +32,7 @@ def line(kind, content, **kw):
 
 PROMPT = line('user', 'what next?')
 TOOL_RESULT = line('user', [{'type': 'tool_result', 'content': 'ok'}])
-NOON = datetime(2026, 10, 13, 12, 49, tzinfo=timezone.utc)   # 5:49 AM PDT
+NOON = datetime(2026, 10, 13, 12, 49, tzinfo=timezone.utc)   # 5:49 AM PDT; utc-ok: the hook's clock input is an instant
 
 
 def tail(lines):
@@ -60,7 +60,7 @@ check('  the last text of the turn is the one read, past tool calls',
                          line('assistant', [{'type': 'text', 'text': 'All done.'}])]), NOON)['decision'], 'block')
 check('  bold and lower case stamps count', [bool(S.STAMP.match(t)) for t in ('**5:49 AM PT**', '12:01am: x', 'At 5:49 AM', '5:49')],
       [True, True, False, False])
-check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)
+check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)  # utc-ok: an instant in, Pacific out
 # the real script: any error exits 0 with no output (never traps a session)
 r = subprocess.run([sys.executable, PATH], input='not json', capture_output=True, text=True)
 check('  bad input: exit 0, nothing printed', (r.returncode, r.stdout), (0, ''))

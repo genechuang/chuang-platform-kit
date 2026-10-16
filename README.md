@@ -13,6 +13,7 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `request_scope` | A per-request cache (`cached`, `drop`, `scope()`): read a thing once per request, never across requests. |
 | `whatsapp_message` | The message shape every WhatsApp send is built from. |
 | `whatsapp_publisher` | Publish a WhatsApp message to a Pub/Sub topic with a deterministic correlation id per target and part, so a sender can dedupe retries and nothing goes out uncounted. |
+| `pubsub` | Pub/Sub without the client library or gRPC: `publish(topic, data, project=, attributes=, ordering_key=)` is one REST POST (the regional endpoint with an ordering key), a 5xx or dropped connection tried once more; `access_token()` from the metadata server on Google Cloud, else Application Default Credentials, else `gcloud`, kept until it nears expiry; `envelope(type, data, source=, subject=, actor=, correlation_id=)` is an event's shape; `decode(delivery)` reads a push body or an Eventarc CloudEvent. Standard library. |
 | `greenapi` | The GREEN-API transport: send, poll the instance state, retry a connect timeout, never log the URL (the token is in its path). |
 | `email_notify` | Send mail through Gmail, redacted, with a throttle for repeated notices and dated subjects. `send_message(service, to, subject, text)` sends through a Gmail service the host built and returns the message id, for hosts that keep their own OAuth token and record delivery. |
 | `gmail_codes` | `wait_for_code(service, query, since_epoch, pattern)`: the one-time code a portal emails during a sign-in, read from Gmail newest-first (plain text, else HTML stripped, else the snippet), a mail older than the sign-in skipped, None after the attempts. Standard library only; the Gmail service is the host's. |
@@ -40,7 +41,8 @@ A slim container image has no `git`, so `git+https` fails there; pin the tag's t
 chuang-platform-kit[gmail] @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v0.2.0.tar.gz
 ```
 
-`gcp` adds the Pub/Sub client the publisher needs; `gmail` adds the Google API client the email sender needs.
+`gmail` adds the Google API client the email sender needs. `gcp` is empty since 0.6.0: Pub/Sub goes over REST
+(`pubsub`), so the publisher needs no client library.
 Hosts that already carry those libraries install the bare kit. On Windows the kit pulls `tzdata` for `clock`.
 
 ## Name the host
