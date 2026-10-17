@@ -41,14 +41,17 @@ def tail(lines):
 
 # the positive case first: a stamped reply lets the turn end
 check('the positive case: a reply opening and closing with the stamp ends the turn',
-      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT\n\nDone.\n\n— 5:49 AM PT'}])]), NOON), None)
-out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT\n\nDone, pushed.'}])]), NOON)
+      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON), None)
+out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone, pushed.'}])]), NOON)
 check('  opening stamp but none at the bottom blocks, asking for the closing line (Gene, 10/14/26 1:54 AM)',
       ((out or {}).get('decision'), 'did not close' in (out or {}).get('reason', ''), '— 10/13/26 5:49 AM PT' in (out or {}).get('reason', '')),
       ('block', True, True))
 check('  a one-line stamped reply counts as both (the recovery line ends the loop)',
-      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT done, see above'}])]), NOON), None)
-check('  the closing stamp may sit anywhere on the last line', S.ends_stamped('text\n\n*— 5:49 AM PT*\n'), True)
+      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT done, see above'}])]), NOON), None)
+check('  the closing stamp may sit anywhere on the last line', S.ends_stamped('text\n\n*— 10/13/26 5:49 AM PT*\n'), True)
+out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 5:49 AM PT'}])]), NOON)
+check('  a closing line with the time alone blocks (Gene, 10/17/26 5:56 AM PT: "— 5:54 AM PT" passed 1.1.0, "still old hook. Why?")',
+      ((out or {}).get('decision'), 'did not close' in (out or {}).get('reason', '')), ('block', True))
 out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': 'Done, pushed.'}])]), NOON)
 check('  an unstamped reply blocks with the clock now', (out or {}).get('decision'), 'block')
 check('  the reason carries the Pacific stamp', '5:49 AM PT' in (out or {}).get('reason', ''), True)
@@ -56,15 +59,14 @@ check('  never twice in a row', S.decide({'stop_hook_active': True}, tail([PROMP
 check('  a turn with no text since the prompt ends', S.decide({}, tail([line('assistant', [{'type': 'text', 'text': 'old'}]), PROMPT,
                                                                       line('assistant', [{'type': 'tool_use', 'name': 'Bash'}]), TOOL_RESULT]), NOON), None)
 check('  the last text of the turn is the one read, past tool calls',
-      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:48 AM PT checking\n— 5:48 AM PT'}]), TOOL_RESULT,
+      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:48 AM PT checking\n— 10/13/26 5:48 AM PT'}]), TOOL_RESULT,
                          line('assistant', [{'type': 'text', 'text': 'All done.'}])]), NOON)['decision'], 'block')
-check('  bold and lower case stamps count', [bool(S.STAMP.match(t)) for t in ('**5:49 AM PT**', '12:01am: x', 'At 5:49 AM', '5:49')],
+check('  bold and lower case stamps count', [bool(S.STAMP.match(t)) for t in ('**10/13/26 5:49 AM PT**', '10/13/26 12:01am: x', 'At 10/13/26 5:49 AM', '10/13/26 5:49')],
       [True, True, False, False])
-check('  the date may lead the time (Gene, 10/17/26: "add date too mm/dd/yy"), opening and closing alike',
-      ([bool(S.STAMP.match(t)) for t in ('10/17/26 5:21 AM PT', '**10/17/26 5:21 AM PT**', '10/17/2026 5:21 am', '10/17/26')],
-       S.ends_stamped('done\n\n— 10/17/26 5:21 AM PT'),
-       S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON)),
-      ([True, True, True, False], True, None))
+check('  the date is required before the time (Gene, 10/17/26: "add date too mm/dd/yy"), opening and closing alike',
+      ([bool(S.STAMP.match(t)) for t in ('10/17/26 5:21 AM PT', '**10/17/26 5:21 AM PT**', '10/17/2026 5:21 am', '10/17/26', '5:21 AM PT')],
+       [S.ends_stamped(t) for t in ('done\n\n— 10/17/26 5:21 AM PT', 'done\n\n— 5:21 AM PT', 'done — 10/17/26 5:21 AM PT')]),
+      ([True, True, True, False, False], [True, False, True]))
 check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)  # utc-ok: an instant in, Pacific out
 # the real script: any error exits 0 with no output (never traps a session)
 r = subprocess.run([sys.executable, PATH], input='not json', capture_output=True, text=True)

@@ -42,9 +42,8 @@ verdict=$(tail -c 262144 "$t" | awk '
   END {
     if (last == "") { print "ok"; exit }
     gsub(/^([ \t]|\\n)+/, "", last); sub(/^\*\*/, "", last)
-    # The date may lead the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"): "10/17/26 5:21 AM PT".
-    sub(/^[0-9][0-9]?\/[0-9][0-9]?\/[0-9][0-9]([0-9][0-9])?[ \t]+/, "", last)
-    print (last ~ /^[0-9][0-9]?:[0-9][0-9] ?(AM|PM|am|pm)/) ? "ok" : "no " id
+    # The date leads the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"), required since 1.2.0: "10/17/26 5:21 AM PT".
+    print (last ~ /^[0-9][0-9]?\/[0-9][0-9]?\/[0-9][0-9]([0-9][0-9])?[ \t]+[0-9][0-9]?:[0-9][0-9] ?(AM|PM|am|pm)/) ? "ok" : "no " id
   }')
 case "$verdict" in no*) ;; *) exit 0 ;; esac
 id="${verdict#no }"

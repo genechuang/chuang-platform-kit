@@ -3,8 +3,8 @@
 stop hook to put in time stamp, make sure it doesn't add overhead to prompt response").
 
 A hook cannot edit what a session wrote; it can only stop the turn from ending. So when the turn's final text
-does not start with `h:mm AM|PM`, with or without the date before it (`10/17/26 5:21 AM PT`, the form since
-10/17/26; the clock hook hands every prompt and tool result the date and the time), this answers
+does not start with `mm/dd/yy h:mm AM|PM` (`10/17/26 5:21 AM PT`, the form since 10/17/26, required since 1.2.0;
+the clock hook hands every prompt and tool result the date and the time), or end with it, this answers
 {"decision": "block"} with the clock now, and the session adds one stamped line. Only the final message of a
 turn is checked: the one Gene reads on his phone when the turn ends, and the one replies to a background
 agent or a peer message used to miss (no prompt fires there).
@@ -19,9 +19,11 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 
-# The date may lead the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"): "10/17/26 5:21 AM PT".
-STAMP = re.compile(r'^\s*(\*\*)?(\d{1,2}/\d{1,2}/\d{2,4}\s+)?\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b')
-END_STAMP = re.compile(r'\b\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b')
+# The date leads the time, opening and closing (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"; 5:56 AM, a closing
+# "— 5:54 AM PT" passed 1.1.0, which took the date as optional: "still old hook. Why?"). Required since 1.2.0.
+DATE_TIME = r'\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b'
+STAMP = re.compile(r'^\s*(\*\*)?' + DATE_TIME)
+END_STAMP = re.compile(r'(?<![\d/])' + DATE_TIME)
 TAIL = 256 * 1024
 
 
@@ -85,8 +87,9 @@ def decide(event, read_tail, now=None):
 
 
 def ends_stamped(reply: str) -> bool:
-    """The reply's last non-empty line carries a time (`— 1:54 AM PT`): Gene, 10/14/26 1:54 AM PT, "Add timestamp at
-    bottom too", after his phone showed a long reply scrolled to its end with the opening stamp off screen."""
+    """The reply's last non-empty line carries the date and the time (`— 10/17/26 1:54 AM PT`): Gene, 10/14/26 1:54 AM PT,
+    "Add timestamp at bottom too", after his phone showed a long reply scrolled to its end with the opening stamp off
+    screen; 10/17/26, the date on the closing line too."""
     lines = [ln for ln in reply.strip().splitlines() if ln.strip()]
     return bool(lines) and bool(END_STAMP.search(lines[-1]))
 

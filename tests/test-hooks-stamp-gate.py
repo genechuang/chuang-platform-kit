@@ -74,15 +74,15 @@ def gate(lines, extra=None):
 
 
 def main():
-    check('a stamped line before the call passes', gate([prompt(), text('12:45 AM PT Checking the deploy now:'), tool_use()])[0], 0)
+    check('a stamped line before the call passes', gate([prompt(), text('10/17/26 12:45 AM PT Checking the deploy now:'), tool_use()])[0], 0)
     code, err = gate([prompt(), text('Checking the deploy now:'), tool_use()])
     check('an unstamped line is refused (exit 2) with the clock to copy', (code, 'Stamp first' in err, ' PT"' in err), (2, True, True))
-    check('  bold and leading blank lines still count as a stamp', gate([prompt(), text('\n\n**9:05 PM PT** next:'), tool_use()])[0], 0)
-    check('  a lowercase am/pm counts', gate([prompt(), text('9:05 pm PT: next'), tool_use()])[0], 0)
-    check('  no space before AM counts', gate([prompt(), text('7:05AM PT go'), tool_use()])[0], 0)
-    check('  the date before the time counts (Gene, 10/17/26: "add date too mm/dd/yy")',
-          [gate([prompt(), text(t), tool_use()])[0] for t in ('10/17/26 5:21 AM PT next', '**10/17/2026 5:21 pm PT** go', '10/17/26 next')],
-          [0, 0, 2])
+    check('  bold and leading blank lines still count as a stamp', gate([prompt(), text('\n\n**10/17/26 9:05 PM PT** next:'), tool_use()])[0], 0)
+    check('  a lowercase am/pm counts', gate([prompt(), text('10/17/26 9:05 pm PT: next'), tool_use()])[0], 0)
+    check('  no space before AM counts', gate([prompt(), text('10/17/26 7:05AM PT go'), tool_use()])[0], 0)
+    check('  the date is required before the time (Gene, 10/17/26: "add date too mm/dd/yy"; 5:56 AM: a dateless stamp "still old hook")',
+          [gate([prompt(), text(t), tool_use()])[0] for t in ('10/17/26 5:21 AM PT next', '**10/17/2026 5:21 pm PT** go', '10/17/26 next', '5:21 AM PT next')],
+          [0, 0, 2, 2])
     dated_err = gate([prompt(), text('no stamp here'), tool_use()])[1]
     check('  the refusal names the dated form', bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT"', dated_err)), True)
 
@@ -93,7 +93,7 @@ def main():
     check('  but only once: the same line never blocks again', s.gate(late)[0], 0)
     check('  a new unstamped line after it is refused again', s.gate(late + [TOOL_RESULT, text('31 of 31 pass.'), tool_use()])[0], 2)
     check('the newest text decides: stamped after an unstamped one passes',
-          gate([prompt(), text('unstamped'), TOOL_RESULT, text('12:46 AM PT stamped now'), tool_use()])[0], 0)
+          gate([prompt(), text('unstamped'), TOOL_RESULT, text('10/17/26 12:46 AM PT stamped now'), tool_use()])[0], 0)
     check('a real prompt starts over: unstamped text from before it is not checked',
           gate([text('old unstamped words'), TOOL_RESULT, prompt('next please'), tool_use()])[0], 0)
     check('an isMeta injection is not a prompt: the unstamped line before it is still refused',
@@ -107,7 +107,7 @@ def main():
     check('a missing transcript passes', r.returncode, 0)
 
     s = Session()
-    lines = [prompt(), text('12:45 AM PT ok'), tool_use()]
+    lines = [prompt(), text('10/17/26 12:45 AM PT ok'), tool_use()]
     t0 = time.perf_counter()
     for _ in range(3):
         s.gate(lines)
