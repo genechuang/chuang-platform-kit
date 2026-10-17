@@ -44,7 +44,7 @@ check('the positive case: a reply opening and closing with the stamp ends the tu
       S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT\n\nDone.\n\n— 5:49 AM PT'}])]), NOON), None)
 out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT\n\nDone, pushed.'}])]), NOON)
 check('  opening stamp but none at the bottom blocks, asking for the closing line (Gene, 10/14/26 1:54 AM)',
-      ((out or {}).get('decision'), 'did not close' in (out or {}).get('reason', ''), '— 5:49 AM PT' in (out or {}).get('reason', '')),
+      ((out or {}).get('decision'), 'did not close' in (out or {}).get('reason', ''), '— 10/13/26 5:49 AM PT' in (out or {}).get('reason', '')),
       ('block', True, True))
 check('  a one-line stamped reply counts as both (the recovery line ends the loop)',
       S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '5:49 AM PT done, see above'}])]), NOON), None)
@@ -60,6 +60,11 @@ check('  the last text of the turn is the one read, past tool calls',
                          line('assistant', [{'type': 'text', 'text': 'All done.'}])]), NOON)['decision'], 'block')
 check('  bold and lower case stamps count', [bool(S.STAMP.match(t)) for t in ('**5:49 AM PT**', '12:01am: x', 'At 5:49 AM', '5:49')],
       [True, True, False, False])
+check('  the date may lead the time (Gene, 10/17/26: "add date too mm/dd/yy"), opening and closing alike',
+      ([bool(S.STAMP.match(t)) for t in ('10/17/26 5:21 AM PT', '**10/17/26 5:21 AM PT**', '10/17/2026 5:21 am', '10/17/26')],
+       S.ends_stamped('done\n\n— 10/17/26 5:21 AM PT'),
+       S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON)),
+      ([True, True, True, False], True, None))
 check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)  # utc-ok: an instant in, Pacific out
 # the real script: any error exits 0 with no output (never traps a session)
 r = subprocess.run([sys.executable, PATH], input='not json', capture_output=True, text=True)

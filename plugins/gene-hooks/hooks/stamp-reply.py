@@ -3,7 +3,8 @@
 stop hook to put in time stamp, make sure it doesn't add overhead to prompt response").
 
 A hook cannot edit what a session wrote; it can only stop the turn from ending. So when the turn's final text
-does not start with `h:mm AM|PM` (the stamp the clock hook hands every prompt and tool result), this answers
+does not start with `h:mm AM|PM`, with or without the date before it (`10/17/26 5:21 AM PT`, the form since
+10/17/26; the clock hook hands every prompt and tool result the date and the time), this answers
 {"decision": "block"} with the clock now, and the session adds one stamped line. Only the final message of a
 turn is checked: the one Gene reads on his phone when the turn ends, and the one replies to a background
 agent or a peer message used to miss (no prompt fires there).
@@ -18,7 +19,8 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 
-STAMP = re.compile(r'^\s*(\*\*)?\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b')
+# The date may lead the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"): "10/17/26 5:21 AM PT".
+STAMP = re.compile(r'^\s*(\*\*)?(\d{1,2}/\d{1,2}/\d{2,4}\s+)?\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b')
 END_STAMP = re.compile(r'\b\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b')
 TAIL = 256 * 1024
 
@@ -72,13 +74,14 @@ def decide(event, read_tail, now=None):
     if opens and closes:
         return None
     t = pacific_now(now)
-    stamp = t.strftime('%I:%M %p').lstrip('0')
+    stamp = f"{t.month}/{t.day}/{t:%y} " + t.strftime('%I:%M %p').lstrip('0')
     where = 'open' if not opens else 'close'
     return {'decision': 'block',
             'reason': f'Your reply did not {where} with the Pacific clock stamp. Send one short line, "— {stamp} PT", '
-                      f'saying the reply above is complete (do not repeat it). Every final reply opens with the stamp and '
-                      f'closes with "— h:mm AM PT" on its last line (Gene, 10/14/26: on the phone a long reply opens '
-                      f'scrolled to its end, so the opening stamp is off screen).'}
+                      f'saying the reply above is complete (do not repeat it). Every final reply opens with the stamp, '
+                      f'the date and the time, and closes with "— mm/dd/yy h:mm AM PT" on its last line (Gene, 10/14/26: '
+                      f'on the phone a long reply opens scrolled to its end, so the opening stamp is off screen; 10/17/26: '
+                      f'the date too).'}
 
 
 def ends_stamped(reply: str) -> bool:

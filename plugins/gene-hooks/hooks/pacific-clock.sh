@@ -33,8 +33,8 @@ esac
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%a %m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 [ -n "$clock" ] || exit 0
 if [ "$event" = PostToolUse ]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp (h:mm am/pm), copied, never estimated."}}' "$clock"
+  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT), copied, never estimated."}}' "$clock"
   exit 0
 fi
-printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp (h:mm am/pm). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT."}}' "$clock"
+printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT."}}' "$clock"
 exit 0

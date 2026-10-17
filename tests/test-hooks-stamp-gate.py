@@ -8,6 +8,7 @@ Run:  python tests/test-hooks-stamp-gate.py      (prints PASS/FAIL per case and 
 import itertools
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -79,6 +80,11 @@ def main():
     check('  bold and leading blank lines still count as a stamp', gate([prompt(), text('\n\n**9:05 PM PT** next:'), tool_use()])[0], 0)
     check('  a lowercase am/pm counts', gate([prompt(), text('9:05 pm PT: next'), tool_use()])[0], 0)
     check('  no space before AM counts', gate([prompt(), text('7:05AM PT go'), tool_use()])[0], 0)
+    check('  the date before the time counts (Gene, 10/17/26: "add date too mm/dd/yy")',
+          [gate([prompt(), text(t), tool_use()])[0] for t in ('10/17/26 5:21 AM PT next', '**10/17/2026 5:21 pm PT** go', '10/17/26 next')],
+          [0, 0, 2])
+    dated_err = gate([prompt(), text('no stamp here'), tool_use()])[1]
+    check('  the refusal names the dated form', bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT"', dated_err)), True)
 
     # The line just written is often not on disk yet: the previous step's unstamped line is caught one call later.
     s = Session()

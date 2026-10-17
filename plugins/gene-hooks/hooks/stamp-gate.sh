@@ -42,6 +42,8 @@ verdict=$(tail -c 262144 "$t" | awk '
   END {
     if (last == "") { print "ok"; exit }
     gsub(/^([ \t]|\\n)+/, "", last); sub(/^\*\*/, "", last)
+    # The date may lead the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"): "10/17/26 5:21 AM PT".
+    sub(/^[0-9][0-9]?\/[0-9][0-9]?\/[0-9][0-9]([0-9][0-9])?[ \t]+/, "", last)
     print (last ~ /^[0-9][0-9]?:[0-9][0-9] ?(AM|PM|am|pm)/) ? "ok" : "no " id
   }')
 case "$verdict" in no*) ;; *) exit 0 ;; esac
@@ -56,7 +58,7 @@ fi
 [ -n "$id" ] && printf '%s\n' "$id" >> "$state" 2>/dev/null
 
 # pacific-clock.sh's way: a bash builtin with the US DST rule string (msys has no zone database).
-clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%I:%M %p)T' -1 2>/dev/null)
-clock="${clock#0}"
-printf 'Stamp first: your last message opened without the Pacific time. Start every message with the stamp: write one line that starts "%s PT" (copy the clock from the latest hook line, never estimate), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp.)\n' "${clock:-<the PT clock>}" >&2
+clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%m/%d/%y %I:%M %p)T' -1 2>/dev/null)
+clock="${clock/ 0/ }"
+printf 'Stamp first: your last message opened without the Pacific date and time. Start every message with the stamp: write one line that starts "%s PT" (copy the clock from the latest hook line, never estimate), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp; 10/17/26: the date too, mm/dd/yy.)\n' "${clock:-<the PT clock>}" >&2
 exit 2

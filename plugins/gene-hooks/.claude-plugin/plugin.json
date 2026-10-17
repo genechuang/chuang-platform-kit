@@ -1,6 +1,6 @@
 {
   "name": "gene-hooks",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hooks for every Claude Code session of Gene's: a bootstrap loader (hooks/boot.sh) that runs each hook from the newest installed version, the Pacific clock on every prompt and tool result, the Stop hook that makes every final reply open and close with its stamp, the PreToolUse gate that refuses a tool call whose preceding line has no stamp, and session-start checks for unpushed commits and a stale install.",
   "author": { "name": "Gene Chuang" },
   "license": "MIT"
