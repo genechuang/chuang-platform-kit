@@ -19,7 +19,8 @@ takes it as a parameter or reads a documented environment variable
 Modules: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
 `request_scope`, `whatsapp_message`, `whatsapp_publisher`, `pubsub` (every
 publish, over REST: no host needs google-cloud-pubsub), `greenapi`,
-`email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk). The host projects' own rules about them (every
+`email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk), `push_gate` (git's pre-push gate over a
+repo's `.push-gate.toml`, `chuang-push-gate`; the hosts' hooks are shims over it). The host projects' own rules about them (every
 WhatsApp send through the publisher, every log line through `setup_logging()`,
 every new secret in `redact.SECRET_ENV_NAMES`) still apply where they are used.
 

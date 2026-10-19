@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.7.0 - 2026-10-18 PT
+
+Additive; no host call site changes. Gene, 10/18/26 11:34 PM PT, of SMAD PickleBot's pre-push gate: "can it be in
+chuang-kit?"
+
+- `push_gate` (new): git's pre-push gate over a repo's `.push-gate.toml` (`chuang-push-gate`, or
+  `python -m chuang_platform_kit.push_gate`). For each commit pushed to the guarded branch: a head that does not
+  descend from the remote's branch is refused first; each check the push touches runs, skipped when its mark answers
+  (a command or a URL), a failure refusing the push; then the branch is fetched again, and if it moved during the
+  checks the pushed commits are rebased onto it (a dirty checkout or a conflict refuses with nothing rewritten), the
+  checks whose paths the rebase changed run again, the others' marks are carried, and the push is refused with
+  "push again, the gate is satisfied". One line per decision; an override variable skips it. Standard library.
+
 ## 0.6.0 - 2026-10-16 PT
 
 One bus for every host's Pub/Sub (Gene, 10/16/26: "build a better/generic one for all to use"). No call site has

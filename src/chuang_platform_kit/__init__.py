@@ -30,8 +30,11 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      budget, and the compute cap that bounds the bill
   cache              answers a metered database must not re-send: kept for seconds, dropped by a write, a
                      per-caller throttle, a once-a-window gate (docs/metered-database.md)
+  push_gate          git's pre-push gate over a repo's .push-gate.toml: the stale-base refusal, each check skipped
+                     on its mark, and a main that moved during the checks rebased onto for the second push
+                     (`chuang-push-gate`)
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.6.0'
+__version__ = '0.7.0'

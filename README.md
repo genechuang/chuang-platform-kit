@@ -28,6 +28,8 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `google_auth` | `service(api, version, scopes, token_file=, token_env=, secret=(project, name))`: a Gmail / Drive / Sheets / People service from the first token source that parses, refreshed, the refresh written back to the file and to Secret Manager; `credentials()` is the half without the client library. The `gmail` extra. |
 | `gitguardian` | A repository's secret incidents: `open_incidents(key, repo)` with occurrences, `detector()`/`files()` (the safe parts), `ignore(key, id, reason, note)` and `resolve(key, id, note)` — those two need a key with `incidents:write` (a read-only key is a `PermissionError` naming the scope). |
 
+| `push_gate` | git's pre-push gate over a repo's `.push-gate.toml` (`chuang-push-gate`, `python -m chuang_platform_kit.push_gate`): a stale base refused first, each check skipped on its mark, and a main that moved during the checks rebased onto for the second push. See [The push gate](#the-push-gate). Standard library. |
+
 ## Install
 
 ```
@@ -94,6 +96,54 @@ or, committed in a project's `.claude/settings.json`:
 Every hook exits 0 on anything unexpected, so a broken hook never traps a session. Their suites are
 `tests/test-hooks-*.py`. The plugin has its own version (`plugins/gene-hooks/.claude-plugin/plugin.json`), bumped with
 every change under `plugins/gene-hooks/`; it needs no package tag, since no host imports it.
+
+## The push gate
+
+`push_gate` runs a repo's checks in git's pre-push hook, so a push leaves the box tested. A repo turns it on with a
+hook that calls it and a config at its root:
+
+```sh
+# .githooks/pre-push  (then: git config core.hooksPath .githooks)
+#!/bin/sh
+exec python -m chuang_platform_kit.push_gate "$@"
+```
+
+```toml
+# .push-gate.toml
+remote = "origin"
+branch = "main"
+override = "MY_PUSH_UNCHECKED"     # MY_PUSH_UNCHECKED=1 git push: no gate
+gate = ["**"]                      # a push touching none of these goes unchecked (told which marks are missing)
+
+[[check]]
+name = "tests"
+run = ["{python}", "-m", "pytest", "-q"]           # an argv; nonzero refuses the push
+paths = ["src/**", "tests/**"]                     # what its result depends on; `!x/**` excludes
+when = ["**"]                                      # what makes it run (default: its paths)
+mark_url = "https://storage.example/marks/{tree}.json"   # a 200 means it already ran for this tree; or
+# mark = ["{python}", "is_marked.py", "{sha}"]     # a command answering 0
+carry = ["{python}", "carry.py", "{old}", "{new}"] # moves the mark across a rebase
+missing = "has no test mark: CI runs the suites"   # said to a push outside `gate` without the mark
+refusal = "fix the suite, then push"
+skip_codes = [2]                                   # exits that mean "not applicable", not a failure
+```
+
+Placeholders: `{python}`, `{root}`, `{sha}`, `{tree}`, `{base}` (the remote's old sha), `{old}` / `{new}` (across
+a rebase), `{remote}`, `{branch}`. Globs: `**` any folders, `*` within one, a trailing `/` the folder.
+`paths_command` (an argv printing one glob a line) adds paths a script computes.
+
+For each commit pushed to the branch, one line per decision:
+
+1. The branch is fetched, and a head that does not descend from it is refused at once (git would refuse it after the
+   checks anyway).
+2. Each check whose `when` the push touches runs, unless its mark answers; a failure refuses the push. The checks
+   test the checkout, so the pushed commit must be its HEAD (`require_head = false` turns that off).
+3. The branch is fetched again. If it moved during the checks, the pushed commits are rebased onto it (a dirty
+   checkout or a conflict refuses the push with nothing rewritten); the checks whose `paths` the rebase changed run
+   again on the new head, the others' marks are carried; and the push is refused with "rebased onto <sha>; push
+   again, the gate is satisfied", since git pushes the sha it gave the hook. The second push clears on the marks.
+
+A config that cannot be read refuses the push; a repo without one is not gated.
 
 ## Develop
 
