@@ -9,7 +9,7 @@
 # yet when PreToolUse fires. So the gate checks the NEWEST text written since the last real prompt (a user line that
 # is neither a tool result nor an isMeta injection), looking past tool results: a miss is caught at the latest one
 # call later. A text line already refused is remembered by its uuid (a small state file per session), so one miss
-# blocks once, not every call after it.
+# blocks at most three calls, not every call after it (once until 1.3.0, which a retry slipped past).
 #
 # Cost is the design: it runs before EVERY tool call. Starting Python costs ~130 ms on the Windows desktop and every
 # extra program ~30-40 ms there (msys process start; measured 10/14/26: a 6-program first cut took 240 ms), so this
@@ -48,10 +48,13 @@ verdict=$(tail -c 262144 "$t" | awk '
 case "$verdict" in no*) ;; *) exit 0 ;; esac
 id="${verdict#no }"
 
-# Refuse each unstamped line once: its uuid goes into the session's state file.
+# Refuse each unstamped line up to three times: its uuid goes into the session's state file once per refusal.
+# Once (1.0.0 to 1.2.0) let a session that retried the call without writing a stamped line through, and the
+# unstamped line stayed on Gene's phone (10/19/26 11:01 AM PT, Black Widow's "11:00 AM PT": "Sometimes a session
+# prompt would forget date stamp"). Three refusals force the stamped line; the cap keeps a stuck session moving.
 sid="$(field session_id)" || sid=default
 state="${TMPDIR:-${TEMP:-/tmp}}/stamp-gate-${sid//[^A-Za-z0-9-]/}"
-if [ -n "$id" ] && [ -f "$state" ] && grep -qxF "$id" "$state" 2>/dev/null; then
+if [ -n "$id" ] && [ -f "$state" ] && [ "$(grep -cxF "$id" "$state" 2>/dev/null)" -ge 3 ]; then
   exit 0
 fi
 [ -n "$id" ] && printf '%s\n' "$id" >> "$state" 2>/dev/null

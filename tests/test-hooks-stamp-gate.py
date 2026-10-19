@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The PreToolUse hook plugins/gene-hooks/hooks/stamp-gate.sh: every line a session writes must open with the Pacific
-stamp; a tool call after an unstamped line is refused, once per line (Gene, 10/14/26 12:43 AM PT; the newest-text-since-
+stamp; a tool call after an unstamped line is refused, up to three times per line (Gene, 10/14/26 12:43 AM PT; the newest-text-since-
 the-prompt rule after a session found at 1:19 AM that the line just written is often not on disk at PreToolUse).
 
 Run:  python tests/test-hooks-stamp-gate.py      (prints PASS/FAIL per case and `N failure(s)`)
@@ -90,7 +90,9 @@ def main():
     s = Session()
     late = [prompt(), text('Now the Jokes screen.'), tool_use(), TOOL_RESULT, tool_use()]
     check('an unstamped line from an earlier step of this turn is refused at the next call', s.gate(late)[0], 2)
-    check('  but only once: the same line never blocks again', s.gate(late)[0], 0)
+    check('  and again, and a third time: a retry without a stamped line is still refused (1.3.0; once let it through)',
+          [s.gate(late)[0], s.gate(late)[0]], [2, 2])
+    check('  but not a fourth: the cap keeps a stuck session moving', s.gate(late)[0], 0)
     check('  a new unstamped line after it is refused again', s.gate(late + [TOOL_RESULT, text('31 of 31 pass.'), tool_use()])[0], 2)
     check('the newest text decides: stamped after an unstamped one passes',
           gate([prompt(), text('unstamped'), TOOL_RESULT, text('10/17/26 12:46 AM PT stamped now'), tool_use()])[0], 0)
