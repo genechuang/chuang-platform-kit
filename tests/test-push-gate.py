@@ -37,6 +37,8 @@ def check(label, got, want):
 ENV = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.test', GIT_COMMITTER_NAME='t',
            GIT_COMMITTER_EMAIL='t@example.test', GIT_CONFIG_NOSYSTEM='1')
 ENV.pop('PUSH_GATE_UNCHECKED', None)
+# The gate's own git calls (its rebase commits) read the process environment: a CI runner has no git identity.
+os.environ.update({k: v for k, v in ENV.items() if k.startswith('GIT_')})
 
 
 def git(cwd, *args, ok=True):
