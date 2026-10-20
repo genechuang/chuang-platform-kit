@@ -108,6 +108,23 @@ def main():
     r = subprocess.run([BASH, GATE], input=json.dumps(missing), capture_output=True, text=True, timeout=20)
     check('a missing transcript passes', r.returncode, 0)
 
+    # 1.4.0, Gene 10/20/26 12:19 AM PT: "Your time stamp is drifting badly from my iOS time" (12:22 written at 12:19).
+    def at(minutes):
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)  # utc-ok: converted to Pacific by the DST rule below
+        y = now.year
+        march = datetime(y, 3, 8, 10, tzinfo=timezone.utc)
+        nov = datetime(y, 11, 1, 9, tzinfo=timezone.utc)
+        dst = march + timedelta(days=(6 - march.weekday()) % 7) <= now < nov + timedelta(days=(6 - nov.weekday()) % 7)
+        t = now + timedelta(hours=-7 if dst else -8, minutes=minutes)
+        return f"{t.month}/{t.day}/{t:%y} " + t.strftime('%I:%M %p').lstrip('0')
+    check('drift: the clock now passes', gate([prompt(), text(f'{at(0)} PT ok'), tool_use()])[0], 0)
+    check('  an older stamp passes here (the line before a call is often not on disk yet; Stop judges behind)',
+          gate([prompt(), text(f'{at(-40)} PT ok'), tool_use()])[0], 0)
+    code, err = gate([prompt(), text(f'**{at(5)} PT** next'), tool_use()])
+    check('  five minutes ahead is refused, naming the stamp and the clock',
+          (code, 'Stamp ahead of the clock' in err, at(5) in err), (2, True, True))
+
     s = Session()
     lines = [prompt(), text('10/17/26 12:45 AM PT ok'), tool_use()]
     t0 = time.perf_counter()

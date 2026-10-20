@@ -68,6 +68,23 @@ check('  the date is required before the time (Gene, 10/17/26: "add date too mm/
        [S.ends_stamped(t) for t in ('done\n\n— 10/17/26 5:21 AM PT', 'done\n\n— 5:21 AM PT', 'done — 10/17/26 5:21 AM PT')]),
       ([True, True, True, False, False], [True, False, True]))
 check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)  # utc-ok: an instant in, Pacific out
+def reply_at(stamp):
+    return tail([PROMPT, line('assistant', [{'type': 'text', 'text': f'{stamp} PT\n\nDone.\n\n— {stamp} PT'}])])
+
+
+# 1.4.0, Gene 10/20/26 12:19 AM PT: "Your time stamp is drifting badly from my iOS time" (a reply said 12:22 at 12:19);
+# 12:22 AM: "reject timestamps more than 1 min ahead or behind".
+check('  drift: a minute ahead or a minute behind passes',
+      [S.decide({}, reply_at(s), NOON) for s in ('10/13/26 5:50 AM', '10/13/26 5:48 AM')], [None, None])
+out = S.decide({}, reply_at('10/13/26 5:52 AM'), NOON)
+check('  drift: three minutes ahead blocks, naming the clock to copy',
+      (out['decision'], '3 minute(s) ahead' in out['reason'], '"— 10/13/26 5:49 AM PT"' in out['reason']), ('block', True, True))
+out = S.decide({}, reply_at('10/13/26 5:47 AM'), NOON)
+check('  drift: two minutes behind blocks', (out['decision'], '2 minute(s) behind' in out['reason']), ('block', True))
+check('  drift: across midnight by the date', S.drift('x\n— 10/12/26 11:59 PM PT', S.pacific_now(
+    datetime(2026, 10, 13, 7, 0, tzinfo=timezone.utc))), None)  # utc-ok: 12:00 AM PDT 10/13, a minute after
+check('  drift: a four-digit year is not judged', S.drift('x\n— 10/13/2026 9:00 AM PT', S.pacific_now(NOON)), None)
+
 # the real script: any error exits 0 with no output (never traps a session)
 r = subprocess.run([sys.executable, PATH], input='not json', capture_output=True, text=True)
 check('  bad input: exit 0, nothing printed', (r.returncode, r.stdout), (0, ''))

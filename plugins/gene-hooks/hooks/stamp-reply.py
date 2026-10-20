@@ -73,10 +73,17 @@ def decide(event, read_tail, now=None):
     if not reply:
         return None
     opens, closes = bool(STAMP.match(reply)), ends_stamped(reply)
-    if opens and closes:
-        return None
     t = pacific_now(now)
     stamp = f"{t.month}/{t.day}/{t:%y} " + t.strftime('%I:%M %p').lstrip('0')
+    if opens and closes:
+        off = drift(reply, t)
+        if off is None:
+            return None
+        return {'decision': 'block',
+                'reason': f'Your reply\'s stamp is {abs(off)} minute(s) {"ahead of" if off > 0 else "behind"} the clock: it is '
+                          f'{stamp} PT now. Send one short line, "— {stamp} PT", saying the reply above is complete (do not '
+                          f'repeat it). A stamp is copied from the latest "Pacific clock:" hook line, never advanced or '
+                          f'carried by felt time (Gene, 10/20/26: "Your time stamp is drifting badly from my iOS time").'}
     where = 'open' if not opens else 'close'
     return {'decision': 'block',
             'reason': f'Your reply did not {where} with the Pacific clock stamp. Send one short line, "— {stamp} PT", '
@@ -84,6 +91,26 @@ def decide(event, read_tail, now=None):
                       f'the date and the time, and closes with "— mm/dd/yy h:mm AM PT" on its last line (Gene, 10/14/26: '
                       f'on the phone a long reply opens scrolled to its end, so the opening stamp is off screen; 10/17/26: '
                       f'the date too).'}
+
+
+AHEAD_OK, BEHIND_OK = 1, 1   # minutes (Gene, 10/20/26 12:22 AM PT: "reject timestamps more than 1 min ahead or behind")
+
+
+def drift(reply: str, now_pacific):
+    """Minutes the reply's closing stamp is off the clock (positive: ahead), or None when it is within a minute either
+    way (since 1.4.0: Gene, 10/20/26 12:19 AM PT, a phone screenshot of "12:22 AM PT" at 12:19). The
+    closing stamp is the one written last, moments before this hook runs; a stamp it cannot read is not judged."""
+    lines = [ln for ln in reply.strip().splitlines() if ln.strip()]
+    m = END_STAMP.search(lines[-1]) if lines else None
+    if not m:
+        return None
+    try:
+        stamped = datetime.strptime(re.sub(r'\s+', ' ', m.group(0)).upper().replace('AM', ' AM').replace('PM', ' PM').replace('  ', ' '),
+                                    '%m/%d/%y %I:%M %p')
+    except ValueError:
+        return None
+    off = round((stamped - now_pacific.replace(tzinfo=None, second=0, microsecond=0)).total_seconds() / 60)
+    return None if -BEHIND_OK <= off <= AHEAD_OK else off
 
 
 def ends_stamped(reply: str) -> bool:
