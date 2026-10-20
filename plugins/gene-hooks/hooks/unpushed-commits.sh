@@ -108,7 +108,7 @@ printf '%s\n' "$found" >"$cache" 2>/dev/null
 # Only your own commits are yours to push (Gene, 2026-10-13): the session a commit's
 # Session trailer names holds it for a reason you cannot see, so another session's
 # are never offered, asked about or pushed, and not mentioned unless the user asks.
-advice="Commits are pushed only by the session their Session trailer names. If any here are yours, push them when your task is done (they are invisible to other sessions and machines until then). Never ask the user whether to push another session's commits, never offer to, and never push them: that session holds them for a reason you do not know. Don't mention them unless the user asks."
+advice="Commits are pushed only by the session their Session trailer names. If any here are yours, they wait for a release order (claude-shared, Aggregate and save, Gene 10/20/26): push them to the repo's hopper branch when its release captain asks, or to main yourself only when you are the captain or the fix cannot wait. Never ask the user whether to push another session's commits, never offer to, and never push them: that session holds them for a reason you do not know. Don't mention them unless the user asks."
 if [ "$others" = 1 ]; then
   advice="$advice A worktree of another repo, or another project, is its owner's to push; message that session if it should know."
 fi
