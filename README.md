@@ -88,7 +88,7 @@ or, committed in a project's `.claude/settings.json`:
 |---|---|---|
 | every hook | `boot.sh` | runs the named script from the newest installed version, so a release reaches open sessions at their next hook |
 | UserPromptSubmit, PostToolUse | `pacific-clock.sh` | puts `Pacific clock: <day date time> PT` into context, so a time is copied, never estimated |
-| PreToolUse | `stamp-gate.sh` | refuses a tool call when the line written before it does not open with the Pacific stamp, the date and the time (`10/17/26 5:21 AM PT`; the time alone is refused since 1.2.0) |
+| PreToolUse | `stamp-gate.sh` | refuses a tool call when the line written before it does not open with the Pacific stamp, the date and the time (`10/17/26 5:21 AM PT`; the time alone is refused since 1.2.0); since 1.5.0 a miss is read again for up to a second before it is refused, because the newest line reaches the transcript after the call starts |
 | Stop | `stamp-reply.sh` / `.py` | blocks a turn whose last reply does not open and close with the stamp, date and time on both lines |
 | SessionStart, UserPromptSubmit | `unpushed-commits.sh` | names sibling repos with unpushed commits and whose they are to push |
 | SessionStart | `plugin-version.sh` | says when the install is behind a checkout of this repo beside the project |

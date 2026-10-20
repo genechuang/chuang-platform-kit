@@ -39,7 +39,7 @@ read -r nm nd ny nh nmin < <(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%m %d %y %H %
 # globally enforced"): a stamp more than a minute past the clock was written from a running guess, not copied. Only
 # ahead is refused here: the newest text can honestly be many minutes old when a long command ends, so behind is the
 # Stop hook's to judge, on a reply written moments before it runs.
-verdict=$(tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$nh" -v nmin="$nmin" '
+judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$nh" -v nmin="$nmin" '
   function mins(y, m, d, h, mi,   a, yy, mm) {  # minutes since an epoch, from the civil date (Howard Hinnant)
     if (y < 100) y += 2000
     a = (m <= 2); yy = y - a; mm = m + (a ? 9 : -3)
@@ -60,8 +60,26 @@ verdict=$(tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
     h = p[4] % 12; if (toupper(substr(st, length(st) - 1)) == "PM") h += 12
     if (nh != "" && mins(p[3] + 0, p[1] + 0, p[2] + 0, h, p[5] + 0) > mins(ny + 0, nm + 0, nd + 0, nh + 0, nmin + 0) + 1) { print "ahead " id " " st; exit }
     print "ok"
-  }')
+  }'; }
+verdict=$(judge)
 case "$verdict" in no*|ahead*) ;; *) exit 0 ;; esac
+
+# A miss is read again before it is refused (1.5.0, Gene 10/20/26 1:55 PM PT; Snow White's transcript that afternoon):
+# Claude Code stamps a text entry when it is made but appends it to the file later, so the gate often judged the line
+# before the newest one: a stamped line written after a refusal was refused again, 2.5 s after its own timestamp, and an
+# unstamped one after a stamped line went through. A short wait lets the newest line land, and costs only a miss; a
+# rescue is written to the state file as "rescued <uuid>" so the wait's worth can be counted. STAMP_GATE_WAIT is the
+# sleeps in seconds ("" skips them, for the tests).
+for w in ${STAMP_GATE_WAIT-0.25 0.25 0.5}; do
+  sleep "$w" 2>/dev/null || break
+  again=$(judge)
+  case "$again" in
+    no*|ahead*) verdict="$again" ;;
+    *) sid="$(field session_id)" || sid=default
+       printf 'rescued %s\n' "${verdict#* }" >> "${TMPDIR:-${TEMP:-/tmp}}/stamp-gate-${sid//[^A-Za-z0-9-]/}" 2>/dev/null
+       exit 0 ;;
+  esac
+done
 kind="${verdict%% *}"
 id="${verdict#* }"; stamped="${id#* }"; id="${id%% *}"
 

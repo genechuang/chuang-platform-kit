@@ -59,14 +59,28 @@ class Session:
         self.path = os.path.join(self.dir, 't.jsonl')
         self.sid = f's{next(_ids)}'
 
-    def gate(self, lines, extra=None):
+    def gate(self, lines, extra=None, wait='', lands=None):
+        """Run the gate over `lines`; `lands` (seconds, line) appends a line while it waits, as Claude Code does."""
         with open(self.path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines) + '\n')
         event = {'hook_event_name': 'PreToolUse', 'tool_name': 'Read', 'transcript_path': self.path,
                  'session_id': self.sid, **(extra or {})}
-        r = subprocess.run([BASH, GATE], input=json.dumps(event), capture_output=True, text=True, timeout=20,
-                           env=dict(os.environ, TMPDIR=self.dir, TEMP=self.dir))
-        return r.returncode, r.stderr
+        p = subprocess.Popen([BASH, GATE], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=dict(os.environ, TMPDIR=self.dir, TEMP=self.dir, STAMP_GATE_WAIT=wait))
+        if lands:
+            p.stdin.write(json.dumps(event))
+            p.stdin.close()
+            time.sleep(lands[0])
+            with open(self.path, 'a', encoding='utf-8') as f:
+                f.write(lands[1] + '\n')
+            p.wait(timeout=20)
+            return p.returncode, p.stderr.read()
+        _, err = p.communicate(json.dumps(event), timeout=20)
+        return p.returncode, err
+
+    def state(self):
+        path = os.path.join(self.dir, 'stamp-gate-' + self.sid)
+        return open(path, encoding='utf-8').read() if os.path.exists(path) else ''
 
 
 def gate(lines, extra=None):
@@ -100,6 +114,16 @@ def main():
           gate([text('old unstamped words'), TOOL_RESULT, prompt('next please'), tool_use()])[0], 0)
     check('an isMeta injection is not a prompt: the unstamped line before it is still refused',
           gate([prompt(), text('unstamped'), tool_use(), TOOL_RESULT, meta(), tool_use()])[0], 2)
+    # 1.5.0: the newest line lands after the gate starts; a miss is read again before it is refused.
+    s = Session()
+    behind = [prompt(), text('unstamped'), tool_use(), TOOL_RESULT, tool_use()]
+    code, _ = s.gate(behind, wait='0.4 0.4', lands=(0.2, text('10/20/26 1:56 PM PT stamped, still landing')))
+    check('a stamped line that lands while the gate waits passes, and is counted as a rescue',
+          (code, s.state().startswith('rescued ')), (0, True))
+    t0 = time.perf_counter()
+    code, _ = Session().gate(behind, wait='0.2 0.2')
+    check('  a miss nothing rescues is still refused, after the wait', (code, time.perf_counter() - t0 >= 0.4), (2, True))
+    check('  a stamped line passes at once, with no wait', Session().gate([prompt(), text('10/20/26 1:56 PM PT ok'), tool_use()], wait='5')[0], 0)
     check('a turn with no text yet passes', gate([prompt(), tool_use()])[0], 0)
     check('a helper (agent_id in the event) is exempt', gate([prompt(), text('unstamped'), tool_use()], {'agent_id': 'a1'})[0], 0)
     s = Session()
