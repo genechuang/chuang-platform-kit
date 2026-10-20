@@ -106,9 +106,10 @@ printf '%s\n' "$found" >"$cache" 2>/dev/null
 [ "$event" = "UserPromptSubmit" ] && [ "$found" = "$said" ] && exit 0
 
 # Only your own commits are yours to push (Gene, 2026-10-13): the session a commit's
-# Session trailer names holds it for a reason you cannot see, so another session's
-# are never offered, asked about or pushed, and not mentioned unless the user asks.
-advice="Commits are pushed only by the session their Session trailer names. If any here are yours, they wait for a release order (claude-shared, Aggregate and save, Gene 10/20/26): push them to the repo's hopper branch when its release captain asks, or to main yourself only when you are the captain or the fix cannot wait. Never ask the user whether to push another session's commits, never offer to, and never push them: that session holds them for a reason you do not know. Don't mention them unless the user asks."
+# Session trailer names holds it for a reason you cannot see. Since 10/20/26 ("without
+# permission ... bundling is what's going to save us $") a release captain may push them
+# once that session says yes; the user is never asked, and they are not mentioned unless he asks.
+advice="Commits are pushed only by the session their Session trailer names. If any here are yours, they wait for a release order (claude-shared, Aggregate and save, Gene 10/20/26): push them to the repo's hopper branch when its release captain asks, or to main yourself only when you are the captain or the fix cannot wait. Never push another session's commits without that session's permission: as a release captain, ask the owning session (never the user) which are ready, and push only the ones it says yes to; otherwise it holds them for a reason you do not know. Don't mention them unless the user asks."
 if [ "$others" = 1 ]; then
   advice="$advice A worktree of another repo, or another project, is its owner's to push; message that session if it should know."
 fi
