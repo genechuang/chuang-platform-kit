@@ -12,6 +12,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" plugin-version.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" no-console-windows.sh",
+            "timeout": 15
           }
         ]
       }
