@@ -20,6 +20,14 @@
 event=""
 [ -t 0 ] || IFS= read -r -d '' -t 1 event 2>/dev/null
 case "$event" in *'"agent_id"'*) exit 0 ;; esac
+# The foreground guard rides this hook (1.7.0, Gene 10/21/26 12:05 AM PT: long runners in the background, "add it to a
+# hook"): a hook added to hooks.json reaches a session only at its next start, while this script runs from the newest
+# installed version on every call of every open session (boot.sh). Shell calls only, about 130 ms each.
+case "$event" in
+  *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*|*'"tool_name":"PowerShell"'*|*'"tool_name": "PowerShell"'*)
+    guard_err=$(printf '%s' "$event" | bash "$(dirname "${BASH_SOURCE[0]}")/foreground-guard.sh" 2>&1 >/dev/null)
+    if [ $? -eq 2 ]; then printf '%s\n' "$guard_err" >&2; exit 2; fi ;;
+esac
 field() {  # the string value of "$1" in the event, by parameter expansion (no grep/sed)
   local v="${event#*\"$1\"}"
   [ "$v" != "$event" ] || return 1
