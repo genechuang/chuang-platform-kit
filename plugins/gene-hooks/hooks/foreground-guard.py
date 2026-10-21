@@ -28,6 +28,13 @@ LONG = [
     (r'\beas\s+build\b', 'an EAS build'),
     (r'\bnpx\s+expo\s+export\b', 'an Expo export'),
 ]
+# A script in LONG counts only when it is run: at the start of a command segment (after env assignments) or as the
+# argument of an interpreter. A grep, cat or Read that merely names the file is not a run (10/21/26 12:25 AM PT: the
+# guard refused `grep ... scripts/desktop-tests.py`, and a `docker images | grep test` beside its name).
+RUN = r'(?:(?:^|[;&|(]|\$\()\s*(?:\w+=\S*\s+)*|\b(?:python[0-9.]*|py|node|bash|sh|pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*)["\']?\S*?'
+SCRIPT = re.compile(r'\.(py|sh|js)')
+# Short forms of a long runner: one suite by name.
+SHORT = [re.compile(r'scripts/run-tests\.py\b[^;&|]*--only\b')]
 PUSH = re.compile(r'\bgit\s+(-C\s+\S+\s+|-c\s+\S+\s+)*push\b')
 TO_HOPPER = re.compile(r'hopper\b')
 PYTEST = re.compile(r'\bpython[0-9.]*(\.exe)?\s+-m\s+pytest\b(?P<rest>[^;&|]*)')
@@ -42,8 +49,11 @@ def reason(event: dict):
     tin = event.get('tool_input') or {}
     if tin.get('run_in_background') is True:
         return None
-    cmd = str(tin.get('command') or '')
-    found = next((what for pat, what in LONG if re.search(pat, cmd)), None)
+    cmd = str(tin.get('command') or '').replace('\\', '/')   # a Windows path reads as the patterns' forward slashes
+    def runs(pat):
+        # A script path must be run (RUN before it); a command pattern (gh run watch, terraform) matches as written.
+        return re.search((RUN + pat) if SCRIPT.search(pat) else pat, cmd)
+    found = next((what for pat, what in LONG if runs(pat) and not any(s.search(cmd) for s in SHORT)), None)
     if not found and PUSH.search(cmd) and not TO_HOPPER.search(cmd):
         found = 'a git push (the pre-push gate runs the suites and the builds)'
     if not found:

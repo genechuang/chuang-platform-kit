@@ -48,6 +48,15 @@ def main():
     check('short ones pass: status, a run view, one test file, one jest file, pytest on one file',
           [guard(c) for c in ('git status -s', 'gh run view 1 --json jobs', 'python tests/test-x.py',
                               'npx jest src/lib/__tests__/a.test.ts', 'python -m pytest tests/test_a.py')], [0] * 5)
+    check('  run by path, after cd, env or from PowerShell: still refused',
+          [guard(c) for c in ('cd /d/code/x && python scripts/desktop-tests.py', 'PYTHONIOENCODING=utf-8 python scripts/build-images.py',
+                              'python -u /d/code/x/app/scripts/ship.py', '& python "D:\\code\\x\\scripts\\run-tests.py"',
+                              './scripts/build-images.py')], [2] * 5)
+    check('naming a runner is not running it: grep, cat, sed, git log on its path pass (10/21/26: grep was refused)',
+          [guard(c) for c in ('grep -n "def " scripts/desktop-tests.py', 'cat app/scripts/ship.py | head',
+                              'docker images | grep test; grep -n IMAGE /d/code/x/scripts/desktop-tests.py',
+                              'git log --oneline -- scripts/build-images.py', 'sed -n 1,20p scripts/run-tests.py')], [0] * 5)
+    check('  one suite by name through run-tests.py --only passes', guard('python scripts/run-tests.py --only push-decider'), 0)
     check('  not a shell tool: never looked at', guard('python app/scripts/ship.py', tool='Read'), 0)
     r = subprocess.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input='not json', capture_output=True, text=True, timeout=30)
     check('  an unreadable event: allowed, never a trap', r.returncode, 0)
