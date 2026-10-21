@@ -30,6 +30,19 @@ case "$input" in
   *'"hook_event_name"'*'"PostToolUse"'*) event=PostToolUse ;;
   *) exit 0 ;;
 esac
+# Gene's ship words (10/21/26 9:51 AM PT, "yes" to the push gate's release-order check): a prompt that names ship,
+# deploy or release is handed to claude-shared's release-words.py, which records it only when the prompt starts with
+# one (his own word, never another session's message). A process only for those prompts; silent; never blocks.
+if [ "$event" = UserPromptSubmit ]; then
+  shopt -s nocasematch
+  case "$input" in
+    *ship*|*deploy*|*release*)
+      for rw in /d/code/claude-shared/hooks/release-words.py "$HOME/code/claude-shared/hooks/release-words.py"; do
+        if [ -f "$rw" ]; then printf '%s' "$input" | python "$rw" record >/dev/null 2>&1; break; fi
+      done ;;
+  esac
+  shopt -u nocasematch
+fi
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%a %m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 [ -n "$clock" ] || exit 0
 if [ "$event" = PostToolUse ]; then
