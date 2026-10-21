@@ -55,7 +55,9 @@ def main():
     check('naming a runner is not running it: grep, cat, sed, git log on its path pass (10/21/26: grep was refused)',
           [guard(c) for c in ('grep -n "def " scripts/desktop-tests.py', 'cat app/scripts/ship.py | head',
                               'docker images | grep test; grep -n IMAGE /d/code/x/scripts/desktop-tests.py',
-                              'git log --oneline -- scripts/build-images.py', 'sed -n 1,20p scripts/run-tests.py')], [0] * 5)
+                              'git log --oneline -- scripts/build-images.py', 'sed -n 1,20p scripts/run-tests.py',
+                              # a file name ending .py or .sh is not the `py` or `sh` interpreter (10/21/26 12:48 AM PT)
+                              'grep -rn x scripts/build-once.py scripts/build-images.py', 'grep -n y a.sh scripts/run-tests.py')], [0] * 7)
     check('  one suite by name through run-tests.py --only passes', guard('python scripts/run-tests.py --only push-decider'), 0)
     check('  not a shell tool: never looked at', guard('python app/scripts/ship.py', tool='Read'), 0)
     r = subprocess.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input='not json', capture_output=True, text=True, timeout=30)

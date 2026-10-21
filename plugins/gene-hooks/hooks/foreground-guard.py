@@ -31,7 +31,7 @@ LONG = [
 # A script in LONG counts only when it is run: at the start of a command segment (after env assignments) or as the
 # argument of an interpreter. A grep, cat or Read that merely names the file is not a run (10/21/26 12:25 AM PT: the
 # guard refused `grep ... scripts/desktop-tests.py`, and a `docker images | grep test` beside its name).
-RUN = r'(?:(?:^|[;&|(]|\$\()\s*(?:\w+=\S*\s+)*|\b(?:python[0-9.]*|py|node|bash|sh|pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*)["\']?\S*?'
+RUN = r'(?:(?:^|[;&|(]|\$\()\s*(?:\w+=\S*\s+)*|(?<![\w.-])(?:python[0-9.]*|py|node|bash|sh|pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*)["\']?\S*?'
 SCRIPT = re.compile(r'\.(py|sh|js)')
 # Short forms of a long runner: one suite by name.
 SHORT = [re.compile(r'scripts/run-tests\.py\b[^;&|]*--only\b')]
