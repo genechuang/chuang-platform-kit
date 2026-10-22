@@ -40,6 +40,11 @@ What it does, for each ref pushed to the guarded branch, one line per decision:
      to, carry the others' marks, and refuse with "rebased onto <sha>; push again, the gate is satisfied": git
      pushes the sha it gave the hook, so the push must be repeated, and the repeat clears on the marks.
 
+Every check it looks at says its seconds and how it ended (`tests 4.1 s (mark answered)`, `(ran)`, `(failed, exit 1)`,
+`(mark carried)`, ...), and each ref ends with the split, `checks 31.2 s, rebase check 1.0 s, base check 0.9 s`
+(step 3 and step 1 with its diff), so a slow push can be profiled from its own output. A check that hands its work
+elsewhere and exits 0 reads as `ran`: only the check knows it delegated.
+
 Standard library only; it knows nothing of the host but its config. Exits 0 to let the push go, 1 to refuse it.
 """
 from __future__ import annotations
@@ -50,6 +55,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -147,15 +153,30 @@ def touched(patterns, files) -> list:
 class Gate:
     """One run of the gate in a checkout. `say` prints a decision; `env` is the environment the override is read
     from; `execute` runs a command (an argv, in the checkout) and answers its exit code; `head` answers a URL's
-    HTTP status. All four are seams for the tests."""
+    HTTP status; `clock` answers seconds (time.monotonic). All five are seams for the tests."""
 
-    def __init__(self, root: str, cfg: Config, say=None, env=None, execute=None, head=None):
+    PHASES = ('checks', 'rebase check', 'base check')     # the order the split line prints them
+
+    def __init__(self, root: str, cfg: Config, say=None, env=None, execute=None, head=None, clock=None):
         self.root, self.cfg = root, cfg
         self.say = say or (lambda m: print(PREFIX + m, flush=True))
         self.env = os.environ if env is None else env
         self.execute = execute or (lambda argv: subprocess.run(argv, cwd=root).returncode)
         self.head = head or _http_status
+        self.clock = clock or time.monotonic
         self._paths = {}
+        self.spent, self._phase, self._since = {}, None, 0.0
+
+    # timing
+    def enter(self, phase):
+        """Close the running phase's lap and start `phase` (None closes it alone)."""
+        now = self.clock()
+        if self._phase:
+            self.spent[self._phase] = self.spent.get(self._phase, 0.0) + now - self._since
+        self._phase, self._since = phase, now
+
+    def timed(self, c: Check, start: float, outcome: str):
+        self.say(f'{c.name} {self.clock() - start:.1f} s ({outcome})')
 
     # git
     def git(self, *args) -> subprocess.CompletedProcess:
@@ -216,16 +237,22 @@ class Gate:
             return self.execute(self.argv(c.mark, **kw)) == 0
         return False
 
-    def run_check(self, c: Check, **kw) -> bool:
-        """Run one check; True when it passed or answered a skip code."""
+    def run_check(self, c: Check, start=None, again=False, **kw) -> bool:
+        """Run one check and say its seconds since `start` (its mark's ask included); True when it passed or
+        answered a skip code."""
+        start = self.clock() if start is None else start
+        ran = 'ran again' if again else 'ran'
         argv = self.argv(c.run, **kw)
         self.say(f'{c.name}: running {" ".join(os.path.basename(a) if a == sys.executable else a for a in argv)}')
         rc = self.execute(argv)
         if rc == 0:
+            self.timed(c, start, ran)
             return True
         if rc in c.skip_codes:
             self.say(f'{c.name}: answered {rc}: not applicable here, skipped')
+            self.timed(c, start, f'skipped, exit {rc}')
             return True
+        self.timed(c, start, f'failed, exit {rc}')
         return False
 
     def refuse(self, line: str) -> int:
@@ -234,7 +261,17 @@ class Gate:
 
     # the gate
     def ref(self, local_sha: str, remote_sha: str) -> int:
-        """The gate for one pushed commit: 0 lets it go, 1 refuses it."""
+        """The gate for one pushed commit: 0 lets it go, 1 refuses it. Ends, whatever the answer, with the line
+        splitting its seconds by phase."""
+        self.spent = dict.fromkeys(self.PHASES, 0.0)
+        self.enter('base check')
+        try:
+            return self._ref(local_sha, remote_sha)
+        finally:
+            self.enter(None)
+            self.say(', '.join(f'{p} {self.spent[p]:.1f} s' for p in self.PHASES))
+
+    def _ref(self, local_sha: str, remote_sha: str) -> int:
         cfg, short = self.cfg, local_sha[:8]
         target = f'{cfg.remote}/{cfg.branch}'
         tip = self.fetch()
@@ -267,10 +304,13 @@ class Gate:
             if head != local_sha:
                 return self.refuse(f'{short} is not this checkout\'s HEAD ({head[:8]}), and the checks test the '
                                    'checkout: check it out and push from it')
+        self.enter('checks')
         for c in due:
+            start = self.clock()
             if self.marked(c, **kw):
                 self.say(f'{c.name}: already done for {short} (its mark answers)')
-            elif not self.run_check(c, **kw):
+                self.timed(c, start, 'mark answered')
+            elif not self.run_check(c, start=start, **kw):
                 return self.refuse(f'{c.name} refused the push' + (f': {c.refusal}' if c.refusal else ''))
         if not tip or not due:
             return 0
@@ -279,6 +319,7 @@ class Gate:
     def after(self, local_sha: str, due: list) -> int:
         """Step 3: the branch fetched again after the checks; if it moved, the rebase and the refusal."""
         cfg = self.cfg
+        self.enter('rebase check')
         tip = self.fetch()
         if not tip or self.is_ancestor(tip, local_sha):
             self.say(f'{cfg.branch} has not moved during the checks; the push goes')
@@ -299,18 +340,20 @@ class Gate:
         kw = dict(sha=new, tree=self.rev(new + '^{tree}'), base=tip, old=local_sha, new=new)
         for c in due:
             hit = None if brought is None else touched(self.paths(c), brought)
+            start = self.clock()
             if hit is None or hit:
                 why = 'the rebase\'s diff could not be read' if hit is None else \
                     f'the rebase changed {len(hit)} of its paths ({hit[0]}{", ..." if len(hit) > 1 else ""})'
                 self.say(f'{c.name}: {why}: running it again on {new[:8]}')
-                ok = self.run_check(c, **kw)
+                ok = self.run_check(c, start=start, again=True, **kw)
             elif c.carry:
                 ok = self.execute(self.argv(c.carry, **kw)) == 0
                 if ok:
                     self.say(f'{c.name}: the rebase changed none of its paths; its mark carried to {new[:8]}')
+                    self.timed(c, start, 'mark carried')
                 else:
                     self.say(f'{c.name}: its carry refused; running it again on {new[:8]}')
-                    ok = self.run_check(c, **kw)
+                    ok = self.run_check(c, start=start, again=True, **kw)
             else:
                 self.say(f'{c.name}: the rebase changed none of its paths; its result stands')
                 ok = True

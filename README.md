@@ -145,6 +145,11 @@ For each commit pushed to the branch, one line per decision:
    again on the new head, the others' marks are carried; and the push is refused with "rebased onto <sha>; push
    again, the gate is satisfied", since git pushes the sha it gave the hook. The second push clears on the marks.
 
+Every check it looks at says its seconds and how it ended (`push-gate: tests 4.1 s (mark answered)`; `ran`,
+`ran again`, `failed, exit 1`, `skipped, exit 2`, `mark carried`), and each pushed commit ends with the split,
+`push-gate: checks 31.2 s, rebase check 1.0 s, base check 0.9 s` (steps 2, 3 and 1), so a slow push says where its
+time went. A check that hands its work elsewhere and exits 0 reads as `ran`.
+
 A config that cannot be read refuses the push; a repo without one is not gated.
 
 ## Develop

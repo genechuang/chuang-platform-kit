@@ -13,6 +13,7 @@ the hook loses the race once and clears on the second push.
 Run:  python -B tests/test-push-gate.py
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -98,17 +99,23 @@ def cfg(**top):
     return G.Config(checks=checks, **top)
 
 
-def gate(world, config, codes=None, marks=(), on_run=None):
-    """A Gate over `world.work` whose commands answer from `codes` (by argv[1], default 0) and record themselves."""
-    said, ran = [], []
+def gate(world, config, codes=None, marks=(), on_run=None, steps=None, mark_secs=0.0):
+    """A Gate over `world.work` whose commands answer from `codes` (by argv[1], default 0) and record themselves.
+    Its clock is fake: a command moves it on by `steps` (by argv[1]), a mark URL's ask by `mark_secs`, git never."""
+    said, ran, now = [], [], [0.0]
 
     def execute(argv):
         ran.append(argv)
         if on_run:
             on_run(argv)
-        return (codes or {}).get(argv[1] if len(argv) > 1 else argv[0], 0)
-    g = G.Gate(world.work, config, say=said.append, env={}, execute=execute,
-               head=lambda url: 200 if any(url.endswith(m) for m in marks) else 404)
+        key = argv[1] if len(argv) > 1 else argv[0]
+        now[0] += (steps or {}).get(key, 0.0)
+        return (codes or {}).get(key, 0)
+
+    def head(url):
+        now[0] += mark_secs
+        return 200 if any(url.endswith(m) for m in marks) else 404
+    g = G.Gate(world.work, config, say=said.append, env={}, execute=execute, head=head, clock=lambda: now[0])
     return g, said, ran
 
 
@@ -126,6 +133,26 @@ try:
     check("a push touching src/ runs the check and goes", (rc, [a[1] for a in ran], has(said, 'has not moved')),
           (0, ['tests'], True))
     check("  the check's argv has its placeholders filled", (ran[0][0] == sys.executable, ran[0][2]), (True, sha))
+
+    # 1b. Timing: every check says its seconds and how it ended; each ref ends with the split by phase.
+    g, said, ran = gate(w, cfg(), steps={'tests': 4.1}, mark_secs=0.3)
+    check("a check that runs says its seconds, its mark's ask included; the ref ends with the split",
+          (g.ref(sha, base), 'tests 4.4 s (ran)' in said, said[-1]),
+          (0, True, 'checks 4.4 s, rebase check 0.0 s, base check 0.0 s'))
+    check("  seconds only, never minutes", [s for s in said if 'min' in s or re.search(r'\d+m\b', s)], [])
+    tree = git(w.work, 'rev-parse', 'HEAD^{tree}')
+    g, said, ran = gate(w, cfg(), marks=[tree], mark_secs=0.3)
+    check("  a check skipped on its mark says the mark's seconds",
+          (g.ref(sha, base), 'tests 0.3 s (mark answered)' in said, said[-1]),
+          (0, True, 'checks 0.3 s, rebase check 0.0 s, base check 0.0 s'))
+    g, said, ran = gate(w, cfg(), codes={'tests': 1}, steps={'tests': 2.0})
+    check("  a failed check says its seconds and exit, and the split still ends the ref",
+          (g.ref(sha, base), 'tests 2.0 s (failed, exit 1)' in said, said[-1]),
+          (1, True, 'checks 2.0 s, rebase check 0.0 s, base check 0.0 s'))
+    g, said, ran = gate(w, cfg(checks=[G.Check(name='app', run=['x', 'app'], skip_codes=[2])]), codes={'app': 2},
+                        steps={'app': 0.5})
+    check("  a skip code says its seconds", (g.ref(sha, base), 'app 0.5 s (skipped, exit 2)' in said), (0, True))
+    check("  the real clock is time.monotonic", G.Gate(w.work, cfg()).clock, G.time.monotonic)
 
     # 2. Its mark answers: not run.
     tree = git(w.work, 'rev-parse', 'HEAD^{tree}')
@@ -168,7 +195,8 @@ try:
     two = [G.Check(name='tests', run=['x', 'tests'], paths=['src/**'], carry=['x', 'carry', '{old}', '{new}']),
            G.Check(name='docs', run=['x', 'docs'], paths=['docs/**'], when=['**'])]
     moved = []
-    g, said, ran = gate(w, cfg(checks=two), on_run=lambda a: moved or moved.append(w.move_main('docs/new.md', 'n\n', 'race')))
+    g, said, ran = gate(w, cfg(checks=two), on_run=lambda a: moved or moved.append(w.move_main('docs/new.md', 'n\n', 'race')),
+                        steps={'tests': 3.0, 'docs': 1.5, 'carry': 0.2})
     rc = g.ref(sha, base)
     head = git(w.work, 'rev-parse', 'HEAD')
     check("main moved during the checks: rebased, refused with 'push again, the gate is satisfied'",
@@ -177,6 +205,9 @@ try:
     check("  the check the rebase did not touch is carried, the touched one runs again",
           ([a[1] for a in ran], ran[2][2:], has(said, 'docs: the rebase changed 1 of its paths (docs/new.md)')),
           (['tests', 'docs', 'carry', 'docs'], [sha, head], True))
+    check("  the rebase's carry and rerun say their seconds, and count as the rebase check",
+          ('tests 0.2 s (mark carried)' in said, 'docs 1.5 s (ran again)' in said, said[-1]),
+          (True, True, 'checks 4.5 s, rebase check 1.7 s, base check 0.0 s'))
     g, said, ran = gate(w, cfg(checks=two))
     check("  the second push of the rebased head clears", (g.ref(head, moved[0]), has(said, 'has not moved')), (0, True))
 
@@ -302,6 +333,11 @@ try:
     check("  the second push clears on the mark and lands",
           (second.returncode, 'already done for' in out2, git(w.work, 'rev-parse', 'HEAD') == git(w.remote, 'rev-parse', 'main')),
           (0, True, True))
+    split = r'push-gate: checks \d+\.\d s, rebase check \d+\.\d s, base check \d+\.\d s'
+    check("  a real push prints each check's seconds and the split, on the real clock",
+          (bool(re.search(r'push-gate: tests \d+\.\d s \(ran\)', out1)), bool(re.search(split, out1)),
+           bool(re.search(r'push-gate: tests \d+\.\d s \(mark answered\)', out2)), bool(re.search(split, out2))),
+          (True, True, True, True))
     if second.returncode:
         print(out1, out2)
 finally:

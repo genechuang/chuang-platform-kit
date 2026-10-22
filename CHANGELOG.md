@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.7.1 - 2026-10-22 PT
+
+Additive; no host call site changes. A release profile could not say which of the gate's checks took a push's 38 s.
+
+- `push_gate`: each check says its seconds and how it ended (`tests 4.1 s (mark answered)`, `(ran)`, `(ran again)`,
+  `(failed, exit 1)`, `(skipped, exit 2)`, `(mark carried)`), and each pushed commit ends with
+  `checks 31.2 s, rebase check 1.0 s, base check 0.9 s`. `time.monotonic`, seconds only; `Gate(clock=...)` is the
+  tests' seam.
+
 ## 0.7.0 - 2026-10-18 PT
 
 Additive; no host call site changes. Gene, 10/18/26 11:34 PM PT, of SMAD PickleBot's pre-push gate: "can it be in
