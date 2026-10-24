@@ -73,6 +73,19 @@ def main():
     check('stamp-gate.sh refuses a foreground push through the guard, its reason on stderr',
           (r.returncode, 'run_in_background' in r.stderr), (2, True))
     shutil.rmtree(d, ignore_errors=True)
+    # Windows PowerShell 5.1 strips the double quotes inside a quoted argument to a native program (Gene, 10/24/26:
+    # "fix it so we do the right thing in the first place"): refused in PowerShell, background or not; Bash untouched.
+    filt = "gcloud logging read 'resource.type=\"cloud_run_job\" AND timestamp>=\"2026-10-24T06:40:00Z\"' --limit 60"
+    check('PowerShell: a native program handed a quoted argument with inner double quotes is refused',
+          [guard(filt, tool='PowerShell'), guard(filt, tool='PowerShell', run_in_background=True),
+           guard("gh run list --json databaseId --jq '.[] | \"\\(.databaseId)\"'", tool='PowerShell'),
+           guard("$x = 1; & git -c user.name=C commit -q -m @'\nSay \"hi\"\n'@", tool='PowerShell'),
+           guard("$j = gcloud logging read 'a=\"b\"' --format=json | ConvertFrom-Json", tool='PowerShell')], [2] * 5)
+    check('  the same in Bash, cmdlets, quotes without a double quote, and --% pass',
+          [guard(filt), guard("Select-String -Pattern 'a\"b' -Path x.txt", tool='PowerShell'),
+           guard("gcloud run jobs executions list --job smad-court-booking --format='table(name)'", tool='PowerShell'),
+           guard("git commit -q -m @'\nNo inner quotes here\n'@", tool='PowerShell'),
+           guard('gcloud logging read --% "a=\\"b\\""', tool='PowerShell')], [0] * 5)
     print(f'\n{len(failures)} failure(s)')
     return 1 if failures else 0
 

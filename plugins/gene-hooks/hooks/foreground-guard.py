@@ -8,6 +8,10 @@ do something about it").
 Refused (exit 2, the reason on stderr) when the call is not run_in_background and its command names a known long
 runner (LONG, below), or its own timeout is 120000 ms or more. A push to `hopper` is allowed: that branch runs no
 gate and takes seconds. Anything unexpected exits 0: a broken hook must never trap a session.
+
+Since 1.9.0 it also refuses, background or not, a PowerShell call that hands a native program (gcloud, gh, git, ...) a
+single-quoted argument or here-string holding a double quote, which Windows PowerShell 5.1 passes mangled
+(mangled_quotes): the reason says to run it with the Bash tool.
 """
 import json
 import re
@@ -42,11 +46,41 @@ JEST = re.compile(r'\bnpx\s+jest\b(?P<rest>[^;&|]*)')
 LONG_TIMEOUT_MS = 120000
 
 
+NATIVE = re.compile(r'(?:&\s*)?["\']?(?:[\w:/\\.-]*[/\\])?(gcloud|gh|git|docker|curl|node|npx|npm|python[0-9.]*|py|'
+                    r'terraform|jq|ssh|gsutil|bq|az|kubectl|bash|wsl)(?:\.exe|\.cmd)?["\']?(?:\s|$)', re.I)
+LITERAL = re.compile(r"@'\r?\n.*?\r?\n'@|'(?:[^']|'')*'", re.S)   # a single-quoted string or here-string
+
+
+def mangled_quotes(cmd: str):
+    """The program a PowerShell command hands a single-quoted argument holding a double quote, or None. Windows
+    PowerShell 5.1 passes that argument with its inner double quotes unescaped, so the program reads them as its own
+    quoting and strips them: a gcloud filter, a gh --jq program or a git commit message arrives mangled (Gene, 10/24/26
+    10:03 AM PT, after "PowerShell strips the quotes inside the filter, so I'm running it from Git Bash instead" once
+    too often: "fix it so we do the right thing in the first place"). `--%` (stop-parsing) is left alone."""
+    if '--%' in cmd:
+        return None
+    for m in LITERAL.finditer(cmd):
+        if '"' not in m.group(0):
+            continue
+        segment = re.split(r'[;|{(\n]', cmd[:m.start()])[-1].strip()   # the command the literal is an argument of
+        native = NATIVE.match(re.sub(r'^\$[\w:]+\s*=\s*', '', segment))   # `$j = gcloud ...` runs gcloud too
+        if native:
+            return native.group(1)
+    return None
+
+
 def reason(event: dict):
     """The refusal's reason, or None to allow."""
     if event.get('tool_name') not in ('Bash', 'PowerShell'):
         return None
     tin = event.get('tool_input') or {}
+    if event.get('tool_name') == 'PowerShell':
+        exe = mangled_quotes(str(tin.get('command') or ''))
+        if exe:
+            return (f'Refused: Windows PowerShell 5.1 strips the double quotes inside a quoted argument it hands to {exe}, '
+                    f'so {exe} would get mangled text (a filter, a --jq program, a commit message). Run this command with '
+                    f'the Bash tool (Git Bash) instead, or drop the inner double quotes (gene-hooks; Gene, 10/24/26: "fix '
+                    f'it so we do the right thing in the first place").')
     if tin.get('run_in_background') is True:
         return None
     cmd = str(tin.get('command') or '').replace('\\', '/')   # a Windows path reads as the patterns' forward slashes
