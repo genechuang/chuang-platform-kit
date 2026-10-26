@@ -137,8 +137,8 @@ def main():
         from datetime import datetime, timedelta, timezone
         now = datetime.now(timezone.utc)  # utc-ok: converted to Pacific by the DST rule below
         y = now.year
-        march = datetime(y, 3, 8, 10, tzinfo=timezone.utc)
-        nov = datetime(y, 11, 1, 9, tzinfo=timezone.utc)
+        march = datetime(y, 3, 8, 10, tzinfo=timezone.utc)  # utc-ok: the DST switch's instant, compared in UTC
+        nov = datetime(y, 11, 1, 9, tzinfo=timezone.utc)  # utc-ok: the DST switch's instant, compared in UTC
         dst = march + timedelta(days=(6 - march.weekday()) % 7) <= now < nov + timedelta(days=(6 - nov.weekday()) % 7)
         t = now + timedelta(hours=-7 if dst else -8, minutes=minutes)
         return f"{t.month}/{t.day}/{t:%y} " + t.strftime('%I:%M %p').lstrip('0')
