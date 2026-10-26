@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.8.0 - 2026-10-26 PT
+
+Additive; no host call site changes. Gene, 10/25/26 11:45 PM PT: "GH access seems to belong in kit" (a host had grown a
+dozen GitHub clients and five tokens).
+
+- `github` (new): one repository's REST calls with one token. `token()`, `request()` / `get()`, `issue()`,
+  `create_issue()`, `comment()`, `compare()`, `create_release()` (an existing tag's release returned, so a retry adds
+  nothing), `dispatch()`, `runners()` / `runner_online()`, `create_deployment()` / `deployment_status()`.
+  `GitHubError(status, message)`; a 401 or 403 names the fine-grained permission the call needs. Standard library only.
+
 ## 0.7.1 - 2026-10-22 PT
 
 Additive; no host call site changes. A release profile could not say which of the gate's checks took a push's 38 s.

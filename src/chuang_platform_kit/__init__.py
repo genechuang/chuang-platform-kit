@@ -25,6 +25,8 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   google_auth        a Gmail / Drive / Sheets / People service from a token in a file, the environment or Secret
                      Manager, refreshed and written back (the `gmail` extra)
   gitguardian        a repository's GitGuardian incidents listed with their occurrences, ignored or resolved with a note
+  github             one repository's GitHub REST calls with one token: issues, compare, releases, dispatch, the
+                     runner list, deployment records; a refusal names the permission the token lacks
   neon               a Neon project as code: found or created with its database, the direct connection URL read
                      and stored as a secret version, never printed; the month's metered consumption against a
                      budget, and the compute cap that bounds the bill
@@ -37,4 +39,4 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.7.1'
+__version__ = '0.8.0'
