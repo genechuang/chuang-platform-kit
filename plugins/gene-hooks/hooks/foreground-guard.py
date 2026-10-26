@@ -6,7 +6,7 @@ you get it in your head to run long running processes in the background?? put it
 do something about it").
 
 Refused (exit 2, the reason on stderr) when the call is not run_in_background and its command names a known long
-runner (LONG, below), or its own timeout is 120000 ms or more. A push to `hopper` is allowed: that branch runs no
+runner (LONG, below), or its own timeout is 120000 ms or more. A push to `dock` is allowed: that branch runs no
 gate and takes seconds. Anything unexpected exits 0: a broken hook must never trap a session.
 
 Since 1.9.0 it also refuses, background or not, a PowerShell call that hands a native program (gcloud, gh, git, ...) a
@@ -40,7 +40,7 @@ SCRIPT = re.compile(r'\.(py|sh|js)')
 # Short forms of a long runner: one suite by name.
 SHORT = [re.compile(r'scripts/run-tests\.py\b[^;&|]*--only\b')]
 PUSH = re.compile(r'\bgit\s+(-C\s+\S+\s+|-c\s+\S+\s+)*push\b')
-TO_HOPPER = re.compile(r'hopper\b')
+TO_DOCK = re.compile(r'(dock|hopper)\b')   # `hopper` was the branch's name until 10/26/26 (SMADPickleBot #375)
 PYTEST = re.compile(r'\bpython[0-9.]*(\.exe)?\s+-m\s+pytest\b(?P<rest>[^;&|]*)')
 JEST = re.compile(r'\bnpx\s+jest\b(?P<rest>[^;&|]*)')
 LONG_TIMEOUT_MS = 120000
@@ -88,7 +88,7 @@ def reason(event: dict):
         # A script path must be run (RUN before it); a command pattern (gh run watch, terraform) matches as written.
         return re.search((RUN + pat) if SCRIPT.search(pat) else pat, cmd)
     found = next((what for pat, what in LONG if runs(pat) and not any(s.search(cmd) for s in SHORT)), None)
-    if not found and PUSH.search(cmd) and not TO_HOPPER.search(cmd):
+    if not found and PUSH.search(cmd) and not TO_DOCK.search(cmd):
         found = 'a git push (the pre-push gate runs the suites and the builds)'
     if not found:
         m = PYTEST.search(cmd)

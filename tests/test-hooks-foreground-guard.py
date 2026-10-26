@@ -37,7 +37,7 @@ def main():
     check('  the same in the background is allowed', guard('python app/scripts/ship.py --phone --push', run_in_background=True), 0)
     check('  a foreground git push is refused (the pre-push gate), in a chain too',
           [guard('git push'), guard('git add a && git commit -m x && git push 2>&1 | tail -3'), guard('git -C /d/x push -q')], [2, 2, 2])
-    check('  a push to hopper runs no gate: allowed', guard('git push -q origin HEAD:hopper'), 0)
+    check('  a push to dock runs no gate: allowed', guard('git push -q origin HEAD:dock'), 0)
     check('  the other long runners, foreground',
           [guard(c) for c in ('python scripts/desktop-tests.py', 'python scripts/build-images.py', 'python scripts/run-tests.py',
                               'python -m pytest -n auto', 'gh run watch 123 --exit-status', 'gcloud builds submit .',
