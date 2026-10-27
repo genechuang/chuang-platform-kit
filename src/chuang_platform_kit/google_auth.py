@@ -24,12 +24,117 @@ watch renewal) go on without one.
 Needs the `gmail` extra (google-auth, google-api-python-client). `credentials()` is the half
 without the client library, for a host that builds its own service or wants the Credentials
 for a different transport.
+
+An access token for Google's REST APIs, with the standard library alone (0.9.0, 10/27/26; lifted from SMAD
+PickleBot's `ci_claim.access_token`, the one token reader its functions, jobs, runners and desktop shared):
+
+    from chuang_platform_kit import google_auth
+    token = google_auth.access_token()                 # '' when no source answers; never raises
+
+`access_token()` takes the first source that answers: the environment variable `env_name` (CI_ACCESS_TOKEN: a
+pipeline job minting one token for every step), a service-account key under GOOGLE_APPLICATION_CREDENTIALS (a
+path, or the key's JSON itself, as a cloud environment's variable holds it) minted in-process by google-auth when
+it is installed and else by `key_file_token()` (the key's RS256 JWT signed with the openssl CLI and exchanged at
+Google's token endpoint, a fraction of a second where gcloud's first start is 5 to 37 s), the metadata server
+(Cloud Run, Cloud Functions, Cloud Build), then `gcloud auth print-access-token` (a desktop, a runner after the
+auth action), bounded by `gcloud_timeout`.
 """
 import json
 import logging
 import os
+import subprocess
+import time
+import urllib.parse
+import urllib.request
 
 log = logging.getLogger(__name__)
+METADATA_TOKEN = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
+CLOUD_PLATFORM = 'https://www.googleapis.com/auth/cloud-platform'
+KEY_ENV = 'GOOGLE_APPLICATION_CREDENTIALS'
+
+
+def key_file_token(path: str, opener=None, run=subprocess.run, now=None, scope: str = CLOUD_PLATFORM) -> str:
+    """An access token from a service-account key (`path`: the key file's path, the key's JSON itself, or either
+    behind a pasted `GOOGLE_APPLICATION_CREDENTIALS=`) with the standard library and the openssl CLI, or '' for
+    anything else: the key's RS256-signed JWT exchanged at its token endpoint. Never raises."""
+    import base64
+    import tempfile
+
+    def b64(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b'=').decode()
+    try:
+        path = (path or '').strip()
+        if path.startswith(KEY_ENV + '='):   # an editor kept the whole `NAME=value` line as the value
+            path = path[len(KEY_ENV) + 1:].strip()
+        if path.startswith('{'):
+            key = json.loads(path)
+        else:
+            with open(path, encoding='utf-8') as f:
+                key = json.load(f)
+        if key.get('type') != 'service_account':
+            return ''
+        t = int(now if now is not None else time.time())
+        uri = key.get('token_uri') or 'https://oauth2.googleapis.com/token'
+        claims = {'iss': key['client_email'], 'scope': scope, 'aud': uri, 'iat': t, 'exp': t + 3600}
+        unsigned = b64(json.dumps({'alg': 'RS256', 'typ': 'JWT'}).encode()) + '.' + b64(json.dumps(claims).encode())
+        with tempfile.NamedTemporaryFile('w', suffix='.pem', delete=False) as pem:
+            pem.write(key['private_key'])
+        try:
+            signed = run(['openssl', 'dgst', '-sha256', '-sign', pem.name], input=unsigned.encode(), capture_output=True,
+                         timeout=10)
+        finally:
+            os.remove(pem.name)
+        if signed.returncode != 0 or not signed.stdout:
+            return ''
+        body = urllib.parse.urlencode({'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                                       'assertion': unsigned + '.' + b64(signed.stdout)}).encode()
+        req = urllib.request.Request(uri, data=body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        with (opener or urllib.request.urlopen)(req, timeout=15) as r:
+            return json.loads(r.read().decode() or '{}').get('access_token') or ''
+    except Exception:   # noqa: BLE001 - no openssl, a bad key, a refused exchange: the caller's next source
+        return ''
+
+
+def access_token(env=None, opener=None, run=subprocess.run, gcloud_timeout=30, env_name: str = 'CI_ACCESS_TOKEN',
+                 scope: str = CLOUD_PLATFORM) -> str:
+    """An OAuth access token for Google's REST APIs, or '' when no source answers (module docstring): `env_name`,
+    the key under GOOGLE_APPLICATION_CREDENTIALS (google-auth in-process when installed, else key_file_token), the
+    metadata server, then gcloud bounded by `gcloud_timeout`. Never raises."""
+    env = os.environ if env is None else env
+    if env.get(env_name):
+        return env[env_name].strip()
+    key = (env.get(KEY_ENV) or '').strip()
+    if key:
+        if os.path.exists(key):
+            try:
+                from google.auth.transport.requests import Request
+                from google.oauth2 import service_account
+                creds = service_account.Credentials.from_service_account_file(key, scopes=[scope])
+                creds.refresh(Request())
+                if creds.token:
+                    return creds.token
+            except Exception:   # noqa: BLE001 - the library missing, or not a service account's key: the next source
+                pass
+        if os.path.exists(key) or key.startswith('{') or key.startswith(KEY_ENV + '='):
+            tok = key_file_token(key, opener=opener, run=run, scope=scope)
+            if tok:
+                return tok
+    opener = opener or urllib.request.urlopen
+    try:
+        req = urllib.request.Request(METADATA_TOKEN, headers={'Metadata-Flavor': 'Google'})
+        with opener(req, timeout=min(3, gcloud_timeout)) as r:
+            tok = json.loads(r.read().decode() or '{}').get('access_token')
+            if tok:
+                return tok
+    except Exception:   # noqa: BLE001 - not on Google Cloud: no metadata server
+        pass
+    try:
+        # Fixed argv, no external input; the shell only so Windows finds the gcloud .cmd shim.
+        p = run(['gcloud', 'auth', 'print-access-token'], capture_output=True, text=True, timeout=gcloud_timeout,  # nosec B602
+                shell=(os.name == 'nt'))
+        return (p.stdout or '').strip() if p.returncode == 0 else ''
+    except Exception:   # noqa: BLE001 - no gcloud, or none signed in
+        return ''
 
 
 def _from_sources(Credentials, scopes, token_json, token_file, token_env, secret, session, logger):

@@ -147,6 +147,90 @@ check("service() without a token is None", G.service('drive', 'v3', SCOPES, toke
 os.environ.pop('TOK_ENV', None)
 os.environ.pop('BAD_ENV', None)
 
+print("access_token() and key_file_token() (0.9.0): the standard library's token, each source in its turn")
+import base64  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.parse  # noqa: E402
+
+
+class Resp:
+    def __init__(self, body):
+        self.body = json.dumps(body).encode()
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+meta = lambda req, timeout=None: Resp({'access_token': 'meta'})  # noqa: E731
+
+
+def no_meta(req, timeout=None):
+    raise OSError('no metadata server')
+
+
+ok = lambda *a, **k: type('P', (), {'returncode': 0, 'stdout': 'gc\n'})()  # noqa: E731
+bad = lambda *a, **k: type('P', (), {'returncode': 1, 'stdout': ''})()  # noqa: E731
+check("the positive case: the environment's token first, stripped", G.access_token({'CI_ACCESS_TOKEN': ' tok '}), 'tok')
+check("  another name for it", G.access_token({'JOB_TOKEN': 't2', 'CI_ACCESS_TOKEN': 'no'}, env_name='JOB_TOKEN'), 't2')
+check("  the metadata server next", G.access_token({}, opener=meta), 'meta')
+check("  then gcloud, then nothing", (G.access_token({}, opener=no_meta, run=ok), G.access_token({}, opener=no_meta, run=bad)), ('gc', ''))
+with tempfile.TemporaryDirectory() as d:
+    junk = os.path.join(d, 'key.json')
+    with open(junk, 'w', encoding='utf-8') as f:
+        f.write('{"type": "nothing"}')
+    check("  a key that cannot mint, or a missing file, is the next source",
+          (G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': junk}, opener=meta),
+           G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': os.path.join(d, 'none.json')}, opener=meta)), ('meta', 'meta'))
+    if shutil.which('openssl'):
+        pem, pub = os.path.join(d, 'k.pem'), os.path.join(d, 'k.pub')
+        subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', pem], check=True, capture_output=True)
+        subprocess.run(['openssl', 'pkey', '-in', pem, '-pubout', '-out', pub], check=True, capture_output=True)
+        keyfile = os.path.join(d, 'sa.json')
+        with open(keyfile, 'w', encoding='utf-8') as f:
+            json.dump({'type': 'service_account', 'client_email': 'ci@example.iam.gserviceaccount.com',
+                       'private_key': open(pem, encoding='utf-8').read(), 'token_uri': 'https://oauth2.example/token'}, f)
+        sent = []
+
+        def opener(req, timeout=None):
+            sent.append((req.full_url, urllib.parse.parse_qs(req.data.decode())))
+            return Resp({'access_token': 'minted'})
+        check("  a service-account key file: the JWT grant, minted", G.key_file_token(keyfile, opener=opener, now=1_800_000_000), 'minted')
+        url, form = sent[0]
+        head, body, sig = form['assertion'][0].split('.')
+        pad = lambda s: base64.urlsafe_b64decode(s + '=' * (-len(s) % 4))  # noqa: E731
+        claims = json.loads(pad(body))
+        sigfile, msgfile = os.path.join(d, 's'), os.path.join(d, 'm')
+        open(sigfile, 'wb').write(pad(sig))
+        open(msgfile, 'wb').write(f'{head}.{body}'.encode())
+        verified = subprocess.run(['openssl', 'dgst', '-sha256', '-verify', pub, '-signature', sigfile, msgfile], capture_output=True)
+        check("  RS256 over the key's account for its token endpoint, an hour, verifiable with the public key",
+              (url, form['grant_type'][0], json.loads(pad(head))['alg'], claims['iss'], claims['aud'], claims['scope'],
+               claims['exp'] - claims['iat'], verified.returncode),
+              ('https://oauth2.example/token', 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'RS256',
+               'ci@example.iam.gserviceaccount.com', 'https://oauth2.example/token', G.CLOUD_PLATFORM, 3600, 0))
+
+        def refused(req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 400, 'invalid_grant', {}, None)
+        check("  not a service account, or a refused exchange: ''",
+              (G.key_file_token(junk, opener=opener), G.key_file_token(keyfile, opener=refused)), ('', ''))
+        inline = open(keyfile, encoding='utf-8').read()
+        check("  the key's JSON itself, and behind a pasted NAME=",
+              (G.key_file_token(inline, opener=opener, now=1_800_000_000), G.key_file_token(' {"type": "authorized_user"}', opener=opener),
+               G.key_file_token('GOOGLE_APPLICATION_CREDENTIALS=' + inline, opener=opener, now=1_800_000_000)), ('minted', '', 'minted'))
+        check("  access_token() takes the key from the environment, file or JSON, before the metadata server",
+              (G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': keyfile}, opener=opener),
+               G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': inline}, opener=opener)), ('minted', 'minted'))
+    else:
+        print("  (no openssl here: the key cases are not run)")
+
 print("credentials() answers None without google-auth installed")
 for name in ('google.auth.transport.requests', 'google.oauth2.credentials'):
     sys.modules[name] = None   # importing it raises ImportError

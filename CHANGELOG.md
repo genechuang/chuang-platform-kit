@@ -2,6 +2,18 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.9.0 - 2026-10-27 PT
+
+Additive; no host call site changes (a host re-exports them under its old names). One Google token helper for every
+project (SMAD PickleBot #413): its functions, jobs, runners and desktop had shared `ci_claim.access_token`.
+
+- `google_auth.access_token(env=, opener=, run=, gcloud_timeout=, env_name='CI_ACCESS_TOKEN', scope=)`: an access token
+  for Google's REST APIs with the standard library, or '' when no source answers, never raising: the named environment
+  variable, a service-account key under GOOGLE_APPLICATION_CREDENTIALS (a path or the key's JSON; google-auth in-process
+  when installed, else the openssl-signed JWT), the metadata server, then gcloud.
+- `google_auth.key_file_token(path, opener=, run=, now=, scope=)`: that key's RS256 JWT exchanged at its token endpoint
+  with the standard library and the openssl CLI, '' for anything else. `METADATA_TOKEN`, `CLOUD_PLATFORM`, `KEY_ENV`.
+
 ## 0.8.0 - 2026-10-26 PT
 
 Additive; no host call site changes. Gene, 10/25/26 11:45 PM PT: "GH access seems to belong in kit" (a host had grown a

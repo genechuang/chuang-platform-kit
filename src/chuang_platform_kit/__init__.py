@@ -23,7 +23,9 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      engine over it (the `db` extra installs psycopg 3)
   secrets            Secret Manager: a JSON secret read into the environment, a new version written back
   google_auth        a Gmail / Drive / Sheets / People service from a token in a file, the environment or Secret
-                     Manager, refreshed and written back (the `gmail` extra)
+                     Manager, refreshed and written back (the `gmail` extra); an access token for Google's REST
+                     APIs with the standard library alone (a job's variable, a service-account key, the metadata
+                     server, gcloud), '' when no source answers
   gitguardian        a repository's GitGuardian incidents listed with their occurrences, ignored or resolved with a note
   github             one repository's GitHub REST calls with one token: issues, compare, releases, dispatch, the
                      runner list, deployment records; a refusal names the permission the token lacks
