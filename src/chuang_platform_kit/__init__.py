@@ -34,6 +34,9 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      budget, and the compute cap that bounds the bill
   cache              answers a metered database must not re-send: kept for seconds, dropped by a write, a
                      per-caller throttle, a once-a-window gate (docs/metered-database.md)
+  keepalive          HTTPS calls on kept-alive connections: one pooled requests.Session a process, urllib3's
+                     retry (connect errors any method, read errors idempotent methods only), replaced after a
+                     minute idle, a timeout on every call
   push_gate          git's pre-push gate over a repo's .push-gate.toml: the stale-base refusal, each check skipped
                      on its mark, and a main that moved during the checks rebased onto for the second push
                      (`chuang-push-gate`)

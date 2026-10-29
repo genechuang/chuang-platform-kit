@@ -2,6 +2,18 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.10.0 - 2026-10-29 PT
+
+Additive; no host call site changes. Kept-alive HTTPS for service-to-service calls (SMAD PickleBot #505; Gene, 10/29/26:
+"should research first if GCP or open source already has something like this but more robust and prod tested"): the
+kit's one dependency, requests, already carries urllib3's pool, so this leans on it rather than a pool of our own.
+
+- `keepalive.request(method, url, headers=, data=, json=, timeout=TIMEOUT_SECONDS, now=)`: a `requests.Response` from
+  the process's one pooled session. urllib3 retries a failed connect for any method (`CONNECT_RETRIES`) and a read that
+  never answered for idempotent methods only (`READ_RETRIES`), so a POST is never sent twice.
+- `keepalive.session(now=)`: that session, closed and replaced after `IDLE_SECONDS` (60) unused, the guard a hand-rolled
+  pool needed against connections Cloudflare or Google's front end closed while idle. `keepalive.reset()`.
+
 ## 0.9.0 - 2026-10-27 PT
 
 Additive; no host call site changes (a host re-exports them under its old names). One Google token helper for every
