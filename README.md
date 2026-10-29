@@ -93,6 +93,7 @@ or, committed in a project's `.claude/settings.json`:
 | PreToolUse (inside `stamp-gate.sh`) | `foreground-guard.sh` / `.py` | refuses a Bash or PowerShell call that is not `run_in_background` when it names a known long runner (ship, build, smoke, the full suites, a git push but to `dock`, run watches, Cloud Build, Terraform, EAS, an Expo export) or its timeout is two minutes or more: the session stays reachable (since 1.7.0) |
 | SessionStart | `no-console-windows.sh` | on a Windows box with claude-shared beside the projects, runs its `no-console-windows.ps1` over the box's scheduled tasks and the session's repo; a launch that would pop up a console window is one line for Gene and listed in the session's context; nothing anywhere else (since 1.6.0) |
 | Stop | `stamp-reply.sh` / `.py` | blocks a turn whose last reply does not open and close with the stamp, date and time on both lines |
+| Stop (inside `stamp-reply.py`) | `evidence-gate.py` | blocks a reply that names a session (from the repo's `Session:` trailers) as a file's builder or owner with no `git log`/`blame`/`show` that turn, or states how production stands (live, shipped, deployed, booked, serving) having read nothing that turn (since 1.10.0) |
 | SessionStart, UserPromptSubmit | `unpushed-commits.sh` | names sibling repos with unpushed commits and whose they are to push |
 | SessionStart | `plugin-version.sh` | says when the install is behind a checkout of this repo beside the project |
 

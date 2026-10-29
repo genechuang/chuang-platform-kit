@@ -78,7 +78,7 @@ def decide(event, read_tail, now=None):
     if opens and closes:
         off = drift(reply, t)
         if off is None:
-            return None
+            return evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd'))
         return {'decision': 'block',
                 'reason': f'Your reply\'s stamp is {abs(off)} minute(s) {"ahead of" if off > 0 else "behind"} the clock: it is '
                           f'{stamp} PT now. Send one short line, "— {stamp} PT", saying the reply above is complete (do not '
@@ -91,6 +91,20 @@ def decide(event, read_tail, now=None):
                       f'the date and the time, and closes with "— mm/dd/yy h:mm AM PT" on its last line (Gene, 10/14/26: '
                       f'on the phone a long reply opens scrolled to its end, so the opening stamp is off screen; 10/17/26: '
                       f'the date too).'}
+
+
+def evidence(reply, lines, cwd=None, names=None):
+    """Once the stamp is right, evidence-gate.py's check (1.10.0; Gene, 10/29/26): an attribution of work to a session
+    with no git log this turn, or a production claim with nothing read this turn, is held. Loaded from this file's own
+    folder, so boot.sh's newest version brings both; any failure lets the reply through."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('evidence_gate', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'evidence-gate.py'))
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        return gate.check(reply, lines, gate.session_names(cwd) if names is None else names)
+    except Exception:  # noqa: BLE001 - never trap a session
+        return None
 
 
 AHEAD_OK, BEHIND_OK = 1, 1   # minutes (Gene, 10/20/26 12:22 AM PT: "reject timestamps more than 1 min ahead or behind")
