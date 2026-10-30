@@ -69,8 +69,28 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
     if (nh != "" && mins(p[3] + 0, p[1] + 0, p[2] + 0, h, p[5] + 0) > mins(ny + 0, nm + 0, nd + 0, nh + 0, nmin + 0) + 1) { print "ahead " id " " st; exit }
     print "ok"
   }'; }
+# The task-list gate rides this hook too (1.11.0, Gene 10/30/26 12:34 AM PT: "update your steps progress in real time"):
+# one awk counts the tool calls since the newest plan call (a tool named *update_plan or TodoWrite) or list close
+# (*wrap_up); only at PLAN_GATE_LIMIT or more does plan-gate.py start, to replay the list and refuse when a step is
+# still open. Most calls cost the awk alone.
+plan_gate() {
+  local n
+  n=$(tail -c 2000000 "$t" | awk '/"type":"assistant"/ {
+      s = $0
+      while ((i = index(s, "\"type\":\"tool_use\"")) > 0) {
+        s = substr(s, i + 17); nm = s; sub(/^[^}]*"name":"/, "", nm); sub(/".*$/, "", nm)
+        if (nm ~ /update_plan$/ || nm == "TodoWrite" || nm ~ /wrap_up$/) c = 0; else c++
+      }
+    } END { print c + 0 }')
+  [ "${n:-0}" -ge "$((${PLAN_GATE_LIMIT:-12} - 1))" ] || return 0
+  local err py
+  py=$(command -v python || command -v python3) || return 0
+  err=$(printf '%s' "$event" | "$py" "$(dirname "${BASH_SOURCE[0]}")/plan-gate.py" 2>&1 >/dev/null)
+  if [ $? -eq 2 ]; then printf '%s\n' "$err" >&2; exit 2; fi
+  return 0
+}
 verdict=$(judge)
-case "$verdict" in no*|ahead*) ;; *) exit 0 ;; esac
+case "$verdict" in no*|ahead*) ;; *) plan_gate; exit 0 ;; esac
 
 # A miss is read again before it is refused (1.5.0, Gene 10/20/26 1:55 PM PT; Snow White's transcript that afternoon):
 # Claude Code stamps a text entry when it is made but appends it to the file later, so the gate often judged the line
