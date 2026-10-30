@@ -21,6 +21,7 @@ LIMIT = int(os.environ.get('PLAN_GATE_LIMIT', '12'))
 MAX_REFUSALS = 3   # a stuck session is never trapped: the same stale run is refused at most this many times
 TAIL_BYTES = 2_000_000
 WAIT = float(os.environ.get('PLAN_GATE_WAIT', '0.4'))   # "0" for the tests
+FRESH_SECONDS = 60
 
 
 def is_plan(name: str) -> bool:
@@ -109,6 +110,20 @@ def main() -> int:
         steps, since, mark = replay(lines)
         state = os.path.join(os.environ.get('TMPDIR') or os.environ.get('TEMP') or '/tmp',
                              'plan-gate-' + ''.join(ch for ch in event.get('session_id') or 'default' if ch.isalnum() or ch == '-'))
+        fresh = state + '.fresh'
+        if is_plan(event.get('tool_name')) or is_close(event.get('tool_name')):
+            # 1.11.1: Claude Code writes a message's tool calls to the transcript only after they all run, so a plan
+            # call sent beside other calls is not on disk when they are checked (it refused its own fix at 12:46 AM PT
+            # 10/30/26). The plan call's own check marks the session fresh, and the gate trusts that for FRESH_SECONDS.
+            with open(fresh, 'w', encoding='utf-8') as f:
+                f.write('fresh\n')
+            return 0
+        try:
+            import time
+            if time.time() - os.path.getmtime(fresh) < FRESH_SECONDS:
+                return 0
+        except OSError:
+            pass
         key = f'{mark}:{since // LIMIT}'
         try:
             with open(state, encoding='utf-8') as f:

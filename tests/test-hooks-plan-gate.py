@@ -76,5 +76,19 @@ check('stamp-gate.sh refuses the stale list with plan-gate\'s reason', (code, 'T
 code, err = gate([json.dumps({'type': 'user', 'message': {'content': 'go'}})] + [PLAN] + WORK[:4] + [stamp])
 check('and lets a fresh one through', code, 0)
 
+
+def gate_tool(lines, tool):
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    ev = {'hook_event_name': 'PreToolUse', 'tool_name': tool, 'transcript_path': path, 'session_id': 'sf'}
+    return subprocess.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True,
+                          text=True, timeout=30, env=dict(os.environ, TMPDIR=d, TEMP=d, STAMP_GATE_WAIT='',
+                                                          PLAN_GATE_WAIT='0')).returncode
+
+
+stale_lines = [json.dumps({'type': 'user', 'message': {'content': 'go'}})] + [PLAN] + WORK + [stamp]
+check('1.11.1: a plan call sent beside the next call, not yet on disk, lets that call through (12:46 AM PT 10/30/26)',
+      (gate_tool(stale_lines, 'mcp__ccd_turn__update_plan'), gate_tool(stale_lines, 'Bash')), (0, 0))
+
 print(f'{len(FAILS)} failure(s)')
 raise SystemExit(1 if FAILS else 0)
