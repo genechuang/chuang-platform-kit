@@ -44,8 +44,12 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      accounts (CLAUDE_ACCOUNTS, CLAUDE_CODE_OAUTH_TOKEN_<NAME> or Secret Manager): `ask` one prompt
                      for the text, `run` the caller's own CLI arguments streamed through; a limited account rests
                      until the reset time its answer names (`python -m chuang_platform_kit.headless_claude`)
+  sentry_api         Sentry's issues API, one client for every project: an issue by short id or id, its newest
+                     event trimmed for a triager, the unresolved list, a search, a note, a resolve with its note,
+                     the paged list a sweep walks, and the named actions a script or listener asks for; a refusal
+                     is `Refused` with Sentry's words, never the token
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.11.2'
+__version__ = '0.12.0'

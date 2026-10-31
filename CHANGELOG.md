@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.12.0 - 2026-10-31 PT
+
+Additive; no host call site changes (SMAD PickleBot's `picklebot_core/sentry_api.py` re-exports it under its old
+names). Sentry's issues API for every project (SMAD PickleBot #569, the one-token rule: one user auth token, one client).
+
+- `sentry_api.Client(org, projects=, token=, opener=, timeout=, zone=)`: `lookup(short_id or id)`, `resolve(short_id,
+  commit, next_release=, session=, postmortem=)` with its note, `unresolved()` across the projects, `issues(project,
+  query=)` following the Link header's pages, `event(issue_id)` raw and `latest_event(short_id)` trimmed for a
+  triager, `search(query)`, `comment(short_id, text)`, `run(action, args)` for the named actions (issue, event, search,
+  unresolved, comment, resolve); `Refused` (a SystemExit with the call, the status and Sentry's words, never the
+  token; a 403 names the scope), `pt(stamp, zone)`, `next_page(link)`. Standard library only; the token is the
+  host's, from wherever it keeps it.
+
 ## 0.11.2 - 2026-10-31 PT
 
 - `python -m chuang_platform_kit.headless_claude run` falls back to the box's own CLI sign-in by default when no
