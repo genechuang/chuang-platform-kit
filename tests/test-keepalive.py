@@ -145,6 +145,55 @@ finally:
     K.session = keep
 check("  every call carries a timeout: TIMEOUT_SECONDS unless given", seen, [K.TIMEOUT_SECONDS, 3])
 
+# 6. urlopen (0.16.0, #562): urllib.request.urlopen's shape over the pool, for every module that takes an opener.
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+sent = []
+
+
+class Resp:
+    def __init__(self, status, content=b'', reason='OK'):
+        self.status_code, self.content, self.reason, self.headers = status, content, reason, {'X-H': '1'}
+
+
+answers = iter([Resp(200, b'{"name": "m1"}'), Resp(404, b'{"error": "gone"}', 'Not Found'), ConnectionError('reset')])
+keep_request = K.request
+
+
+def fake_request(method, url, headers=None, data=None, json=None, timeout=None, now=None):
+    sent.append((method, url, headers, data, timeout))
+    nxt = next(answers)
+    if isinstance(nxt, Exception):
+        raise nxt
+    return nxt
+
+
+K.request = fake_request
+try:
+    req = urllib.request.Request('https://pubsub.example/v1/t:publish', data=b'{"messages": []}', method='POST',
+                                 headers={'Content-Type': 'application/json', 'Authorization': 'Bearer t'})
+    with K.urlopen(req, timeout=7) as r:
+        ok = (r.status, r.read(), r.headers['X-H'], r.getcode())
+    try:
+        K.urlopen(urllib.request.Request('https://github.example/repos/x'), timeout=5)
+        missing = None
+    except urllib.error.HTTPError as e:
+        missing = (e.code, e.read())
+    try:
+        K.urlopen('https://firestore.example/doc')
+        unreachable = None
+    except urllib.error.URLError as e:
+        unreachable = type(e.reason).__name__
+finally:
+    K.request = keep_request
+plain = K.urlopen(f'{srv.url}/plain', timeout=5)   # plain http: urllib's own urlopen, not the pool
+check("urlopen: any method's headers and body on the pool, the answer read whole; a 4xx is HTTPError with its body; no answer is URLError; plain http is urllib's own",
+      (ok, sent[0][0], sent[0][3], sent[0][4], sent[0][2].get('Authorization'), missing, unreachable,
+       type(plain).__name__ != 'Answer', plain.status),
+      ((200, b'{"name": "m1"}', '1', 200), 'POST', b'{"messages": []}', 7, 'Bearer t', (404, b'{"error": "gone"}'),
+       'ConnectionError', True, 200))
+
 K.reset()
 srv.close()
 print(f"\n{len(fails)} failure(s)")

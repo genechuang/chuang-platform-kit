@@ -30,6 +30,8 @@ import urllib.request
 import uuid
 from datetime import datetime, timezone
 
+from . import keepalive
+
 METADATA_TOKEN_URL = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
 SCOPE = 'https://www.googleapis.com/auth/pubsub'
 _ON_GOOGLE_CLOUD = ('K_SERVICE', 'CLOUD_RUN_JOB', 'FUNCTION_TARGET', 'GCE_METADATA_HOST')
@@ -115,7 +117,7 @@ def publish(topic: str, data, *, project: str, attributes: dict = None, ordering
     PublishFailed on failure."""
     if not topic or not project:
         raise PublishFailed('no topic or project')
-    fetch = fetch or urllib.request.urlopen
+    fetch = fetch or keepalive.urlopen   # kept-alive (#562): a publish never re-sent by the pool once it went out
     message = {'data': base64.b64encode(_body(data)).decode('ascii'),
                'attributes': {str(k): str(v) for k, v in (attributes or {}).items()}}
     host = 'pubsub.googleapis.com'

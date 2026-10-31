@@ -19,9 +19,18 @@ sent no FIN looks alive until it is written to. Every call has a timeout (TIMEOU
     resp.raise_for_status()
 
 requests is the kit's one dependency and is imported on the first call (lazy_import.py), never at cold start.
+
+`urlopen(req, timeout=)` (0.16.0, SMAD PickleBot #562, lifted from its api_client's GET-only adapter of #500) is the same
+pool in urllib.request.urlopen's shape, for every module that takes an `opener`: an HTTPS request of any method on the
+kept-alive session, its answer read whole; a 4xx or 5xx raised as urllib.error.HTTPError and a connection that could not
+be made or answer as urllib.error.URLError, as urlopen raises them. Plain http (the metadata server) goes to urlopen.
 """
+import io
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from .lazy_import import lazy
 
@@ -77,6 +86,43 @@ def request(method: str, url: str, headers: dict = None, data=None, json=None, t
     with _LOCK:
         _STATE['used'] = (now or time.monotonic)()   # a slow answer counts as use up to its end
     return resp
+
+
+class Answer:
+    """An answer read whole from a kept-alive connection, in the shape callers read urlopen's: `status`, `headers`,
+    `read()`, a context manager."""
+
+    def __init__(self, status: int, body: bytes, headers=None):
+        self.status, self._body, self.headers = status, body, headers or {}
+
+    def getcode(self) -> int:
+        return self.status
+
+    def read(self, *a) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def urlopen(req, timeout: float = TIMEOUT_SECONDS, data=None):
+    """urllib.request.urlopen's shape over the kept-alive session: `req` a urllib Request (or a URL), its method, headers
+    and body sent as they are. A 4xx or 5xx is urllib.error.HTTPError (its body readable), no answer URLError; plain
+    http goes to urllib's own urlopen. A POST is never re-sent after it went out (the module docstring's retry rule)."""
+    if isinstance(req, str):
+        req = urllib.request.Request(req, data=data)
+    if urllib.parse.urlsplit(req.full_url).scheme != 'https':
+        return urllib.request.urlopen(req, timeout=timeout)
+    try:
+        resp = request(req.get_method(), req.full_url, headers=dict(req.header_items()), data=req.data, timeout=timeout)
+    except Exception as e:   # noqa: BLE001 - requests' ConnectionError, Timeout and the rest, as urlopen's URLError
+        raise urllib.error.URLError(e)
+    if resp.status_code >= 400:
+        raise urllib.error.HTTPError(req.full_url, resp.status_code, resp.reason, resp.headers, io.BytesIO(resp.content))
+    return Answer(resp.status_code, resp.content, resp.headers)
 
 
 def reset() -> None:

@@ -2,6 +2,23 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.16.0 - 2026-10-31 PT
+
+Additive; no host call site changes (a host that passes its own opener or fetch keeps it). Kept-alive connections for
+the kit's repeat callers (SMAD PickleBot #562, phase 2 of #505), each measured first from the desktop, a fresh
+connection per call against a warm kept-alive one: GitHub 159 ms saved a call, Pub/Sub 34 ms (GREEN-API 362 ms, Firestore
+157 ms and SMAD's API 31 ms, the hosts' own callers).
+
+- `keepalive.urlopen(req, timeout=)`: urllib.request.urlopen's shape over the pooled session, lifted from SMAD's
+  api_client GET adapter (#500) and widened to every method: the request's method, headers and body sent as they are,
+  the answer read whole (`Answer`: status, headers, read(), a context manager), a 4xx or 5xx raised as HTTPError with
+  its body, no answer as URLError; plain http (the metadata server) goes to urllib's own. A POST is never re-sent once
+  it went out (the pool's retry rule).
+- `github.request` and `pubsub.publish` default to it when no opener / fetch is given.
+- GREEN-API is not moved here: its own connect-retry loop would stack on the pool's (three tries each), about 90 s on
+  an outage against the sender's timeout, so it moves in its own release with one retry budget.
+- tests/test-keepalive.py: urlopen's method, headers, body, answer, HTTPError, URLError and plain http.
+
 ## 0.15.1 - 2026-10-31 PT
 
 - `gmail.Mailbox` and `mailbox()` use the token's own granted scopes by default (`scopes=None`); 0.15.0 asked every

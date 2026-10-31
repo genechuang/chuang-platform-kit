@@ -21,6 +21,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import keepalive
+
 API = 'https://api.github.com'
 TIMEOUT = 20
 TOKEN_ENV = ('GH_TOKEN', 'GITHUB_TOKEN')
@@ -73,7 +75,7 @@ def request(tok: str, method: str, path: str, body=None, opener=None, timeout: i
         headers['Content-Type'] = 'application/json'
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+        with (opener or keepalive.urlopen)(req, timeout=timeout) as r:   # kept-alive: 159 ms off a warm call (#562)
             text, status = r.read().decode('utf-8', 'replace'), getattr(r, 'status', 200)
     except urllib.error.HTTPError as e:
         raw = e.read().decode('utf-8', 'replace') if e.fp else ''
