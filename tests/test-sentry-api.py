@@ -75,7 +75,7 @@ done = c.resolve('PROJ-6', 'abc1234', session='Snow White', postmortem='https://
 check('the positive case: lookup by short id and by id, in the zone; resolve sets the status and leaves the note',
       (got['id'], got['shortId'], got['project'], got['lastSeenPT'], by_id['id'], calls[0][3], done['status'], done['note'],
        calls[-2][2], calls[-1][2]),
-      ('42', 'PROJ-6', 'proj-bot', '10/31/26 9:30 AM PDT', '42', 'Bearer tok', 'resolved',
+      ('42', 'PROJ-6', 'proj-bot', '10/31/26 9:30 AM PT', '42', 'Bearer tok', 'resolved',
        'Fixed by abc1234 (Snow White). Post-mortem: https://x/pm', {'status': 'resolved'},
        {'text': 'Fixed by abc1234 (Snow White). Post-mortem: https://x/pm'}))
 
@@ -151,8 +151,9 @@ check('a 403 is Refused naming the scope, another status with the words, no answ
       ('Sentry refused GET /organizations/acme/s', True, 'Sentry GET /organizations/acme/shortids/PROJ-6/ failed (500): {"detail": "nope"}',
        'Sentry GET /organizations/acme/shortids/PROJ-6/ did not answer (URLError)', 'no Sentry token: the host passes one to the client'))
 
-check('pt: an ISO stamp in the zone, a bare one as UTC, none as empty',
-      (S.pt('2026-10-31T16:30:00Z'), S.pt('2026-10-31T16:30:00', 'UTC'), S.pt('')), ('10/31/26 9:30 AM PDT', '10/31/26 4:30 PM UTC', ''))
+check('pt: an ISO stamp in the zone with the label people write (PT in either season), a bare one as UTC, none as empty',
+      (S.pt('2026-10-31T16:30:00Z'), S.pt('2026-01-08T16:30:00Z'), S.pt('2026-10-31T16:30:00', 'UTC'), S.pt(''), S.pt('garbage')),
+      ('10/31/26 9:30 AM PT', '1/8/26 8:30 AM PT', '10/31/26 4:30 PM UTC', '', 'garbage'))
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

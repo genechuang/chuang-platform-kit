@@ -15,7 +15,9 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
+
+from .clock import human_time
 
 API = 'https://sentry.io/api/0'
 TIMEOUT = 30
@@ -26,16 +28,15 @@ class Refused(SystemExit):
 
 
 def pt(stamp, zone: str = 'America/Los_Angeles') -> str:
-    """Sentry's ISO stamp as a local clock reading, `mm/dd/yy h:mm AM ZONE`; '' when there is none."""
+    """Sentry's ISO stamp as the clock reading a person writes, `10/8/26 12:57 AM PT` (`clock.human_time`: a US zone's
+    two-letter label in either season, any other zone's own name; a stamp with no zone is UTC, as Sentry's are); ''
+    when there is none, the stamp itself when it cannot be read."""
     if not stamp:
         return ''
     try:
         from zoneinfo import ZoneInfo
-        d = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
-        if d.tzinfo is None:
-            d = d.replace(tzinfo=timezone.utc)   # utc-ok: Sentry's stamps are UTC when they carry no zone
-        local = d.astimezone(ZoneInfo(zone))
-        return local.strftime('%m/%d/%y %I:%M %p %Z').replace(' 0', ' ').lstrip('0')
+        return human_time(datetime.fromisoformat(str(stamp).replace('Z', '+00:00')), weekday=False, tz_word=True,
+                          tz=ZoneInfo(zone))
     except (ValueError, TypeError):
         return str(stamp)
 

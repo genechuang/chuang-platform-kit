@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import tempfile
+import urllib.error
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path.insert(0, os.path.join(ROOT, 'src'))
@@ -120,6 +121,56 @@ with tempfile.TemporaryDirectory() as d:
     check("unchanged", S.renew_if_changed('p', 'TOKEN', '{"k": 1}\n', path, session=sess), 'unchanged')
     check("renewed", (S.renew_if_changed('p', 'TOKEN', 'old', path, session=sess), sess.store['TOKEN']),
           ('projects/p/secrets/TOKEN/versions/7', b'{"k": 1}'))
+
+print("TokenSession: the standard library over a bearer token asked at each call; a refusal keeps its status; default_session() falls back to it without google-auth")
+sent = []
+
+
+class Raw:
+    def __init__(self, body):
+        self.status, self._body = 200, body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def opener(req, timeout=0):
+    sent.append((req.get_method(), req.full_url, req.headers.get('Authorization'), req.data))
+    if 'MISSING' in req.full_url:
+        raise urllib.error.HTTPError(req.full_url, 404, 'no', {}, None)
+    if req.get_method() == 'POST':
+        return Raw(b'{"name": "projects/p/secrets/TOKEN/versions/8"}')
+    return Raw(json.dumps({'payload': {'data': base64.b64encode(b'v').decode('ascii')}}).encode())
+
+
+asked = []
+ts = S.TokenSession(token=lambda: asked.append(1) or 'gtok', opener=opener)
+check("get", (S.access('p', 'LOGINS', session=ts), sent[0][0], sent[0][2], len(asked)), (b'v', 'GET', 'Bearer gtok', 1))
+try:
+    S.access('p', 'MISSING', session=ts)
+    miss = 'no error'
+except RuntimeError as e:
+    miss = str(e)
+check("404", (miss, len(asked)), ('HTTP 404', 2))
+check("post", (S.add_version('p', 'TOKEN', 'x', session=ts), sent[-1][0], json.loads(sent[-1][3])['payload']['data']),
+      ('projects/p/secrets/TOKEN/versions/8', 'POST', base64.b64encode(b'x').decode('ascii')))
+saved = {k: sys.modules.get(k) for k in ('google', 'google.auth', 'google.auth.exceptions', 'google.auth.transport.requests')}
+sys.modules['google'] = None
+try:
+    fallback = type(S.default_session()).__name__
+finally:
+    for k, v in saved.items():
+        if v is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = v
+check("default_session without google-auth", fallback, 'TokenSession')
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

@@ -261,7 +261,7 @@ def ask(prompt: str, model: str = '', system: str = '', env=None, resting: Resti
     return {'ok': False, 'text': '', 'account': '', 'tried': tried, 'usage': {}}
 
 
-def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, timeout: float = 0, popen=subprocess.Popen,
+def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, timeout: float = 0, popen=None,
            cwd: str = None, cli: str = '') -> dict:
     """The CLI with the caller's arguments on one account, stdout and stderr streamed to `out` and `err` (sys.stdout
     and sys.stderr by default) as they come, the last TAIL_LINES of each kept for the verdict; `timeout` seconds
@@ -269,7 +269,7 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
     out, err = out if out is not None else sys.stdout, err if err is not None else sys.stderr
     tails = {'out': collections.deque(maxlen=TAIL_LINES), 'err': collections.deque(maxlen=TAIL_LINES)}
     try:
-        p = popen([cli or cli_path(env), *args], stdin=stdin if stdin is not None else subprocess.DEVNULL,
+        p = (popen or subprocess.Popen)([cli or cli_path(env), *args], stdin=stdin if stdin is not None else subprocess.DEVNULL,
                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
                   env=child_env(token, env), cwd=cwd, creationflags=NO_WINDOW)
     except OSError as e:
@@ -302,7 +302,7 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
 
 
 def run(args: list, env=None, resting: Resting = None, now=time.time, timeout: float = 0, names=None, project: str = '',
-        access=None, popen=subprocess.Popen, stdin=None, out=None, err=None, cwd: str = None, cli: str = '',
+        access=None, popen=None, stdin=None, out=None, err=None, cwd: str = None, cli: str = '',
         zone: str = '', login_fallback: bool = False) -> dict:
     """The CLI with the caller's arguments on the first account whose run is not refused for a limit: {'ok',
     'returncode', 'account', 'tried'}. A limited run rests the account and the same run starts on the next; a plain

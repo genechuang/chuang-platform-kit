@@ -2,6 +2,24 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.12.1 - 2026-10-31 PT
+
+Additive; no host call site changes.
+
+- `sentry_api.pt` writes its reading the way `clock.human_time` does, `10/8/26 12:57 AM PT`: a US zone's two-letter
+  label in either season (PDT and PST are both PT, the label people write), any other zone's own name, the day and the
+  hour unpadded; 0.12.0's `%Z` said PDT, which SMAD PickleBot's suite refused (its rule: labels say PT, logs say `%Z`).
+- `secrets.TokenSession(token=, opener=)`: the session over the standard library and a bearer token, by default
+  `google_auth.access_token` (a job's variable, a service-account key, the metadata server, gcloud's own sign-in), so a
+  box with neither google-auth nor application-default credentials reads and writes a secret; `default_session()`
+  falls back to it where google-auth is missing or finds no credentials. Lifted from SMAD PickleBot's
+  picklebot_core/claude_accounts.py (#660); `python -m chuang_platform_kit.headless_claude run --project <p>` now
+  reaches Secret Manager on a desktop with nothing else passed (Dragnet, 10/31/26 9:15 AM PT).
+- `headless_claude.run` and `stream` look `subprocess.Popen` up at the call (`popen=None`), not at import, so a suite
+  that replaces it reaches them; 0.11.2's own `main run` case had been starting the real CLI, and its IndexError is
+  why the Tests run of 0.11.2 and of 0.12.0 was red. Both were tagged on that red run (the release chain's watch did
+  not gate the tag; it does from this one); the code they ship is right, only the suite was.
+
 ## 0.12.0 - 2026-10-31 PT
 
 Additive; no host call site changes (SMAD PickleBot's `picklebot_core/sentry_api.py` re-exports it under its old
