@@ -110,5 +110,132 @@ calls = []
 GH.get('', f'/repos/{REPO}', opener=fake([('GET', '/repos/owner/repo', 200, {})], calls))
 check('no token, no Authorization header', 'Authorization' in calls[0][3], False)
 
+# The throttle (SMAD PickleBot #679; Gene, 10/31/26: "add a throttle mechanism so we don't have this problem again").
+import subprocess  # noqa: E402
+import time  # noqa: E402
+
+GH.reset_limits()
+clock = [1_000_000.0]
+GH._now = lambda: clock[0]
+
+
+class Limited(Resp):
+    def __init__(self, status, body, headers):
+        super().__init__(status, body)
+        self.headers = headers
+
+
+def limited(headers, status=200, body=None, calls=None):
+    """One answer with rate-limit headers; a 4xx is an HTTPError carrying them."""
+    def opener(req, timeout=None):
+        if calls is not None:
+            calls.append(req.full_url)
+        if status >= 400:
+            raise urllib.error.HTTPError(req.full_url, status, 'x', headers, io.BytesIO(json.dumps(body or {}).encode()))
+        return Limited(status, body or {}, headers)
+    return opener
+
+
+sent = []
+GH.get('t', '/search/issues?q=x', opener=limited({'X-RateLimit-Resource': 'search', 'X-RateLimit-Remaining': '2',
+                                                   'X-RateLimit-Reset': str(clock[0] + 40)}, calls=sent))
+try:
+    GH.get('t', '/search/issues?q=y', opener=limited({}, calls=sent))
+    under = None
+except GH.RateLimited as e:
+    under = (e.resource, e.remaining, int(e.reset_at - clock[0]), e.status, isinstance(e, GH.GitHubError))
+clock[0] += 41
+GH.get('t', '/search/issues?q=z', opener=limited({'X-RateLimit-Resource': 'search', 'X-RateLimit-Remaining': '29',
+                                                   'X-RateLimit-Reset': str(clock[0] + 60)}, calls=sent))
+check("the throttle's positive case: GitHub's count read from the headers; under the floor the next search is refused "
+      "locally and not sent; after the reset it goes", (len(sent), under, GH.limits()['search']['remaining']),
+      (2, ('search', 2, 40, 429, True), 29))
+
+GH.reset_limits()
+sent = []
+try:
+    GH.get('t', f'/repos/{REPO}/issues', opener=limited({'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': str(clock[0] + 30)},
+                                                        403, {'message': 'API rate limit exceeded for user'}, calls=sent))
+    spent = None
+except GH.RateLimited as e:
+    spent = (e.resource, e.remaining, 'exceeded' in e.message, int(e.reset_at - clock[0]))
+try:
+    GH.get('t', f'/repos/{REPO}/issues/2', opener=limited({}, calls=sent))
+    again = None
+except GH.RateLimited as e:
+    again = e.resource
+check('a 403 with remaining 0 spends core until the reset; the next call is not sent', (spent, again, len(sent)),
+      (('core', 0, True, 30), 'core', 1))
+
+GH.reset_limits()
+sent = []
+for _ in range(GH.LOCAL_CAP['search']):
+    GH.get('t', '/search/issues?q=a', opener=limited({}, calls=sent))
+try:
+    GH.get('t', '/search/issues?q=a', opener=limited({}, calls=sent))
+    capped = None
+except GH.RateLimited as e:
+    capped = ('its cap' in e.message, e.resource)
+clock[0] += 61
+GH.get('t', '/search/issues?q=a', opener=limited({}, calls=sent))
+check("the process's own cap: the eleventh search in a minute is refused before it is sent; the minute after, it goes",
+      (capped, len(sent)), ((True, 'search'), 11))
+
+GH.reset_limits()
+data = GH.graphql('t', 'query { x }', {'a': 1}, opener=limited({'X-RateLimit-Resource': 'graphql', 'X-RateLimit-Remaining': '4000',
+                                                                   'X-RateLimit-Reset': str(clock[0] + 3000)}, body={'data': {'x': 1}}))
+try:
+    GH.graphql('t', 'query { x }', opener=limited({}, body={'errors': [{'message': 'API rate limit exceeded for this resource'}]}))
+    gql = None
+except GH.RateLimited as e:
+    gql = e.resource
+try:
+    GH.graphql('t', 'query { x }', opener=limited({}, body={'data': {}}))
+    after = None
+except GH.RateLimited as e:
+    after = e.resource
+try:
+    GH.reset_limits()
+    GH.graphql('t', 'query { x }', opener=limited({}, body={'errors': [{'message': 'Field x does not exist'}]}))
+    plain = None
+except GH.GitHubError as e:
+    plain = (type(e).__name__, e.message)
+check("graphql: the data; GitHub's count kept; a rate-limit error spends the resource and the next call is not sent; "
+      "another error is a GitHubError", (data, gql, after, plain), ({'x': 1}, 'graphql', 'graphql', ('GitHubError', 'Field x does not exist')))
+
+GH.reset_limits()
+ran = []
+
+
+def gh_run(args, **kw):
+    ran.append(args)
+    return subprocess.CompletedProcess(args, 1, '', 'gh: HTTP 403: API rate limit exceeded for user')
+
+
+try:
+    GH.cli(['api', 'graphql', '-f', 'query=x'], run=gh_run)
+    c1 = None
+except GH.RateLimited as e:
+    c1 = e.resource
+try:
+    GH.cli(['api', 'graphql', '-f', 'query=y'], run=gh_run)
+    c2 = None
+except GH.RateLimited as e:
+    c2 = e.resource
+fine = GH.cli(['issue', 'list'], run=lambda args, **kw: subprocess.CompletedProcess(args, 0, 'fine', ''))
+check('cli: a rate-limited gh run spends its resource, the next graphql run is refused before gh runs, core still runs',
+      (c1, c2, len(ran), fine.stdout), ('graphql', 'graphql', 1, 'fine'))
+check('resource_of: graphql, code_search, search, core',
+      (GH.resource_of('/graphql'), GH.resource_of('/search/code?q=a'), GH.resource_of('/search/issues?q=a'), GH.resource_of('/repos/o/r')),
+      ('graphql', 'code_search', 'search', 'core'))
+slept = []
+GH.reset_limits()
+GH._note('search', {'X-RateLimit-Remaining': '1', 'X-RateLimit-Reset': str(clock[0] + 25)})
+check('wait_until sleeps to the reset while under the floor, at most the cap; nothing when the resource is free',
+      (GH.wait_until('search', sleep=slept.append), GH.wait_until('search', cap=10, sleep=slept.append), GH.wait_until('core', sleep=slept.append)),
+      (25.0, 10.0, 0))
+GH._now = time.time
+GH.reset_limits()
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)

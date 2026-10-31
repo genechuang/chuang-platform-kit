@@ -2,6 +2,27 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.17.0 - 2026-10-31 PT
+
+Additive; no host call site changes. **GitHub calls are throttled** (SMAD PickleBot #679; Gene, 10/31/26 12:29 PM PT:
+"at least the 2nd time broke github GraphQL quota by runaway queries ... add a throttle mechanism so we don't have this
+problem again": a board watch spent an hour's 5,000 GraphQL points in a minute of reads on 10/27/26, and a retried
+event searched issues 300 times a minute into the search quota's 403 on 10/31/26).
+
+- `github.request` (and so every verb) keeps GitHub's own count of the token per rate-limit resource (core, search,
+  graphql, code_search) from every answer's `X-RateLimit-*` headers, and refuses a call locally, with no network call,
+  once the resource is under its `FLOOR` (core 100, search 3, graphql 250, code_search 2), spent (a 403 or 429 with
+  remaining 0, a `Retry-After`, or a message naming a rate limit; held `SPENT_FOR` 60 s when no reset can be read) or
+  over this process's `LOCAL_CAP` a minute (core 120, search 10, graphql 60, code_search 5). The refusal is
+  `RateLimited`, a `GitHubError` with status 429, `resource`, `remaining` and `reset_at`; nothing is retried.
+  `limits()` reads the count, `wait_until(resource, cap=120)` sleeps to the reset for a script that can, `reset_limits()`
+  is the suite's seam, and `resource_of(path)` names a path's resource.
+- `github.graphql(tok, query, variables=None)`: one GraphQL call's `data` through the same throttle; `GitHubError` with
+  the first error's message, `RateLimited` when that message names the rate limit.
+- `github.cli(args, run=subprocess.run, timeout=60)`: `gh <args>` through the same local cap, for a script or daemon on
+  the CLI (gh hides GitHub's headers); a failed run whose stderr names a rate limit spends the resource; a missing gh is
+  returncode 127.
+
 ## 0.16.0 - 2026-10-31 PT
 
 Additive; no host call site changes (a host that passes its own opener or fetch keeps it). Kept-alive connections for
