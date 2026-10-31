@@ -2,6 +2,27 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.15.0 - 2026-10-31 PT
+
+Additive; no host call site changes. Clerk and Gmail for every project (SMAD PickleBot #571 and #661), one release.
+
+- `clerk_api`: Clerk has two APIs behind two credentials that neither takes the other's, so the consolidation is one
+  module with both. `Backend(secret_key, opener=, timeout=, user_agent=)`: `call(path, method=, body=, query=)`,
+  `pages()`, and the named calls (`user`, `users`, `session`, `sessions`, `revoke_session`, `sign_in_token`, `invite`,
+  `revoke_invitation`, `add_email`, `update_email`, `delete_email`, `delete_external_account`, `ban`, `unban`,
+  `delete_user`). `Platform(token, ...)`: `call`, `applications`, `application(include_secret_keys=)`, `config(keys=,
+  schema=)`, `patch_config(if_match=, dry_run=)`. `Refused` (a RuntimeError) reads `<METHOD> <address> answered
+  <status>: <Clerk's long_message>` or `... did not answer (<error>)`, with `status`, `detail` and `kind`, never a key.
+  `verify_session(authorization, publishable_key, test_publishable_key=)` → (claims, signed by the second instance),
+  the JWKS clients kept per address (`jwk_client`), `Unauthorized` / `NotConfigured`; `frontend_api`, `issuer`,
+  `jwks_url`. The `clerk` extra (PyJWT with cryptography) is for the session check alone.
+- `gmail`: `Mailbox(scopes=, service=, **sources)` on the kit's `google_auth` token readers: `search(query)`,
+  `thread(id)` (headers only, oldest first), `has_message_from(thread, address)`, `reply_all(message, text=, html=,
+  to=, cc=)` (Re: once, In-Reply-To, References, in the thread), `send(...)`; `mailbox(name, mailboxes, project)` by
+  the host's map of mailbox to token name, the environment first and Secret Manager second; `NoMailbox` without a
+  usable token. Built for a headless run on a setup token, which carries no claude.ai connector (Dragnet, 10/31/26).
+- tests/test-clerk-api.py, tests/test-gmail.py; the Tests workflow installs the `clerk` extra.
+
 ## 0.14.0 - 2026-10-31 PT
 
 Additive; no host call site changes. Anthropic's Messages API for every project (SMAD PickleBot #573: three callers,

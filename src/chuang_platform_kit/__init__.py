@@ -55,8 +55,13 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   anthropic_api      Anthropic's Messages API, one client for every project: one call with the host's headers and
                      extras, the text and the body back with the model that answered, the host's meter run on every
                      answer; a refusal names the status and Anthropic's words and says when the account cannot pay
+  clerk_api          Clerk's two APIs, one module: the Backend API on an instance's secret key, the Platform API on an
+                     account's token, and the session check from the publishable key (the `clerk` extra)
+  gmail              one Gmail client per mailbox on its stored token: search threads, read a thread's senders and
+                     subjects, the never-send-twice check, reply-all with an explicit `to`, send; a host's map names
+                     each mailbox's token once
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.14.0'
+__version__ = '0.15.0'
