@@ -77,9 +77,28 @@ fake_oauth_creds.Credentials = FakeCreds
 fake_api = types.ModuleType('googleapiclient')
 fake_discovery = types.ModuleType('googleapiclient.discovery')
 fake_discovery.build = lambda api, version, credentials=None, cache_discovery=True: built.append((api, version, credentials.data.get('token'))) or f'{api}-{version}'
+
+
+class FakeSA:
+    """google.oauth2.service_account.Credentials: a key file read, no refresh."""
+
+    def __init__(self, path, scopes):
+        self.path, self.scopes, self.data = path, scopes, {'token': 'sa'}
+
+    @classmethod
+    def from_service_account_file(cls, path, scopes=None):
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        return cls(path, scopes)
+
+
+fake_sa = types.ModuleType('google.oauth2.service_account')
+fake_sa.Credentials = FakeSA
+fake_oauth2.service_account = fake_sa
 for name, mod in (('google', fake_google), ('google.auth', fake_auth), ('google.auth.transport', fake_transport),
                   ('google.auth.transport.requests', fake_requests), ('google.oauth2', fake_oauth2),
-                  ('google.oauth2.credentials', fake_oauth_creds), ('googleapiclient', fake_api), ('googleapiclient.discovery', fake_discovery)):
+                  ('google.oauth2.credentials', fake_oauth_creds), ('google.oauth2.service_account', fake_sa),
+                  ('googleapiclient', fake_api), ('googleapiclient.discovery', fake_discovery)):
     sys.modules[name] = mod
 
 from chuang_platform_kit import google_auth as G  # noqa: E402
@@ -146,6 +165,73 @@ check("warned", [m.split(' ')[1] for lvl, m in logs if lvl == 'WARNING'][:5], ['
 check("service() without a token is None", G.service('drive', 'v3', SCOPES, token_env='NOPE'), None)
 os.environ.pop('TOK_ENV', None)
 os.environ.pop('BAD_ENV', None)
+
+print("a service account's key is one more source (0.19.0): its Credentials for the scopes, no refresh, no write-back; a missing file is None with a WARNING")
+with tempfile.TemporaryDirectory() as d:
+    key = os.path.join(d, 'sa.json')
+    with open(key, 'w', encoding='utf-8') as f:
+        json.dump({'type': 'service_account', 'client_email': 'x@p.iam.gserviceaccount.com'}, f)
+    sa = G.credentials(SCOPES, service_account_file=key)
+    svc = G.service('sheets', 'v4', SCOPES, service_account_file=key)
+    missing = G.credentials(SCOPES, service_account_file=os.path.join(d, 'none.json'))
+check("service account", (type(sa).__name__, sa.path, sa.scopes, svc, built[-1][:2], missing, logs[-1][0], 'service account key was not read' in logs[-1][1]),
+      ('FakeSA', key, SCOPES, 'sheets-v4', ('sheets', 'v4'), None, 'WARNING', True))
+
+print("token_info() reads the stored token itself in the same order with the standard library; refresh_access_token() trades it over REST")
+import io  # noqa: E402
+import urllib.error  # noqa: E402
+
+
+class RestResp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, 'token.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump({'refresh_token': 'r-file'}, f)
+    os.environ['TOK_ENV'] = json.dumps({'refresh_token': 'r-env'})
+    os.environ['BAD_ENV'] = 'not json'
+    info_order = (G.token_info(token_json={'refresh_token': 'r-json'}, token_file=path)['refresh_token'],
+                  G.token_info(token_file=path, token_env='TOK_ENV')['refresh_token'],
+                  G.token_info(token_file=os.path.join(d, 'none.json'), token_env='TOK_ENV')['refresh_token'],
+                  G.token_info(token_env='NOPE', secret=('p', 'T'), session=Session({'T': b'{"refresh_token": "r-secret"}'}))['refresh_token'],
+                  G.token_info(token_env='BAD_ENV'), G.token_info(secret=('p', 'MISSING'), session=Session({})))
+    os.environ.pop('TOK_ENV', None)
+    os.environ.pop('BAD_ENV', None)
+rest_calls = []
+
+
+def rest_ok(req, timeout=None):
+    rest_calls.append((req.full_url, req.get_method(), req.data, timeout))
+    return RestResp(json.dumps({'access_token': 'at', 'expires_in': 3600}).encode())
+
+
+def refused(exc):
+    def o(req, timeout=None):
+        raise exc
+    return o
+
+
+def refresh_said(info, opener):
+    try:
+        return G.refresh_access_token(info, opener=opener)
+    except G.RefreshFailed as e:
+        return str(e)
+
+
+got = refresh_said({'refresh_token': 'r', 'client_id': 'c', 'client_secret': 's', 'token_uri': 'https://t.example/token'}, rest_ok)
+check("token_info and refresh_access_token",
+      (info_order, got, rest_calls[0][:2], b'refresh_token=r' in rest_calls[0][2] and b'client_secret=s' in rest_calls[0][2], rest_calls[0][3],
+       refresh_said({'refresh_token': 'r'}, refused(urllib.error.HTTPError('u', 400, 'no', {}, io.BytesIO(b'{}')))),
+       refresh_said({'refresh_token': 'r'}, refused(OSError('down'))), refresh_said({}, rest_ok),
+       refresh_said({'refresh_token': 'r'}, lambda req, timeout=None: RestResp(b'{}'))),
+      (('r-json', 'r-file', 'r-env', 'r-secret', None, None), ('at', 3600), ('https://t.example/token', 'POST'), True, 15,
+       'Google answered 400', 'Google could not be reached (OSError)', 'the token has no refresh token', 'Google gave no access token'))
 
 print("access_token() and key_file_token() (0.9.0): the standard library's token, each source in its turn")
 import base64  # noqa: E402

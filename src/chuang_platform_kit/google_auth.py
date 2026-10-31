@@ -38,12 +38,24 @@ it is installed and else by `key_file_token()` (the key's RS256 JWT signed with 
 Google's token endpoint, a fraction of a second where gcloud's first start is 5 to 37 s), the metadata server
 (Cloud Run, Cloud Functions, Cloud Build), then `gcloud auth print-access-token` (a desktop, a runner after the
 auth action), bounded by `gcloud_timeout`.
+
+A stored authorized-user token, read and refreshed with the standard library alone (0.19.0; lifted from SMAD
+PickleBot's API mailer and watchdog job, each of which carried the refresh dance itself because its image has no
+Google client library):
+
+    info = google_auth.token_info(token_env='GMAIL_OAUTH_TOKEN_JSON')   # the first source that parses, or None
+    access, life = google_auth.refresh_access_token(info)              # RefreshFailed names Google's code, never a token
+
+`gmail.Mailbox` sends over REST on these. A service account's key (`service_account_file=`, 0.19.0) is one more
+source for `credentials()` and `service()`: `google.oauth2.service_account` Credentials for `scopes`, the way a sheet
+shared to that account is read (ChuangFinance's ledger sheets); it is never refreshed here or written back.
 """
 import json
 import logging
 import os
 import subprocess
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -137,6 +149,84 @@ def access_token(env=None, opener=None, run=subprocess.run, gcloud_timeout=30, e
         return ''
 
 
+TOKEN_URI = 'https://oauth2.googleapis.com/token'
+
+
+class RefreshFailed(RuntimeError):
+    """The authorized-user token was not refreshed: Google's code ("Google answered 400"), the error's kind ("Google
+    could not be reached (TimeoutError)") or the token's own lack ("the token has no refresh token"); never a token."""
+
+
+def token_info(token_json=None, token_file=None, token_env=None, secret=None, session=None, logger=None):
+    """The stored authorized-user token itself (refresh_token, client_id, client_secret, token_uri) from the first
+    source that parses, in `credentials()`'s order (json > file > env > secret), with the standard library alone
+    (0.19.0): for a host without google-auth that refreshes over REST. None when no source answers, each miss a
+    WARNING on `logger`."""
+    logger = logger or log
+    if token_json:
+        try:
+            data = token_json if isinstance(token_json, dict) else json.loads(token_json)
+            if isinstance(data, dict):
+                return data
+            logger.warning('google_auth: token_json is not an authorized-user token (%s)', type(data).__name__)
+        except ValueError as e:
+            logger.warning('google_auth: token_json is not an authorized-user token (%s)', type(e).__name__)
+    if token_file and os.path.exists(token_file):
+        try:
+            with open(token_file, encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            logger.warning('google_auth: %s not read (%s)', token_file, type(data).__name__)
+        except (OSError, ValueError) as e:
+            logger.warning('google_auth: %s not read (%s)', token_file, type(e).__name__)
+    if token_env and os.environ.get(token_env, '').strip():
+        try:
+            data = json.loads(os.environ[token_env])
+            if isinstance(data, dict):
+                return data
+            logger.warning('google_auth: %s is not an authorized-user token (%s)', token_env, type(data).__name__)
+        except ValueError as e:
+            logger.warning('google_auth: %s is not an authorized-user token (%s)', token_env, type(e).__name__)
+    if secret:
+        try:
+            from . import secrets as _secrets
+            project, name = secret
+            data = json.loads(_secrets.access(project, name, session=session).decode('utf-8'))
+            if isinstance(data, dict):
+                return data
+            logger.warning('google_auth: the token secret is not an authorized-user token (%s)', type(data).__name__)
+        except Exception as e:   # noqa: BLE001 - a missing secret is "no token", logged
+            logger.warning('google_auth: the token secret was not read (%s)', type(e).__name__)
+    return None
+
+
+def refresh_access_token(info: dict, opener=None, timeout: int = 15) -> tuple:
+    """(access token, the seconds it lives) for an authorized-user token dict, over REST with the standard library
+    alone (0.19.0): grant_type=refresh_token at the token's own `token_uri` (Google's by default). RefreshFailed on a
+    refusal, with Google's code or the error's kind and never the token."""
+    if not isinstance(info, dict) or not info.get('refresh_token'):
+        raise RefreshFailed('the token has no refresh token')
+    form = urllib.parse.urlencode({'grant_type': 'refresh_token', 'refresh_token': info['refresh_token'],
+                                   'client_id': info.get('client_id', ''), 'client_secret': info.get('client_secret', '')}).encode()
+    req = urllib.request.Request(info.get('token_uri') or TOKEN_URI, data=form, method='POST',
+                                 headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        raise RefreshFailed(f'Google answered {e.code}')
+    except Exception as e:   # noqa: BLE001 - a timeout or a refused connection is one kind to the caller
+        raise RefreshFailed(f'Google could not be reached ({type(e).__name__})')
+    try:
+        got = json.loads(raw.decode()) if raw else {}
+    except ValueError:
+        got = {}
+    if not isinstance(got, dict) or not got.get('access_token'):
+        raise RefreshFailed('Google gave no access token')
+    return got['access_token'], int(got.get('expires_in') or 0)
+
+
 def _from_sources(Credentials, scopes, token_json, token_file, token_env, secret, session, logger):
     """(source, Credentials) for the first token source that yields one, or (None, None). `scopes` None keeps the
     token's own granted scopes (0.15.1): a refresh that asks for a scope the token was never granted is refused."""
@@ -169,11 +259,25 @@ def _from_sources(Credentials, scopes, token_json, token_file, token_env, secret
 
 
 def credentials(scopes, token_json=None, token_file=None, token_env=None, secret=None,
-                write_back=True, session=None, request=None, logger=None):
+                write_back=True, session=None, request=None, logger=None, service_account_file=None):
     """google.oauth2 Credentials for `scopes` from the first token source that parses,
     refreshed when expired, the refresh written back (module docstring); None when
-    no source yields a usable token. Warnings go to `logger` (this module's by default)."""
+    no source yields a usable token. Warnings go to `logger` (this module's by default).
+    `service_account_file` (0.19.0) is a service account's key instead of a user's token: its
+    Credentials for `scopes`, no refresh here and no write-back; None when the file or
+    google-auth is missing."""
     logger = logger or log
+    if service_account_file:
+        try:
+            from google.oauth2 import service_account
+        except ImportError:
+            logger.debug('google_auth: google-auth is not installed (pip install chuang-platform-kit[gmail])')
+            return None
+        try:
+            return service_account.Credentials.from_service_account_file(service_account_file, scopes=list(scopes) if scopes else None)
+        except Exception as e:   # noqa: BLE001 - a missing or malformed key file is "no credentials", logged
+            logger.warning('google_auth: the service account key was not read (%s)', type(e).__name__)
+            return None
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials

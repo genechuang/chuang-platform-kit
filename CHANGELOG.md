@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.19.0 - 2026-10-31 PT
+
+Additive; no host call site changes. `gmail.Mailbox` gains the REST transport (`rest=True`, an `opener` given, or no
+google-api-python-client installed): `send` and `reply_all` over users.messages.send with the standard library alone,
+the access token refreshed through `google_auth.refresh_access_token` and kept on the mailbox until a minute before it
+expires; `search` and `thread` on a REST mailbox are NoMailbox; a refused send is `gmail.SendFailed` with Google's code
+or the error's kind, never a token. `google_auth.token_info(**sources)` reads the stored authorized-user token itself
+(the same source order, no google-auth), `refresh_access_token(info, opener=None, timeout=15)` trades it for (access
+token, seconds), `RefreshFailed` on a refusal; `credentials()` and `service()` take `service_account_file=` for a
+service account's key (a sheet shared to that account). SMAD PickleBot's API mailer and watchdog job (#661) carried
+the refresh and the send themselves because their images have no Google client library; ChuangFinance's ledger sheets
+read on a service account (ChuangFinance#2).
+
 ## 0.18.1 - 2026-10-31 PT
 
 Additive; no host call site changes. `anthropic_api.admin_get(path, admin_key, params=None, timeout=30, http=None,

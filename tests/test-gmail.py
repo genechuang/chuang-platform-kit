@@ -157,6 +157,81 @@ google_auth._from_sources(Creds, ['s1'], {'refresh_token': 'r'}, None, None, Non
 check("google_auth: scopes None keeps the token's own (from_authorized_user_info gets None); a list is passed as a list",
       (src, made, Creds.made), ('json', 'creds', [None, ['s1']]))
 
+
+# -- the REST transport (0.19.0): a host without the Google client library sends with the standard library alone
+import io  # noqa: E402
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+
+
+class Resp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+rest_calls, life = [], [3599]
+
+
+def rest_opener(req, timeout=None):
+    rest_calls.append((req.full_url, req.get_method(), req.data, dict(req.header_items()), timeout))
+    if 'oauth2' in req.full_url:
+        return Resp(json.dumps({'access_token': f"at-{sum(1 for c in rest_calls if 'oauth2' in c[0])}", 'expires_in': life[0]}).encode())
+    return Resp(json.dumps({'id': 'gm-1'}).encode())
+
+
+rest = G.Mailbox(token_json={'refresh_token': 'rt', 'client_id': 'ci', 'client_secret': 'cs'}, opener=rest_opener, timeout=9)
+sent_id = rest.send('a@x.com', 'Hi', 'plain', '<b>h</b>', headers={'From': 'Bot <bot@x.com>'})
+refresh, post = rest_calls[0], rest_calls[1]
+mail3 = email.message_from_bytes(base64.urlsafe_b64decode(json.loads(post[2])['raw']))
+check("REST (the positive case): the refresh at Google's token endpoint, then users.messages.send with the bearer; From as given, text and HTML",
+      (sent_id, rest.uses_rest(), refresh[0], refresh[1], b'refresh_token=rt' in refresh[2] and b'client_id=ci' in refresh[2],
+       post[0], post[1], post[3].get('Authorization'), post[4], mail3['From'], mail3['To'],
+       [p.get_content_type() for p in mail3.walk() if not p.is_multipart()]),
+      ('gm-1', True, google_auth.TOKEN_URI, 'POST', True, G.SEND_URL, 'POST', 'Bearer at-1', 9, 'Bot <bot@x.com>', 'a@x.com',
+       ['text/plain', 'text/html']))
+rest.send('b@x.com', 'Again', 'p')
+kept_refreshes = sum(1 for c in rest_calls if 'oauth2' in c[0])
+life[0] = 30
+short = G.Mailbox(token_json={'refresh_token': 'rt'}, rest=True, opener=rest_opener)
+first, second = short.access_token(), short.access_token()
+check("the access token is kept between sends until a minute before it expires; one Google says lives under a minute is asked for again",
+      (kept_refreshes, first != second), (1, True))
+
+
+def refuse(code):
+    def opener(req, timeout=None):
+        if 'oauth2' in req.full_url and code == 'refresh':
+            raise urllib.error.HTTPError(req.full_url, 400, 'no', {}, io.BytesIO(b'{}'))
+        if 'oauth2' in req.full_url:
+            return Resp(json.dumps({'access_token': 'at'}).encode())
+        if code == 'down':
+            raise TimeoutError('slow')
+        raise urllib.error.HTTPError(req.full_url, code, 'no', {}, io.BytesIO(b'{}'))
+    return opener
+
+
+def said(box, call='send'):
+    try:
+        box.send('a@x.com', 's', 't') if call == 'send' else box.search('x')
+        return 'ok'
+    except (G.NoMailbox, G.SendFailed) as e:
+        return f'{type(e).__name__}: {e}'
+
+
+tok = {'refresh_token': 'rt'}
+check("refusals name Google's code or the error's kind, never a token; no token is NoMailbox; a REST mailbox does not read",
+      (said(G.Mailbox(token_json=tok, opener=refuse(401))), said(G.Mailbox(token_json=tok, opener=refuse('refresh'))),
+       said(G.Mailbox(token_json=tok, opener=refuse('down'))), said(G.Mailbox(token_env='NOTHING_HERE', rest=True)),
+       said(G.Mailbox(token_json=tok, rest=True), call='search'), G.Mailbox(service=fake).uses_rest(),
+       G.Mailbox(rest=False, token_json=tok).uses_rest(), G.mailbox('smad', {'smad': 'X'}, rest=True).rest),
+      ('SendFailed: Google answered 401', 'SendFailed: Google answered 400', 'SendFailed: Google could not be reached (TimeoutError)',
+       'NoMailbox: no usable Gmail token for this mailbox',
+       'NoMailbox: reading a mailbox needs google-api-python-client (chuang-platform-kit[gmail]); the REST transport sends only',
+       False, False, True))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
