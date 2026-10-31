@@ -96,6 +96,10 @@ check('unresolved walks the projects newest first; issues() follows the pages; s
       ([r['shortId'] for r in un], len(un[0]['title']), [r['shortId'] for r in paged], len(calls2), found[0]['shortId'], len(found[0]['title']),
        S.next_page(page1), S.next_page('<x>; rel="next"; results="false"'), S.next_page('')),
       (['PROJ-9', 'PROJ-1'], 90, ['PROJ-1', 'PROJ-9'], 5, 'PROJ-9', 100, f'{S.API}/projects/acme/proj-bot/issues/?cursor=2', '', ''))
+cut, capped = c2.paged('/projects/acme/proj-bot/issues/?query=is%3Aunresolved', limit_pages=1)
+whole, capped_whole = c2.paged('/projects/acme/proj-bot/issues/?query=is%3Aunresolved')
+check('paged says when the list was cut at its cap with a page still to come',
+      ([r['shortId'] for r in cut], capped, len(whole), capped_whole), (['PROJ-1'], True, 2, False))
 
 event = {'message': 'boom', 'dateCreated': '2026-10-31T16:00:00Z', 'release': {'version': '1.2'},
          'tags': [{'key': 'env', 'value': 'prod'}],

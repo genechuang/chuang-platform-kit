@@ -87,14 +87,19 @@ class Client:
         except (OSError, ValueError) as e:
             raise Refused(f"Sentry {method} {path or full_url} did not answer ({type(e).__name__})")
 
-    def pages(self, path: str, tok: str = '', limit_pages: int = 20) -> list:
-        """Every row of a paged list, following Sentry's Link header up to `limit_pages` pages."""
+    def paged(self, path: str, tok: str = '', limit_pages: int = 20) -> tuple:
+        """Every row of a paged list, following Sentry's Link header up to `limit_pages` pages, and whether the list
+        was cut there with a page still to come: (rows, capped). A sweep says so rather than loop on."""
         rows, url, n = [], f"{API}{path}", 0
         while url and n < limit_pages:
             got, link = self.call('GET', '', tok=tok, full_url=url, headers=True)
             rows.extend(got or [])
             url, n = next_page(link), n + 1
-        return rows
+        return rows, bool(url)
+
+    def pages(self, path: str, tok: str = '', limit_pages: int = 20) -> list:
+        """Every row of a paged list, following Sentry's Link header up to `limit_pages` pages."""
+        return self.paged(path, tok, limit_pages)[0]
 
     def lookup(self, short_id: str, tok: str = '') -> dict:
         """The issue behind a short id (PROJ-6) or a numeric issue id: id, status, counts, title, first and last seen

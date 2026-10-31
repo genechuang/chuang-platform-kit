@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.12.2 - 2026-10-31 PT
+
+Additive; no host call site changes.
+
+- `headless_claude.run` reads a `stdin` stream once and feeds every attempt the whole of it on a pipe of its own
+  (`stream` takes the prompt itself, str or bytes); before, the same `sys.stdin` went to every Popen, the first attempt
+  read it to EOF and the one after a limited account got nothing: "Error: Input must be provided either through stdin
+  or as a prompt argument when using --print", exit 1 (Dragnet, 10/31/26 9:37 AM PT, the SMPD weekly report's probe
+  with gene at its monthly spend limit). `main run` passes stdin on only when it is not a terminal.
+- `sentry_api.Client.paged(path, limit_pages=)`: (rows, capped), `pages()`'s rows with whether the list was cut at the
+  cap with a page still to come, so a sweep can say so (SMAD PickleBot's alerts sweep, #371's warning, moving onto
+  the client in #569).
+
 ## 0.12.1 - 2026-10-31 PT
 
 Additive; no host call site changes.

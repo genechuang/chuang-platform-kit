@@ -172,12 +172,26 @@ with tempfile.TemporaryDirectory() as d:
 # -- run: the CLI with the caller's arguments, streamed ---------------------------------------------------------------
 
 
+class Feed:
+    """A fake pipe to the child's stdin: what was written to it, and whether it was closed."""
+
+    def __init__(self):
+        self.data, self.closed = [], False
+
+    def write(self, s):
+        self.data.append(s)
+
+    def close(self):
+        self.closed = True
+
+
 class Proc:
     """A stand-in for subprocess.Popen: `outs` is the stdout text, `code` the exit."""
     made = []
 
     def __init__(self, argv, stdin=None, stdout=None, stderr=None, text=True, encoding='', errors='', env=None, cwd=None, **k):
         self.argv, self.env, self.cwd, self.flags = argv, env, cwd, k.get('creationflags')
+        self.stdin_given, self.stdin = stdin, (Feed() if stdin == H.subprocess.PIPE else None)
         out, err, code = Proc.script.pop(0)
         self.stdout, self.stderr, self.returncode = io.StringIO(out), io.StringIO(err), code
         Proc.made.append(self)
@@ -228,6 +242,15 @@ check("child_env: every account token dropped, this one as CLAUDE_CODE_OAUTH_TOK
           H.child_env('t', {'CLAUDE_CODE_OAUTH_TOKEN_GENE': 'g', 'ANTHROPIC_API_KEY': 'k', 'PATH': '/bin'})),
       ('t', False, False, '1', '/bin'))
 
+Proc.made, Proc.script = [], [('{"type":"result","is_error":true,"result":"monthly spend limit · weekly limit resets 5am (UTC)"}\n', '', 1),
+                              ('{"type":"result","result":"ran"}\n', '', 0)]
+fed = H.run(['-p'], env=ENV, resting=H.Resting(Store()), now=lambda: at(2026, 10, 31, 9, 0), popen=Proc,
+            stdin=io.StringIO('the prompt\nline 2\n'), out=io.StringIO(), err=io.StringIO())
+check("a prompt on stdin reaches every attempt whole: the stream is read once, each attempt fed its own pipe (Dragnet, 10/31/26 9:37 AM PT)",
+      (fed['account'], [m.stdin_given == H.subprocess.PIPE for m in Proc.made], [''.join(m.stdin.data) for m in Proc.made],
+       [m.stdin.closed for m in Proc.made]),
+      ('smad', [True, True], ['the prompt\nline 2\n'] * 2, [True, True]))
+
 # -- main -----------------------------------------------------------------------------------------------------------
 os.environ.update({'CLAUDE_ACCOUNTS': 'gene,smad', 'CLAUDE_CODE_OAUTH_TOKEN_SMAD': 'x'})
 os.environ.pop('CLAUDE_CODE_OAUTH_TOKEN_GENE', None)
@@ -242,14 +265,15 @@ check("main accounts: each account and whether it holds a token, never the token
 os.environ.pop('CLAUDE_CODE_OAUTH_TOKEN_SMAD', None)
 Proc.made, Proc.script = [], [('{"type":"result","result":"ran on the login"}\n', '', 0)]
 kept_popen, H.subprocess.Popen = H.subprocess.Popen, Proc
+kept_in, sys.stdin = sys.stdin, io.StringIO('from stdin')
 try:
     with_login = H.main(['run', '--', '-p', '--model', 'm'])
     without = H.main(['run', '--no-login-fallback', '--', '-p'])
 finally:
-    H.subprocess.Popen = kept_popen
-check("main run: with no token anywhere the box's own sign-in runs by default (Dragnet, 10/31/26 9:10 AM PT: exit 75 before), --no-login-fallback keeps the 75",
-      (with_login, Proc.made[0].argv[1:], 'CLAUDE_CODE_OAUTH_TOKEN' in Proc.made[0].env, without, len(Proc.made)),
-      (0, ['-p', '--model', 'm'], False, 75, 1))
+    H.subprocess.Popen, sys.stdin = kept_popen, kept_in
+check("main run: with no token anywhere the box's own sign-in runs by default (Dragnet, 10/31/26 9:10 AM PT: exit 75 before), on the piped prompt; --no-login-fallback keeps the 75",
+      (with_login, Proc.made[0].argv[1:], 'CLAUDE_CODE_OAUTH_TOKEN' in Proc.made[0].env, ''.join(Proc.made[0].stdin.data), without, len(Proc.made)),
+      (0, ['-p', '--model', 'm'], False, 'from stdin', 75, 1))
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

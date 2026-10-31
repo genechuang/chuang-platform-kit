@@ -265,15 +265,25 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
            cwd: str = None, cli: str = '') -> dict:
     """The CLI with the caller's arguments on one account, stdout and stderr streamed to `out` and `err` (sys.stdout
     and sys.stderr by default) as they come, the last TAIL_LINES of each kept for the verdict; `timeout` seconds
-    (0: none) kills it. {'ok', 'returncode', 'limited', 'detail'}."""
+    (0: none) kills it. `stdin` is a stream the CLI reads as it is, or the prompt itself (str or bytes), fed to this
+    attempt on a pipe of its own so every attempt gets the whole of it. {'ok', 'returncode', 'limited', 'detail'}."""
     out, err = out if out is not None else sys.stdout, err if err is not None else sys.stderr
     tails = {'out': collections.deque(maxlen=TAIL_LINES), 'err': collections.deque(maxlen=TAIL_LINES)}
+    feed = stdin if isinstance(stdin, (str, bytes)) else None
     try:
-        p = (popen or subprocess.Popen)([cli or cli_path(env), *args], stdin=stdin if stdin is not None else subprocess.DEVNULL,
-                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
-                  env=child_env(token, env), cwd=cwd, creationflags=NO_WINDOW)
+        p = (popen or subprocess.Popen)([cli or cli_path(env), *args],
+                                        stdin=subprocess.PIPE if feed is not None else (stdin if stdin is not None else subprocess.DEVNULL),
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
+                                        env=child_env(token, env), cwd=cwd, creationflags=NO_WINDOW)
     except OSError as e:
         return {'ok': False, 'returncode': 127, 'limited': False, 'detail': f'the CLI did not start: {e}'}
+
+    def give():
+        try:
+            p.stdin.write(feed.decode('utf-8', 'replace') if isinstance(feed, bytes) else feed)
+            p.stdin.close()
+        except (OSError, ValueError):
+            pass
 
     def pump(src, sink, tail):
         for line in iter(src.readline, ''):
@@ -285,6 +295,8 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
                 pass
     threads = [threading.Thread(target=pump, args=(p.stdout, out, tails['out']), daemon=True),
                threading.Thread(target=pump, args=(p.stderr, err, tails['err']), daemon=True)]
+    if feed is not None:
+        threads.append(threading.Thread(target=give, daemon=True))
     for t in threads:
         t.start()
     try:
@@ -308,8 +320,12 @@ def run(args: list, env=None, resting: Resting = None, now=time.time, timeout: f
     'returncode', 'account', 'tried'}. A limited run rests the account and the same run starts on the next; a plain
     failure (any other exit) is the caller's, returned as it is, since a run with tools may have done work. With
     `login_fallback`, every account missing or resting runs once more on the box's own CLI sign-in (the account named
-    LOGIN), the way a desktop ran before it had tokens; without it that case is exit 75 and no account."""
+    LOGIN), the way a desktop ran before it had tokens; without it that case is exit 75 and no account. A `stdin`
+    stream is read once here and every attempt is fed the whole of it (Dragnet, 10/31/26 9:37 AM PT: the second attempt
+    had read the first's EOF, and the CLI said "Input must be provided")."""
     env = os.environ if env is None else env
+    if hasattr(stdin, 'read'):
+        stdin = stdin.read()
     tried = []
     plan = _plan(env, names, project, access, resting, now)
     if login_fallback:
@@ -366,7 +382,8 @@ def main(argv=None) -> int:
         print('headless_claude: no account answered: ' + '; '.join(f'{n}: {o}' for n, o in got['tried']), file=sys.stderr)
         return 75
     args = ns.args[1:] if ns.args[:1] == ['--'] else ns.args
-    got = run(args, resting=resting, timeout=ns.timeout, names=ns.accounts, project=ns.project, zone=ns.zone, stdin=sys.stdin,
+    piped = sys.stdin if sys.stdin is not None and not sys.stdin.isatty() else None   # a terminal is never read to EOF
+    got = run(args, resting=resting, timeout=ns.timeout, names=ns.accounts, project=ns.project, zone=ns.zone, stdin=piped,
               login_fallback=ns.login_fallback)
     if not got['account']:
         print('headless_claude: no account ran: ' + '; '.join(f'{n}: {o}' for n, o in got['tried']), file=sys.stderr)
