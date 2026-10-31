@@ -2,6 +2,22 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.14.0 - 2026-10-31 PT
+
+Additive; no host call site changes. Anthropic's Messages API for every project (SMAD PickleBot #573: three callers,
+one client), lifted from its Post Game story's and /pb reader's own `requests.post` calls.
+
+- `anthropic_api.messages(model, messages, system=, max_tokens=, api_key=, timeout=, headers=, extra=, usage=, post=,
+  env=)` and `ask(prompt, model, ...)`: {'text', 'body', 'stop_reason', 'model'}, the model the body names (a
+  server-side fallback names what ran); `headers` added to the request's (a beta header), `extra` to the payload
+  (`output_config`, `fallbacks`); `usage(body, model)` the host's meter, run on every 200 and never allowed to fail the
+  call; the key `api_key` else ANTHROPIC_API_KEY, none Refused before any call. `Refused` (a RuntimeError) carries
+  `status`, `detail` (Anthropic's own message, never the key) and `out_of_credits` (400/402/403 with the billing
+  words, `out_of_credits(status, text)`). The transport is `post(url, headers=, json=, timeout=)` in requests.post's
+  shape: `urllib_post` by default (an HTTP error an `Answer` with its status and body), `requests.post` or a kept-alive
+  session's where the host has one, a suite's fake.
+- tests/test-anthropic-api.py.
+
 ## 0.13.0 - 2026-10-31 PT
 
 Additive; no host call site changes (SMAD PickleBot's `picklebot_core/app_store.py` binds its app to it under its old
