@@ -17,7 +17,9 @@ spend limit while a second account had room).
   goes to the next account at once. The subscription's token alone reaches the child; the API key never does.
 - `headless_claude.run(args, ...)`: the CLI with the caller's own arguments (tools, a permission mode, stream-json, a
   prompt on stdin), stdout and stderr streamed through, judged for a limit at its end, so a scheduled run with tools
-  fails over too; a plain failure is returned as the caller's; exit 75 when every account rests or has no token.
+  fails over too; a plain failure is returned as the caller's; exit 75 when every account rests or has no token, or,
+  with `login_fallback=True`, one more run on the box's own CLI sign-in (the account `login`). Every child starts with
+  no console window on Windows.
 - `headless_claude.Resting(store)` over any `get(name)` / `put(name, dict)` store, `FileStore(path)` for a box;
   `token_for`, `token_var`, `accounts`, `reset_at`, `judge`, `child_env`, `LIMITED`.
 - `python -m chuang_platform_kit.headless_claude accounts | ask | run -- <claude args>` for a script in any language.

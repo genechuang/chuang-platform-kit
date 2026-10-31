@@ -173,8 +173,8 @@ class Proc:
     """A stand-in for subprocess.Popen: `outs` is the stdout text, `code` the exit."""
     made = []
 
-    def __init__(self, argv, stdin=None, stdout=None, stderr=None, text=True, encoding='', errors='', env=None, cwd=None):
-        self.argv, self.env, self.cwd = argv, env, cwd
+    def __init__(self, argv, stdin=None, stdout=None, stderr=None, text=True, encoding='', errors='', env=None, cwd=None, **k):
+        self.argv, self.env, self.cwd, self.flags = argv, env, cwd, k.get('creationflags')
         out, err, code = Proc.script.pop(0)
         self.stdout, self.stderr, self.returncode = io.StringIO(out), io.StringIO(err), code
         Proc.made.append(self)
@@ -205,6 +205,14 @@ none = H.run(['-p'], env={'CLAUDE_ACCOUNTS': 'gene'}, popen=Proc, out=io.StringI
 check("a plain failure is the caller's, returned as it is on the first account; every account missing is 75 with no account",
       (got['ok'], got['returncode'], got['account'], got['tried'][0][1].startswith('exit 2:'), len(Proc.made), none['returncode'], none['account'], none['tried']),
       (False, 2, 'gene', True, 1, 75, '', [('gene', 'no token')]))
+
+Proc.made, Proc.script = [], [('{"type":"result","is_error":true,"result":"usage limit reached"}\n', '', 1), ('{"type":"result","result":"sent"}\n', '', 0)]
+fb = H.run(['-p'], env={'CLAUDE_ACCOUNTS': 'gene', 'CLAUDE_CODE_OAUTH_TOKEN_GENE': 'g'}, resting=H.Resting(Store()), now=lambda: 1.0,
+           popen=Proc, out=io.StringIO(), err=io.StringIO(), login_fallback=True)
+check("login_fallback: every account limited or missing runs once more on the box's own sign-in, no token in its environment, no console window",
+      (fb['ok'], fb['account'], fb['tried'][0][1].startswith('limited:'), fb['tried'][1], 'CLAUDE_CODE_OAUTH_TOKEN' in Proc.made[1].env,
+       Proc.made[0].env['CLAUDE_CODE_OAUTH_TOKEN'], Proc.made[1].flags == H.NO_WINDOW),
+      (True, 'login', True, ('login', 'ran'), False, 'g', True))
 
 check("judge: JSON out's result line, a non-zero exit, is_error or an empty answer, a 429, plain text on exit 0",
       (H.judge(0, '{"type":"result","result":" hi "}', '')['text'], H.judge(1, '{"type":"result","result":"x","is_error":true}', '')['ok'],

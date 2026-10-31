@@ -44,6 +44,8 @@ TIMEOUT_S = 120
 LIMITED = re.compile(r'usage limit|rate limit|spend limit|weekly limit|limit resets|credit balance|out of credits|quota|'
                      r'limit reached', re.I)   # "You've hit your org's monthly spend limit ... weekly limit resets 1pm (UTC)"
 TAIL_LINES = 40   # of a streamed run's output kept for the verdict
+NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)   # Windows: a child console never pops up
+LOGIN = 'login'   # the pseudo-account for the box's own CLI sign-in (run(login_fallback=True))
 
 
 def cli_path(env=None) -> str:
@@ -123,11 +125,13 @@ def reset_at(text: str, now: float, zone: str = '') -> float:
 
 
 def child_env(token: str, env=None) -> dict:
-    """The child's environment: the caller's, every account token dropped, this one as CLAUDE_CODE_OAUTH_TOKEN, no API
-    key, no auto-update, no telemetry."""
+    """The child's environment: the caller's, every account token dropped, this one as CLAUDE_CODE_OAUTH_TOKEN (an
+    empty token sets none: the box's own CLI sign-in answers), no API key, no auto-update, no telemetry."""
     base = os.environ if env is None else env
     out = {k: v for k, v in base.items() if not k.startswith('CLAUDE_CODE_OAUTH_TOKEN')}
-    out.update({'CLAUDE_CODE_OAUTH_TOKEN': token, 'DISABLE_AUTOUPDATER': '1', 'CLAUDE_CODE_DISABLE_TELEMETRY': '1'})
+    out.update({'DISABLE_AUTOUPDATER': '1', 'CLAUDE_CODE_DISABLE_TELEMETRY': '1'})
+    if token:
+        out['CLAUDE_CODE_OAUTH_TOKEN'] = token
     out.pop('ANTHROPIC_API_KEY', None)
     out.pop('ANTHROPIC_AUTH_TOKEN', None)
     return out
@@ -163,7 +167,7 @@ def run_once(prompt: str, model: str, system: str, token: str, run=subprocess.ru
     """One `ask` call on one account: {'ok', 'text', 'limited', 'detail', 'usage', 'model'}."""
     try:
         done = run(command(model, system, cli or cli_path(env)), input=prompt, capture_output=True, text=True,
-                   encoding='utf-8', errors='replace', timeout=timeout, env=child_env(token, env))
+                   encoding='utf-8', errors='replace', timeout=timeout, env=child_env(token, env), creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
         return {'ok': False, 'text': '', 'limited': False, 'detail': f'timed out after {timeout:.0f} s', 'usage': {}, 'model': model}
     except OSError as e:
@@ -264,7 +268,7 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
     try:
         p = popen([cli or cli_path(env), *args], stdin=stdin if stdin is not None else subprocess.DEVNULL,
                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
-                  env=child_env(token, env), cwd=cwd)
+                  env=child_env(token, env), cwd=cwd, creationflags=NO_WINDOW)
     except OSError as e:
         return {'ok': False, 'returncode': 127, 'limited': False, 'detail': f'the CLI did not start: {e}'}
 
@@ -296,15 +300,20 @@ def stream(args: list, token: str, env=None, stdin=None, out=None, err=None, tim
 
 def run(args: list, env=None, resting: Resting = None, now=time.time, timeout: float = 0, names=None, project: str = '',
         access=None, popen=subprocess.Popen, stdin=None, out=None, err=None, cwd: str = None, cli: str = '',
-        zone: str = '') -> dict:
+        zone: str = '', login_fallback: bool = False) -> dict:
     """The CLI with the caller's arguments on the first account whose run is not refused for a limit: {'ok',
     'returncode', 'account', 'tried'}. A limited run rests the account and the same run starts on the next; a plain
-    failure (any other exit) is the caller's, returned as it is, since a run with tools may have done work."""
+    failure (any other exit) is the caller's, returned as it is, since a run with tools may have done work. With
+    `login_fallback`, every account missing or resting runs once more on the box's own CLI sign-in (the account named
+    LOGIN), the way a desktop ran before it had tokens; without it that case is exit 75 and no account."""
     env = os.environ if env is None else env
     tried = []
-    for name, token in _candidates(env, names, project, access, resting, now, tried):
+    candidates = _candidates(env, names, project, access, resting, now, tried)
+    if login_fallback:
+        candidates.append((LOGIN, ''))
+    for name, token in candidates:
         got = stream(args, token, env=env, stdin=stdin, out=out, err=err, timeout=timeout, popen=popen, cwd=cwd, cli=cli)
-        if got['limited']:
+        if got['limited'] and name != LOGIN:
             if resting:
                 resting.rest(name, reset_at(got['detail'], now(), zone), got['detail'])
             tried.append((name, f"limited: {got['detail'][:120]}"))
