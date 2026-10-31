@@ -40,8 +40,12 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   push_gate          git's pre-push gate over a repo's .push-gate.toml: the stale-base refusal, each check skipped
                      on its mark, and a main that moved during the checks rebased onto for the second push
                      (`chuang-push-gate`)
+  headless_claude    the Claude Code CLI in print mode on a subscription account's token, failing over between
+                     accounts (CLAUDE_ACCOUNTS, CLAUDE_CODE_OAUTH_TOKEN_<NAME> or Secret Manager): `ask` one prompt
+                     for the text, `run` the caller's own CLI arguments streamed through; a limited account rests
+                     until the reset time its answer names (`python -m chuang_platform_kit.headless_claude`)
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.8.0'
+__version__ = '0.11.0'

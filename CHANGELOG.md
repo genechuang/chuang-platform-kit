@@ -2,6 +2,26 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.11.0 - 2026-10-31 PT
+
+Additive; no host call site changes (SMAD PickleBot's claude-runner re-exports it under its old names). Headless Claude
+for every project (SMAD PickleBot #660; Gene, 10/31/26: "Headless Claude should be in Chuang kit so we can do handoff
+in one place and it's reusable across projects", after a runtime with one account's token stopped at that account's
+spend limit while a second account had room).
+
+- `headless_claude.ask(prompt, model=, system=, env=, resting=, names=, project=, zone=)`: the Claude Code CLI in print
+  mode (JSON out, no tools, no settings, no MCP servers, no session kept) on the first account of `CLAUDE_ACCOUNTS`
+  (or `names`) whose token is in the environment as `CLAUDE_CODE_OAUTH_TOKEN_<NAME>` or in Secret Manager when a
+  project is named, and that is not resting; an answer naming a limit rests the account until the reset time it
+  names (an epoch, or clock words in the zone the words name, else `zone`, else UTC; else an hour) and the same prompt
+  goes to the next account at once. The subscription's token alone reaches the child; the API key never does.
+- `headless_claude.run(args, ...)`: the CLI with the caller's own arguments (tools, a permission mode, stream-json, a
+  prompt on stdin), stdout and stderr streamed through, judged for a limit at its end, so a scheduled run with tools
+  fails over too; a plain failure is returned as the caller's; exit 75 when every account rests or has no token.
+- `headless_claude.Resting(store)` over any `get(name)` / `put(name, dict)` store, `FileStore(path)` for a box;
+  `token_for`, `token_var`, `accounts`, `reset_at`, `judge`, `child_env`, `LIMITED`.
+- `python -m chuang_platform_kit.headless_claude accounts | ask | run -- <claude args>` for a script in any language.
+
 ## 0.10.0 - 2026-10-29 PT
 
 Additive; no host call site changes. Kept-alive HTTPS for service-to-service calls (SMAD PickleBot #505; Gene, 10/29/26:
