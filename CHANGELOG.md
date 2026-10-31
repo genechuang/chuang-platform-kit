@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.18.0 - 2026-10-31 PT
+
+Additive; no host call site changes. Two Sentry calls SMAD PickleBot's #569 audit found still written by hand needed
+shapes `sentry_api.Client.call` has not:
+
+- `Client.request(method, path, body=None, tok='', full_url='', timeout=None)`: (status, parsed JSON or text), never
+  raising, for a host that reads the status itself (a release's deploy marker takes a 2xx and retries anything else);
+  a refusal is its status and Sentry's text, no answer or no token 0 and the reason.
+- `Client.get_bytes(path, tok='', full_url='', timeout=None)`: a raw GET's bytes (an attachment's download), Refused
+  as `call` raises it.
+
 ## 0.17.1 - 2026-10-31 PT
 
 Additive; no host call site changes. Two things SMAD PickleBot's #364 migration met:

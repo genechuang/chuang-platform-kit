@@ -159,6 +159,16 @@ check('pt: an ISO stamp in the zone with the label people write (PT in either se
       (S.pt('2026-10-31T16:30:00Z'), S.pt('2026-01-08T16:30:00Z'), S.pt('2026-10-31T16:30:00', 'UTC'), S.pt(''), S.pt('garbage')),
       ('10/31/26 9:30 AM PT', '1/8/26 8:30 AM PT', '10/31/26 4:30 PM UTC', '', 'garbage'))
 
+calls = []
+rq = S.Client('acme', token='t', opener=opener_for({('POST', '/organizations/acme/releases/v1/deploys/'): {'id': 9},
+                                                   ('GET', '/organizations/acme/down/'): 503,
+                                                   ('GET', '/organizations/acme/att/'): (b'PNG', '')}, calls))
+check("0.18.0: request() answers (status, body) and never raises: a 2xx with the JSON, a 503 with Sentry's text, no token 0",
+      (rq.request('POST', '/organizations/acme/releases/v1/deploys/', {'environment': 'prod'}),
+       rq.request('GET', '/organizations/acme/down/'), S.Client('acme', opener=opener_for({}, [])).request('GET', '/x')[0]),
+      ((200, {'id': 9}), (503, '{"detail": "nope"}'), 0))
+check('0.18.0: get_bytes() is the raw download', rq.get_bytes('/organizations/acme/att/'), b'PNG')
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

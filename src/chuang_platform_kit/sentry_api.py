@@ -87,6 +87,42 @@ class Client:
         except (OSError, ValueError) as e:
             raise Refused(f"Sentry {method} {path or full_url} did not answer ({type(e).__name__})")
 
+    def request(self, method: str, path: str, body: dict = None, tok: str = '', full_url: str = '', timeout: int = None):
+        """(status, parsed JSON or text) for one call, never raising: for a host that reads the status itself (a deploy
+        marker's 2xx, a retry on a 5xx). A refusal is its status and Sentry's text; no answer, or no token, is 0 and
+        the reason (0.18.0)."""
+        try:
+            token = self._tok(tok)
+        except Refused as e:
+            return 0, str(e)
+        data = json.dumps(body).encode() if body is not None else None
+        url = full_url or f"{API}{path}"
+        req = urllib.request.Request(url, data=data, method=method,
+                                     headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json',
+                                              'Accept': 'application/json'})
+        try:
+            with self.opener(req, timeout=timeout or self.timeout) as r:
+                text, status = r.read().decode('utf-8', 'replace'), getattr(r, 'status', 200)
+        except urllib.error.HTTPError as e:
+            return e.code, (e.read().decode('utf-8', 'replace') if e.fp else '')
+        except (OSError, ValueError) as e:
+            return 0, f'{type(e).__name__}: {e}'
+        try:
+            return status, json.loads(text) if text else {}
+        except ValueError:
+            return status, text
+
+    def get_bytes(self, path: str, tok: str = '', full_url: str = '', timeout: int = None) -> bytes:
+        """A raw GET's bytes (an attachment's download); Refused as `call` raises it (0.18.0)."""
+        req = urllib.request.Request(full_url or f"{API}{path}", headers={'Authorization': f'Bearer {self._tok(tok)}'})
+        try:
+            with self.opener(req, timeout=timeout or self.timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            raise Refused(f"Sentry GET {path or full_url} failed ({e.code})")
+        except (OSError, ValueError) as e:
+            raise Refused(f"Sentry GET {path or full_url} did not answer ({type(e).__name__})")
+
     def paged(self, path: str, tok: str = '', limit_pages: int = 20) -> tuple:
         """Every row of a paged list, following Sentry's Link header up to `limit_pages` pages, and whether the list
         was cut there with a page still to come: (rows, capped). A sweep says so rather than loop on."""
