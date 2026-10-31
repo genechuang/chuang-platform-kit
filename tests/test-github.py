@@ -253,6 +253,37 @@ GH.reset_limits()
 got = GH.cli(['issue', 'list'], run=dup_run, capture_output=True, text=True, timeout=5)
 check("0.17.1: cli takes a caller's own capture keywords over its defaults instead of raising",
       (got.stdout, seen[0]['timeout'], seen[0]['capture_output'], seen[0]['encoding']), ('ok', 5, True, 'utf-8'))
+GH.reset_limits()
+
+
+def raised(**kw):
+    try:
+        got = GH.cli(['issue', 'close', '7'], **kw)
+        return ('returned', got.returncode)
+    except subprocess.CalledProcessError as e:
+        return ('raised', e.returncode, e.cmd[:3], e.stderr)
+
+
+def missing_gh(args, **kw):
+    raise FileNotFoundError('gh')
+
+
+passed_check = []
+check("0.19.1: check raises CalledProcessError on a failed run and a missing gh, never passes check to the runner; a pass returns",
+      (raised(run=lambda args, **kw: passed_check.append('check' in kw) or subprocess.CompletedProcess(args, 1, '', 'not found'), check=True),
+       raised(run=missing_gh, check=True),
+       raised(run=lambda args, **kw: subprocess.CompletedProcess(args, 0, '', ''), check=True),
+       raised(run=lambda args, **kw: subprocess.CompletedProcess(args, 1, '', 'not found')), passed_check),
+      (('raised', 1, ['gh', 'issue', 'close'], 'not found'), ('raised', 127, ['gh', 'issue', 'close'], 'gh'), ('returned', 0),
+       ('returned', 1), [False]))
+GH.reset_limits()
+try:
+    GH.cli(['api', 'repos/o/r/tarball/x'], run=lambda args, **kw: subprocess.CompletedProcess(args, 1, b'', b'API rate limit exceeded'),
+           text=False, encoding=None, errors=None)
+    binary = 'returned'
+except GH.RateLimited as e:
+    binary = e.resource
+check("0.19.1: a binary run's bytes stderr naming a rate limit spends core as a text one does, never a TypeError", binary, 'core')
 GH._now = time.time
 GH.reset_limits()
 

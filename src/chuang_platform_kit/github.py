@@ -255,11 +255,14 @@ def graphql(tok: str, query: str, variables: dict = None, opener=None, timeout: 
     return body.get('data') or {}
 
 
-def cli(args, run=subprocess.run, timeout: int = 60, **kw) -> subprocess.CompletedProcess:
+def cli(args, run=subprocess.run, timeout: int = 60, check: bool = False, **kw) -> subprocess.CompletedProcess:
     """`gh <args>` through the same local cap, for a script or daemon on the CLI (gh hides GitHub's headers): the
     CompletedProcess; RateLimited before the run when the resource the arguments name (graphql, a search, else core)
     is spent or over this process's cap, and after a failed run whose stderr names a rate limit, the resource then spent
-    for SPENT_FOR seconds. A missing gh is returncode 127, never an exception."""
+    for SPENT_FOR seconds. A missing gh is returncode 127, never an exception. `check` (0.19.1) raises
+    CalledProcessError on a failed run, a missing gh's 127 included, as subprocess.run's own would; it is the kit's and
+    never reaches `run`, whose CalledProcessError the missing-gh path read as 127 (0.17.1 to 0.19.0 swallowed a caller's
+    check=True so). A binary run's (text=False) stderr is read as UTF-8 for the rate-limit words (0.19.1)."""
     args = [str(a) for a in args]
     resource = ('graphql' if 'graphql' in args
                 else 'search' if '--search' in args or any(a.startswith('search/') or '/search/' in a for a in args)
@@ -270,13 +273,17 @@ def cli(args, run=subprocess.run, timeout: int = 60, **kw) -> subprocess.Complet
     try:
         got = run(['gh', *args], **opts)
     except (OSError, subprocess.SubprocessError) as e:
-        return subprocess.CompletedProcess(['gh', *args], 127, '', str(e))
+        got = subprocess.CompletedProcess(['gh', *args], 127, '', str(e))
     err = getattr(got, 'stderr', '') or ''
+    if isinstance(err, bytes):
+        err = err.decode('utf-8', 'replace')
     if getattr(got, 'returncode', 0) and RATE_WORDS.search(err):
         until = _now() + SPENT_FOR
         with _lock:
             _spent[resource] = until
         raise RateLimited(resource, 0, until, err.strip()[:160], 'gh ' + ' '.join(args[:2]))
+    if check and getattr(got, 'returncode', 0):
+        raise subprocess.CalledProcessError(got.returncode, ['gh', *args], getattr(got, 'stdout', None), err)
     return got
 
 

@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.19.1 - 2026-10-31 PT
+
+A fix; no host call site changes. `github.cli(..., check=True)` raises CalledProcessError on a failed run, a missing
+gh's 127 included: from 0.17.1 a caller's `check=True` reached the runner, whose CalledProcessError cli then caught as
+"gh missing" and returned as 127, so the failure went unraised. And a binary run's (`text=False`) bytes stderr is read
+as UTF-8 for the rate-limit words instead of raising TypeError. SMAD PickleBot #364's last raw `gh` runs (the alert
+sweeps' `gh issue` calls, all `check=True`) move onto cli with it.
+
 ## 0.19.0 - 2026-10-31 PT
 
 Additive; no host call site changes. `gmail.Mailbox` gains the REST transport (`rest=True`, an `opener` given, or no
