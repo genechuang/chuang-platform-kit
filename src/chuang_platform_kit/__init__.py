@@ -49,8 +49,11 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      event trimmed for a triager, the unresolved list, a search, a note, a resolve with its note,
                      the paged list a sweep walks, and the named actions a script or listener asks for; a refusal
                      is `Refused` with Sentry's words, never the token
+  app_store_connect  App Store Connect's API, one client for every project: the ES256 bearer from a team key, one
+                     call with Apple's own reason on a refusal, and an app's builds, App Store versions, internal
+                     testers and their snapshot, the app id a parameter (the `asc` extra signs the bearer)
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.12.2'
+__version__ = '0.13.0'

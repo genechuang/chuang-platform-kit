@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.12.2"
+version = "0.13.0"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -31,6 +31,8 @@ monitoring = ["sentry-sdk>=2.20,<3"]
 config = ["openfeature-sdk>=0.7,<1"]
 # Postgres (db.py): psycopg 3 with the bundled libpq. SQLAlchemy, for db.engine(), is the host's own pin.
 db = ["psycopg[binary]>=3.1"]
+# App Store Connect (app_store_connect.py): PyJWT with cryptography signs the ES256 bearer; the readers need nothing else.
+asc = ["pyjwt[crypto]>=2.8"]
 
 [project.scripts]
 # git's pre-push gate (push_gate.py); `python -m chuang_platform_kit.push_gate` is the same.

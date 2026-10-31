@@ -2,6 +2,20 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.13.0 - 2026-10-31 PT
+
+Additive; no host call site changes (SMAD PickleBot's `picklebot_core/app_store.py` binds its app to it under its old
+names). App Store Connect's API for every project (SMAD PickleBot #570, the one-key rule: the App Manager key, one
+client), lifted from its `picklebot_core/app_store.py` with the app id made a parameter.
+
+- `app_store_connect`: `token(key, key_id, issuer_id, now=, seconds=)` the ES256 bearer (PyJWT with cryptography, the
+  new `asc` extra); `call(method, path, bearer, body=, query=, opener=)` and `get()` with `Refused` (a RuntimeError:
+  the call, the status and Apple's own reason, or the error's name when nothing answers; never the key);
+  `builds(app_id, bearer, limit=)`, `store_versions(app_id, bearer, with_builds=)`, `internal_testers(app_id,
+  bearer)`, `snapshot(app_id, bearer)` (the three read side by side); `private_key(name, env=, project=, access=)` from
+  the environment, else Secret Manager, '' when neither has it. Apple's state words stay the host's to translate.
+- tests/test-app-store-connect.py; the Tests workflow installs the `asc` extra.
+
 ## 0.12.2 - 2026-10-31 PT
 
 Additive; no host call site changes.
