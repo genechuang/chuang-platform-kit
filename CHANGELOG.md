@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.17.1 - 2026-10-31 PT
+
+Additive; no host call site changes. Two things SMAD PickleBot's #364 migration met:
+
+- `github.request`: a refusal whose body carries no `message` takes the HTTP reason phrase ("Not Found") as its message,
+  so a `GitHubError` always reads as something.
+- `github.cli`: a caller's own `capture_output`, `text`, `encoding`, `errors` or `timeout` keywords are taken over the
+  defaults instead of raising "multiple values", so a `subprocess.run(['gh', ...], capture_output=True, text=True)` line
+  moves over as `github.cli([...], capture_output=True, text=True)`.
+
 ## 0.17.0 - 2026-10-31 PT
 
 Additive; no host call site changes. **GitHub calls are throttled** (SMAD PickleBot #679; Gene, 10/31/26 12:29 PM PT:

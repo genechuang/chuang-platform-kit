@@ -234,6 +234,25 @@ GH._note('search', {'X-RateLimit-Remaining': '1', 'X-RateLimit-Reset': str(clock
 check('wait_until sleeps to the reset while under the floor, at most the cap; nothing when the resource is free',
       (GH.wait_until('search', sleep=slept.append), GH.wait_until('search', cap=10, sleep=slept.append), GH.wait_until('core', sleep=slept.append)),
       (25.0, 10.0, 0))
+GH.reset_limits()
+try:
+    GH.get('t', '/repos/o/r/issues/9', opener=limited({}, 404, None))
+    reason = None
+except GH.GitHubError as e:
+    reason = (e.status, e.message)
+check('0.17.1: a refusal with no message in its body reads as the HTTP reason phrase', reason, (404, 'x'))
+seen = []
+
+
+def dup_run(args, **kw):
+    seen.append(kw)
+    return subprocess.CompletedProcess(args, 0, 'ok', '')
+
+
+GH.reset_limits()
+got = GH.cli(['issue', 'list'], run=dup_run, capture_output=True, text=True, timeout=5)
+check("0.17.1: cli takes a caller's own capture keywords over its defaults instead of raising",
+      (got.stdout, seen[0]['timeout'], seen[0]['capture_output'], seen[0]['encoding']), ('ok', 5, True, 'utf-8'))
 GH._now = time.time
 GH.reset_limits()
 

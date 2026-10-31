@@ -213,6 +213,8 @@ def request(tok: str, method: str, path: str, body=None, opener=None, timeout: i
             msg = json.loads(raw).get('message', '') if raw else ''
         except ValueError:
             msg = raw[:200]
+        if not msg and isinstance(getattr(e, 'reason', None), str):
+            msg = e.reason   # the HTTP reason phrase ("Not Found") when the body carries no message (0.17.1)
         spent = _note(resource, getattr(e, 'headers', None), e.code, msg)
         if spent:
             lim = _limits.get(spent) or {}
@@ -263,8 +265,10 @@ def cli(args, run=subprocess.run, timeout: int = 60, **kw) -> subprocess.Complet
                 else 'search' if '--search' in args or any(a.startswith('search/') or '/search/' in a for a in args)
                 else 'core')
     _check(resource, 'gh ' + ' '.join(args[:2]))
+    opts = {'capture_output': True, 'text': True, 'encoding': 'utf-8', 'errors': 'replace', 'timeout': timeout}
+    opts.update(kw)   # a caller moving a subprocess.run line over keeps its own keywords (0.17.1)
     try:
-        got = run(['gh', *args], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, **kw)
+        got = run(['gh', *args], **opts)
     except (OSError, subprocess.SubprocessError) as e:
         return subprocess.CompletedProcess(['gh', *args], 127, '', str(e))
     err = getattr(got, 'stderr', '') or ''
