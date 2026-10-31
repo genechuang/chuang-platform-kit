@@ -89,11 +89,8 @@ class Mailbox:
             return bool(self.rest)
         if self.opener is not None:
             return True
-        try:
-            import googleapiclient  # noqa: F401
-        except ImportError:
-            return True
-        return False
+        import importlib.util
+        return importlib.util.find_spec('googleapiclient') is None
 
     def service(self):
         if self._service is None:
