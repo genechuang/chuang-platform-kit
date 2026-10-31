@@ -138,8 +138,9 @@ def access_token(env=None, opener=None, run=subprocess.run, gcloud_timeout=30, e
 
 
 def _from_sources(Credentials, scopes, token_json, token_file, token_env, secret, session, logger):
-    """(source, Credentials) for the first token source that yields one, or (None, None)."""
-    scopes = list(scopes)
+    """(source, Credentials) for the first token source that yields one, or (None, None). `scopes` None keeps the
+    token's own granted scopes (0.15.1): a refresh that asks for a scope the token was never granted is refused."""
+    scopes = list(scopes) if scopes is not None else None
     if token_json:
         try:
             data = token_json if isinstance(token_json, dict) else json.loads(token_json)

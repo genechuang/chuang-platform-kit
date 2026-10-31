@@ -123,13 +123,14 @@ try:
 except G.NoMailbox as e:
     unknown = str(e)
 check("mailbox(): by the host's map, the environment's variable first and Secret Manager's secret second; an unknown name refused",
-      (opened.sources, bare.sources, opened.scopes, unknown),
+      (opened.sources, bare.sources, opened.scopes, G.mailbox('gene', {'gene': 'X'}, scopes=[G.READONLY]).scopes, unknown),
       ({'token_env': 'GMAIL_OAUTH_TOKEN_GENE', 'secret': ('p1', 'GMAIL_OAUTH_TOKEN_GENE')}, {'token_env': 'GMAIL_OAUTH_TOKEN_SMAD', 'secret': None},
-       G.READ_SEND, "no mailbox named 'nobody' (known: gene)"))
+       None, (G.READONLY,), "no mailbox named 'nobody' (known: gene)"))
 
 from chuang_platform_kit import google_auth  # noqa: E402
 kept = google_auth.service
-google_auth.service = lambda *a, **k: None
+asked = []
+google_auth.service = lambda api, version, scopes, **k: asked.append((api, version, scopes)) or None
 try:
     G.Mailbox(token_env='NOTHING_HERE').search('x')
     none = ''
@@ -137,7 +138,24 @@ except G.NoMailbox as e:
     none = str(e)
 finally:
     google_auth.service = kept
-check("no usable token is NoMailbox, said once", none, 'no usable Gmail token for this mailbox')
+check("no usable token is NoMailbox; the service is asked for the token's own scopes (None) unless narrowed",
+      (none, asked), ('no usable Gmail token for this mailbox', [('gmail', 'v1', None)]))
+
+
+class Creds:
+    made = []
+
+    @classmethod
+    def from_authorized_user_info(cls, data, scopes):
+        cls.made.append(scopes)
+        return 'creds'
+
+
+import logging  # noqa: E402
+src, made = google_auth._from_sources(Creds, None, {'refresh_token': 'r'}, None, None, None, None, logging.getLogger('t'))
+google_auth._from_sources(Creds, ['s1'], {'refresh_token': 'r'}, None, None, None, None, logging.getLogger('t'))
+check("google_auth: scopes None keeps the token's own (from_authorized_user_info gets None); a list is passed as a list",
+      (src, made, Creds.made), ('json', 'creds', [None, ['s1']]))
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

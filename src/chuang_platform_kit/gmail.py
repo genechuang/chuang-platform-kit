@@ -10,8 +10,9 @@ survives both. `Mailbox(**sources)` is one mailbox on the kit's `google_auth` to
 with an explicit `to`, `send`. `mailbox(name, mailboxes, project)` opens one by a host's own map of mailbox to secret
 name, so each project names its mailboxes once.
 
-Needs the `gmail` extra (google-api-python-client, google-auth). The token's scopes must cover the calls: reading
-needs gmail.readonly (or gmail.modify), replying and sending gmail.send. No message body or address is logged.
+Needs the `gmail` extra (google-api-python-client, google-auth). The token's own granted scopes are used (0.15.1) and
+must cover the calls: reading needs gmail.readonly (or gmail.modify), replying and sending gmail.send. No message
+body or address is logged.
 """
 import base64
 import logging
@@ -53,15 +54,18 @@ def message(msg: dict) -> dict:
 
 class Mailbox:
     """One Gmail mailbox on a stored token (`sources` as `google_auth.credentials` takes them), or on a ready
-    `service` (a suite's fake, or a host's own)."""
+    `service` (a suite's fake, or a host's own). `scopes` None (the default, 0.15.1) uses the token's own granted
+    scopes: asking a refresh for one it was never granted is refused, so a caller names scopes only to narrow them."""
 
-    def __init__(self, scopes=READ_SEND, service=None, logger=None, **sources):
-        self.scopes, self._service, self.logger, self.sources = tuple(scopes), service, logger or log, sources
+    def __init__(self, scopes=None, service=None, logger=None, **sources):
+        self.scopes = tuple(scopes) if scopes else None
+        self._service, self.logger, self.sources = service, logger or log, sources
 
     def service(self):
         if self._service is None:
             from . import google_auth
-            self._service = google_auth.service('gmail', 'v1', list(self.scopes), logger=self.logger, **self.sources)
+            self._service = google_auth.service('gmail', 'v1', list(self.scopes) if self.scopes else None,
+                                                logger=self.logger, **self.sources)
             if self._service is None:
                 raise NoMailbox('no usable Gmail token for this mailbox')
         return self._service
@@ -113,7 +117,7 @@ class Mailbox:
         return self.send(list(to) if to else [msg.get('from')], subject, text, html, cc, msg.get('thread_id') or '', headers)
 
 
-def mailbox(name: str, mailboxes: dict, project: str = '', scopes=READ_SEND, **kw) -> Mailbox:
+def mailbox(name: str, mailboxes: dict, project: str = '', scopes=None, **kw) -> Mailbox:
     """The mailbox `name` by the host's map {name: the secret / environment variable holding its token}: the
     environment's variable first, else Secret Manager's secret in `project`."""
     if name not in mailboxes:

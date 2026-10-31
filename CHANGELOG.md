@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.15.1 - 2026-10-31 PT
+
+- `gmail.Mailbox` and `mailbox()` use the token's own granted scopes by default (`scopes=None`); 0.15.0 asked every
+  refresh for gmail.readonly and gmail.send, which Google refuses for a token granted gmail.modify or read alone, so
+  a mailbox would have been NoMailbox. A caller names scopes only to narrow them.
+- `google_auth.credentials` and `service` take `scopes=None` for the same: the token's own scopes.
+
 ## 0.15.0 - 2026-10-31 PT
 
 Additive; no host call site changes. Clerk and Gmail for every project (SMAD PickleBot #571 and #661), one release.
