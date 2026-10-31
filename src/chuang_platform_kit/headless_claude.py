@@ -221,18 +221,18 @@ class FileStore:
             json.dump(marks, f)
 
 
-def _candidates(env, names, project, access, resting, now, tried):
-    """The (name, token) pairs to try, in order, the skipped ones recorded in `tried`."""
+def _plan(env, names, project, access, resting, now):
+    """(name, token, skip) per account in order: `skip` is '' for an account to try, else why it is passed over ('no
+    token', 'resting'), so `tried` reads in account order whatever each account did."""
     out = []
     for name in accounts(env, names):
         token = token_for(name, env, project, access)
         if not token:
-            tried.append((name, 'no token'))
-            continue
-        if resting and resting.until(name) > now():
-            tried.append((name, 'resting'))
-            continue
-        out.append((name, token))
+            out.append((name, '', 'no token'))
+        elif resting and resting.until(name) > now():
+            out.append((name, '', 'resting'))
+        else:
+            out.append((name, token, ''))
     return out
 
 
@@ -244,7 +244,10 @@ def ask(prompt: str, model: str = '', system: str = '', env=None, resting: Resti
     on; any other failure moves on too (the next account may be fine). ok False when none answered."""
     env = os.environ if env is None else env
     tried = []
-    for name, token in _candidates(env, names, project, access, resting, now, tried):
+    for name, token, skip in _plan(env, names, project, access, resting, now):
+        if skip:
+            tried.append((name, skip))
+            continue
         got = run_once(prompt, model, system, token, run=run, timeout=timeout, cli=cli, env=env)
         if got['ok']:
             tried.append((name, 'answered'))
@@ -308,10 +311,13 @@ def run(args: list, env=None, resting: Resting = None, now=time.time, timeout: f
     LOGIN), the way a desktop ran before it had tokens; without it that case is exit 75 and no account."""
     env = os.environ if env is None else env
     tried = []
-    candidates = _candidates(env, names, project, access, resting, now, tried)
+    plan = _plan(env, names, project, access, resting, now)
     if login_fallback:
-        candidates.append((LOGIN, ''))
-    for name, token in candidates:
+        plan.append((LOGIN, '', ''))
+    for name, token, skip in plan:
+        if skip:
+            tried.append((name, skip))
+            continue
         got = stream(args, token, env=env, stdin=stdin, out=out, err=err, timeout=timeout, popen=popen, cwd=cwd, cli=cli)
         if got['limited'] and name != LOGIN:
             if resting:

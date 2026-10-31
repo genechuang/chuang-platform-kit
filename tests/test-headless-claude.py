@@ -121,9 +121,12 @@ def boom(argv, **k):
 run, _ = cli([Done(1, '', 'segfault')])
 got = H.ask('ping', env={'CLAUDE_ACCOUNTS': 'gene,smad', 'CLAUDE_CODE_OAUTH_TOKEN_SMAD': 'tok-smad'}, run=run, resting=H.Resting(store), now=lambda: 1.0)
 timed = H.ask('ping', env={'CLAUDE_ACCOUNTS': 'gene', 'CLAUDE_CODE_OAUTH_TOKEN_GENE': 'g'}, run=boom, resting=H.Resting(store), now=lambda: 1.0)
-check("a plain failure moves on without resting; no token skips; none answering is ok False with each outcome",
-      (got['ok'], got['tried'][0], got['tried'][1][1].startswith('failed: segfault'), store.marks, timed['tried'][0][1].startswith('failed: timed out')),
-      (False, ('gene', 'no token'), True, {}, True))
+run4, _ = cli([Done(1, '', 'crash')])
+order = H.ask('ping', env={'CLAUDE_ACCOUNTS': 'gene,smad', 'CLAUDE_CODE_OAUTH_TOKEN_GENE': 'g'}, run=run4, resting=H.Resting(Store()), now=lambda: 1.0)
+check("a plain failure moves on without resting; no token skips; none answering is ok False with each outcome, in account order",
+      (got['ok'], got['tried'][0], got['tried'][1][1].startswith('failed: segfault'), store.marks, timed['tried'][0][1].startswith('failed: timed out'),
+       [n for n, _ in order['tried']], order['tried'][0][1].startswith('failed: crash'), order['tried'][1]),
+      (False, ('gene', 'no token'), True, {}, True, ['gene', 'smad'], True, ('smad', 'no token')))
 
 
 class Broken:

@@ -2,6 +2,11 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.11.1 - 2026-10-31 PT
+
+- `headless_claude`: `tried` reads in account order whatever each account did (0.11.0 recorded a later account's "no
+  token" before an earlier account's outcome; SMAD PickleBot's runner suite pins the order).
+
 ## 0.11.0 - 2026-10-31 PT
 
 Additive; no host call site changes (SMAD PickleBot's claude-runner re-exports it under its old names). Headless Claude
