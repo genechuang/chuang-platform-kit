@@ -239,6 +239,18 @@ finally:
     sys.stdout = kept
 check("main accounts: each account and whether it holds a token, never the token", (rc, buf.getvalue().splitlines()), (0, ['gene: no token', 'smad: token']))
 
+os.environ.pop('CLAUDE_CODE_OAUTH_TOKEN_SMAD', None)
+Proc.made, Proc.script = [], [('{"type":"result","result":"ran on the login"}\n', '', 0)]
+kept_popen, H.subprocess.Popen = H.subprocess.Popen, Proc
+try:
+    with_login = H.main(['run', '--', '-p', '--model', 'm'])
+    without = H.main(['run', '--no-login-fallback', '--', '-p'])
+finally:
+    H.subprocess.Popen = kept_popen
+check("main run: with no token anywhere the box's own sign-in runs by default (Dragnet, 10/31/26 9:10 AM PT: exit 75 before), --no-login-fallback keeps the 75",
+      (with_login, Proc.made[0].argv[1:], 'CLAUDE_CODE_OAUTH_TOKEN' in Proc.made[0].env, without, len(Proc.made)),
+      (0, ['-p', '--model', 'm'], False, 75, 1))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

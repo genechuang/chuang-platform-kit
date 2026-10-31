@@ -345,6 +345,10 @@ def main(argv=None) -> int:
     a.add_argument('--timeout', type=float, default=TIMEOUT_S)
     r = sub.add_parser('run', help='the CLI with your own arguments after --, stdin and stdout passed through')
     r.add_argument('--timeout', type=float, default=0, help='seconds before the run is killed (0: none)')
+    r.add_argument('--login-fallback', dest='login_fallback', action='store_true', default=True,
+                   help="the box's own CLI sign-in runs when no account has a token or all rest (the default)")
+    r.add_argument('--no-login-fallback', dest='login_fallback', action='store_false',
+                   help='exit 75 instead when no account can run (a service with no sign-in of its own)')
     r.add_argument('args', nargs=argparse.REMAINDER)
     ns = ap.parse_args(argv)
     resting = Resting(FileStore(ns.resting)) if ns.resting else None
@@ -362,7 +366,8 @@ def main(argv=None) -> int:
         print('headless_claude: no account answered: ' + '; '.join(f'{n}: {o}' for n, o in got['tried']), file=sys.stderr)
         return 75
     args = ns.args[1:] if ns.args[:1] == ['--'] else ns.args
-    got = run(args, resting=resting, timeout=ns.timeout, names=ns.accounts, project=ns.project, zone=ns.zone, stdin=sys.stdin)
+    got = run(args, resting=resting, timeout=ns.timeout, names=ns.accounts, project=ns.project, zone=ns.zone, stdin=sys.stdin,
+              login_fallback=ns.login_fallback)
     if not got['account']:
         print('headless_claude: no account ran: ' + '; '.join(f'{n}: {o}' for n, o in got['tried']), file=sys.stderr)
     return got['returncode']

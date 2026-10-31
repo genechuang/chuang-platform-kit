@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.11.2 - 2026-10-31 PT
+
+- `python -m chuang_platform_kit.headless_claude run` falls back to the box's own CLI sign-in by default when no
+  account has a token or all rest (0.11.1's command line never passed `login_fallback`, so a box with no tokens got
+  exit 75 and the CLI never started: Dragnet, 10/31/26 9:10 AM PT); `--no-login-fallback` keeps the 75 for a service
+  with no sign-in of its own.
+
 ## 0.11.1 - 2026-10-31 PT
 
 - `headless_claude`: `tried` reads in account order whatever each account did (0.11.0 recorded a later account's "no
