@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.18.1 - 2026-10-31 PT
+
+Additive; no host call site changes. `anthropic_api.admin_get(path, admin_key, params=None, timeout=30, http=None,
+user_agent=)`: one Admin API GET (an organization's usage and cost reports) under the admin key with the version
+header, answered in requests.Response's shape; `http` is requests, a fake with .get, or None for the standard library.
+SMAD PickleBot's cost script (#573) read the Admin API with its own call until now.
+
 ## 0.18.0 - 2026-10-31 PT
 
 Additive; no host call site changes. Two Sentry calls SMAD PickleBot's #569 audit found still written by hand needed

@@ -58,6 +58,29 @@ def urllib_post(url: str, headers=None, json=None, timeout: float = TIMEOUT):
         return Answer(e.code, e.read().decode('utf-8', 'replace'))
 
 
+ADMIN_URL = 'https://api.anthropic.com/v1/organizations'
+ADMIN_VERSION = '2023-06-01'
+
+
+def admin_get(path: str, admin_key: str, params: dict = None, timeout: float = 30, http=None,
+              user_agent: str = 'chuang-platform-kit'):
+    """One Admin API GET (an organization's usage and cost reports, `usage_report/messages`, `cost_report`) under the
+    admin key, answered in requests.Response's shape (Answer: status_code, text, json()); the host pages with has_more
+    and next_page itself. `http` is requests, a fake with .get, or None for the standard library (0.18.1). An HTTP
+    error is an Answer with its status, never a raise; no answer at all raises as urllib does."""
+    headers = {'x-api-key': admin_key, 'anthropic-version': ADMIN_VERSION, 'User-Agent': user_agent}
+    url = f"{ADMIN_URL}/{path.lstrip('/')}"
+    if http is not None:
+        return http.get(url, params=params or {}, headers=headers, timeout=timeout)
+    import urllib.parse
+    req = urllib.request.Request(url + (('?' + urllib.parse.urlencode(params)) if params else ''), headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return Answer(getattr(r, 'status', 200), r.read().decode('utf-8', 'replace'))
+    except urllib.error.HTTPError as e:
+        return Answer(e.code, e.read().decode('utf-8', 'replace'))
+
+
 def messages(model: str, messages: list, system: str = '', max_tokens: int = 1024, api_key: str = '',
              timeout: float = TIMEOUT, headers=None, extra=None, usage=None, post=None, env=None) -> dict:
     """One Messages call: {'text': the text blocks joined, 'body': the response, 'stop_reason', 'model': the one that

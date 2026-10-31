@@ -140,6 +140,21 @@ check("out_of_credits: the billing words at 400/402/403 only",
       (A.out_of_credits(400, 'usage limit reached'), A.out_of_credits(403, 'Your credit balance is too low'), A.out_of_credits(429, 'usage limit'),
        A.out_of_credits(402, 'nope'), A.out_of_credits(500, 'billing')), (True, True, False, False, False))
 
+seen = []
+
+
+class _Http:
+    def get(self, url, params=None, headers=None, timeout=None):
+        seen.append((url, dict(params or {}), headers['x-api-key'], headers['anthropic-version'], timeout))
+        return A.Answer(200, '{"data": [1], "has_more": false}')
+
+
+got = A.admin_get('usage_report/messages', 'adm-key', params={'starting_at': '2026-10-01'}, http=_Http(), timeout=9)
+check("0.18.1: admin_get GETs the Admin API path under the admin key with the version header, in requests' shape",
+      (got.status_code, got.json()['data'], seen[0]),
+      (200, [1], ('https://api.anthropic.com/v1/organizations/usage_report/messages', {'starting_at': '2026-10-01'}, 'adm-key',
+                  A.ADMIN_VERSION, 9)))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
