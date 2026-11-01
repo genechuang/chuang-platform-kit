@@ -2,7 +2,8 @@
 # PreToolUse on every tool: every line a session writes must open with the Pacific stamp ("12:43 AM PT"); a tool call
 # after an unstamped line is refused until the session writes a stamped one (Gene, 10/14/26 12:36 AM PT, after the
 # one-line updates between tool calls kept arriving on his phone with no time: "enforce the PT stamp on EVERY
-# message"). stamp-reply (Stop) covers a turn's last reply.
+# message"). stamp-reply (Stop) covers a turn's last reply. Since 1.13.0 the stamp's line also names the ticket the turn
+# works on, "· ticket: #N" or "ticket: none" (SMADPickleBot #671; Gene, 10/31/26 11:45 AM PT).
 #
 # Which line it checks (fixed 10/14/26 1:20 AM PT; a session found the first cut never blocked):
 # the transcript is written as each block finishes, and the text just written before a tool call is often not on disk
@@ -56,7 +57,7 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
   /"type":"user"/ { if ($0 !~ /"tool_result"/ && $0 !~ /"isMeta":true/) { last = ""; id = "" } next }
   /"type":"assistant"/ {
     s = $0; found = 0
-    while ((i = index(s, "\"type\":\"text\",\"text\":\"")) > 0) { s = substr(s, i + 22); last = substr(s, 1, 40); found = 1 }
+    while ((i = index(s, "\"type\":\"text\",\"text\":\"")) > 0) { s = substr(s, i + 22); last = substr(s, 1, 200); found = 1 }
     if (found) { id = ""; if (match($0, /"uuid":"[^"]*"/)) id = substr($0, RSTART + 8, RLENGTH - 9) }
   }
   END {
@@ -64,9 +65,13 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
     gsub(/^([ \t]|\\n)+/, "", last); sub(/^\*\*/, "", last)
     # The date leads the time (Gene, 10/17/26 5:21 AM PT: "add date too mm/dd/yy"), required since 1.2.0: "10/17/26 5:21 AM PT".
     if (!match(last, /^[0-9][0-9]?\/[0-9][0-9]?\/[0-9][0-9]([0-9][0-9])?[ \t]+[0-9][0-9]?:[0-9][0-9] ?(AM|PM|am|pm)/)) { print "no " id; exit }
-    st = substr(last, 1, RLENGTH); split(st, p, /[\/ \t:]+/)
+    sl = RLENGTH; st = substr(last, 1, sl); split(st, p, /[\/ \t:]+/)
     h = p[4] % 12; if (toupper(substr(st, length(st) - 1)) == "PM") h += 12
     if (nh != "" && mins(p[3] + 0, p[1] + 0, p[2] + 0, h, p[5] + 0) > mins(ny + 0, nm + 0, nd + 0, nh + 0, nmin + 0) + 1) { print "ahead " id " " st; exit }
+    # The ticket the turn works on, after the stamp on its own line (1.13.0, SMADPickleBot #671; Gene, 10/31/26: "also
+    # write the ticket # you are working on - if none, then say ticket: none"): "PT · ticket: #N" or "ticket: none". Any
+    # separator but a letter, a digit or a backslash (the JSON "\n" ends the line); a "·" escape counts as one.
+    if (substr(last, sl + 1) !~ /^[ \t]*(PT)?([^A-Za-z0-9#\\]|\\u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])*[Tt][Ii][Cc][Kk][Ee][Tt]:[ \t]*([Nn][Oo][Nn][Ee]|#[0-9])/) { print "noticket " id; exit }
     print "ok"
   }'; }
 # The task-list gate rides this hook too (1.11.0, Gene 10/30/26 12:34 AM PT: "update your steps progress in real time"):
@@ -126,8 +131,12 @@ fi
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 clock="${clock/ 0/ }"
 if [ "$kind" = ahead ]; then
-  printf 'Stamp ahead of the clock: your last message says "%s" but it is %s PT now. A stamp is copied from the latest "Pacific clock:" hook line, never advanced by felt time. Write one line that starts "%s PT", then make the call again. (gene-hooks stamp-gate.sh; Gene 10/20/26: "Your time stamp is drifting badly from my iOS time".)\n' "$stamped" "${clock:-<the PT clock>}" "${clock:-<the PT clock>}" >&2
+  printf 'Stamp ahead of the clock: your last message says "%s" but it is %s PT now. A stamp is copied from the latest "Pacific clock:" hook line, never advanced by felt time. Write one line that starts "%s PT · ticket: #N", then make the call again. (gene-hooks stamp-gate.sh; Gene 10/20/26: "Your time stamp is drifting badly from my iOS time".)\n' "$stamped" "${clock:-<the PT clock>}" "${clock:-<the PT clock>}" >&2
   exit 2
 fi
-printf 'Stamp first: your last message opened without the Pacific date and time. Start every message with the stamp: write one line that starts "%s PT" (copy the clock from the latest hook line, never estimate), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp; 10/17/26: the date too, mm/dd/yy.)\n' "${clock:-<the PT clock>}" >&2
+if [ "$kind" = noticket ]; then
+  printf 'Name the ticket: your last message'"'"'s stamp names no ticket. Write one line that starts "%s PT · ticket: #N" (the ticket this turn works on, several as "#N, #M", or "ticket: none" when no ticket owns it), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/31/26: "also write the ticket # you'"'"'re working on - if none, then say ticket: none".)\n' "${clock:-<the PT clock>}" >&2
+  exit 2
+fi
+printf 'Stamp first: your last message opened without the Pacific date and time. Start every message with the stamp: write one line that starts "%s PT · ticket: #N" (copy the clock from the latest hook line, never estimate; "ticket: none" when no ticket owns the turn), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp; 10/17/26: the date too, mm/dd/yy; 10/31/26: the ticket too.)\n' "${clock:-<the PT clock>}" >&2
 exit 2

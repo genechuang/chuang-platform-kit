@@ -5,7 +5,8 @@ stop hook to put in time stamp, make sure it doesn't add overhead to prompt resp
 A hook cannot edit what a session wrote; it can only stop the turn from ending. So when the turn's final text
 does not start with `mm/dd/yy h:mm AM|PM` (`10/17/26 5:21 AM PT`, the form since 10/17/26, required since 1.2.0;
 the clock hook hands every prompt and tool result the date and the time), or end with it, this answers
-{"decision": "block"} with the clock now, and the session adds one stamped line. Only the final message of a
+{"decision": "block"} with the clock now, and the session adds one stamped line. Since 1.13.0 both stamps also name the
+ticket the turn works on (`· ticket: #N`, or `ticket: none`; SMADPickleBot #671). Only the final message of a
 turn is checked: the one Gene reads on his phone when the turn ends, and the one replies to a background
 agent or a peer message used to miss (no prompt fires there).
 
@@ -24,6 +25,13 @@ from datetime import datetime, timedelta, timezone
 DATE_TIME = r'\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}\s?(AM|PM|am|pm)\b'
 STAMP = re.compile(r'^\s*(\*\*)?' + DATE_TIME)
 END_STAMP = re.compile(r'(?<![\d/])' + DATE_TIME)
+# The ticket the turn works on, after the stamp's PT on the same line (1.13.0; Gene, 10/31/26 11:45 AM PT: "aside from
+# the time stamp, also write the ticket # you're working on - if none, then say ticket: none"): `10/31/26 11:45 AM PT ·
+# ticket: #667` opening and closing, several as `ticket: #669, #244`. Any separator but a letter or a digit.
+TICKET = r'\s*(?:PT\b)?[^\w#\n]*(?i:ticket):\s*(?:(?i:none)\b|#\d+)'
+STAMP_TICKET = re.compile(r'^\s*(\*\*)?' + DATE_TIME + TICKET)
+END_TICKET = re.compile(r'(?<![\d/])' + DATE_TIME + TICKET)
+TICKET_FORM = 'mm/dd/yy h:mm AM PT · ticket: #N'
 TAIL = 256 * 1024
 
 
@@ -78,19 +86,28 @@ def decide(event, read_tail, now=None):
     if opens and closes:
         off = drift(reply, t)
         if off is None:
+            missing = [where for where, ok in zip(('opening', 'closing'), names_ticket(reply)) if not ok]
+            if missing:
+                return {'decision': 'block',
+                        'reason': f'Your reply\'s {" and ".join(missing)} stamp names no ticket. Send one short line, '
+                                  f'"— {stamp} PT · ticket: #N" (the ticket this turn works on, several as "#N, #M", or '
+                                  f'"ticket: none" when no ticket owns it), saying the reply above is complete (do not '
+                                  f'repeat it). Every stamp, opening and closing, is "{TICKET_FORM}" (Gene, 10/31/26: '
+                                  f'"also write the ticket # you\'re working on - if none, then say ticket: none").'}
             return evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd'))
         return {'decision': 'block',
                 'reason': f'Your reply\'s stamp is {abs(off)} minute(s) {"ahead of" if off > 0 else "behind"} the clock: it is '
-                          f'{stamp} PT now. Send one short line, "— {stamp} PT", saying the reply above is complete (do not '
-                          f'repeat it). A stamp is copied from the latest "Pacific clock:" hook line, never advanced or '
-                          f'carried by felt time (Gene, 10/20/26: "Your time stamp is drifting badly from my iOS time").'}
+                          f'{stamp} PT now. Send one short line, "— {stamp} PT · ticket: #N", saying the reply above is '
+                          f'complete (do not repeat it). A stamp is copied from the latest "Pacific clock:" hook line, never '
+                          f'advanced or carried by felt time (Gene, 10/20/26: "Your time stamp is drifting badly from my iOS '
+                          f'time").'}
     where = 'open' if not opens else 'close'
     return {'decision': 'block',
-            'reason': f'Your reply did not {where} with the Pacific clock stamp. Send one short line, "— {stamp} PT", '
-                      f'saying the reply above is complete (do not repeat it). Every final reply opens with the stamp, '
-                      f'the date and the time, and closes with "— mm/dd/yy h:mm AM PT" on its last line (Gene, 10/14/26: '
-                      f'on the phone a long reply opens scrolled to its end, so the opening stamp is off screen; 10/17/26: '
-                      f'the date too).'}
+            'reason': f'Your reply did not {where} with the Pacific clock stamp. Send one short line, "— {stamp} PT · '
+                      f'ticket: #N", saying the reply above is complete (do not repeat it). Every final reply opens with '
+                      f'the stamp, the date and the time, and closes with "— {TICKET_FORM}" on its last line (Gene, '
+                      f'10/14/26: on the phone a long reply opens scrolled to its end, so the opening stamp is off screen; '
+                      f'10/17/26: the date too; 10/31/26: the ticket too, or "ticket: none").'}
 
 
 def evidence(reply, lines, cwd=None, names=None):
@@ -125,6 +142,14 @@ def drift(reply: str, now_pacific):
         return None
     off = round((stamped - now_pacific.replace(tzinfo=None, second=0, microsecond=0)).total_seconds() / 60)
     return None if -BEHIND_OK <= off <= AHEAD_OK else off
+
+
+def names_ticket(reply: str) -> tuple:
+    """(opening, closing): whether the reply's opening stamp and its last line's stamp each name the ticket the turn
+    works on (`· ticket: #N`, `· ticket: #N, #M` or `· ticket: none`; 1.13.0, SMADPickleBot #671). The hook checks that a
+    ticket is named, never that it is the right one."""
+    lines = [ln for ln in reply.strip().splitlines() if ln.strip()]
+    return bool(STAMP_TICKET.match(reply)), bool(lines) and bool(END_TICKET.search(lines[-1]))
 
 
 def ends_stamped(reply: str) -> bool:

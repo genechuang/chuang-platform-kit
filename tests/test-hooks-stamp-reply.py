@@ -41,13 +41,13 @@ def tail(lines):
 
 # the positive case first: a stamped reply lets the turn end
 check('the positive case: a reply opening and closing with the stamp ends the turn',
-      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON), None)
+      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT · ticket: #671\n\nDone.\n\n— 10/13/26 5:49 AM PT · ticket: #671'}])]), NOON), None)
 out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone, pushed.'}])]), NOON)
 check('  opening stamp but none at the bottom blocks, asking for the closing line (Gene, 10/14/26 1:54 AM)',
       ((out or {}).get('decision'), 'did not close' in (out or {}).get('reason', ''), '— 10/13/26 5:49 AM PT' in (out or {}).get('reason', '')),
       ('block', True, True))
 check('  a one-line stamped reply counts as both (the recovery line ends the loop)',
-      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT done, see above'}])]), NOON), None)
+      S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT · ticket: #671 done, see above'}])]), NOON), None)
 check('  the closing stamp may sit anywhere on the last line', S.ends_stamped('text\n\n*— 10/13/26 5:49 AM PT*\n'), True)
 out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 5:49 AM PT'}])]), NOON)
 check('  a closing line with the time alone blocks (Gene, 10/17/26 5:56 AM PT: "— 5:54 AM PT" passed 1.1.0, "still old hook. Why?")',
@@ -67,9 +67,25 @@ check('  the date is required before the time (Gene, 10/17/26: "add date too mm/
       ([bool(S.STAMP.match(t)) for t in ('10/17/26 5:21 AM PT', '**10/17/26 5:21 AM PT**', '10/17/2026 5:21 am', '10/17/26', '5:21 AM PT')],
        [S.ends_stamped(t) for t in ('done\n\n— 10/17/26 5:21 AM PT', 'done\n\n— 5:21 AM PT', 'done — 10/17/26 5:21 AM PT')]),
       ([True, True, True, False, False], [True, False, True]))
+# 1.13.0 (SMADPickleBot #671; Gene, 10/31/26 11:45 AM PT: "also write the ticket # you're working on - if none, then say
+# ticket: none"): both stamps name the ticket.
+check('#671: the opening and the closing stamp each name the ticket, one, several or none',
+      [S.names_ticket(t) for t in ('10/31/26 11:45 AM PT · ticket: #667: done\n\n— 10/31/26 11:45 AM PT · ticket: #667',
+                                   '**10/31/26 11:45 AM PT — Ticket: #669, #244**\n\nok\n\n*— 10/31/26 11:45 AM PT | ticket: none*',
+                                   '10/31/26 11:45 AM PT: done\n\n— 10/31/26 11:45 AM PT',
+                                   '10/31/26 11:45 AM PT · ticket: #667\n\n— 10/31/26 11:45 AM PT',
+                                   '10/31/26 11:45 AM PT\nticket: #667\n\n— 10/31/26 11:45 AM PT · ticket: TBD')],
+      [(True, True), (True, True), (False, False), (True, False), (False, False)])
+out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON)
+check('  stamps with no ticket block once, asking for one closing line that names it',
+      ((out or {}).get('decision'), 'opening and closing stamp names no ticket' in (out or {}).get('reason', ''),
+       '"— 10/13/26 5:49 AM PT · ticket: #N"' in (out or {}).get('reason', '')), ('block', True, True))
+out = S.decide({}, tail([PROMPT, line('assistant', [{'type': 'text', 'text': '10/13/26 5:49 AM PT · ticket: none\n\nDone.\n\n— 10/13/26 5:49 AM PT'}])]), NOON)
+check('  a closing stamp alone without it blocks too, naming the closing one',
+      ((out or {}).get('decision'), "reply's closing stamp names no ticket" in (out or {}).get('reason', '')), ('block', True))
 check('  Pacific time across DST: winter is UTC-8', S.pacific_now(datetime(2026, 12, 1, 20, 0, tzinfo=timezone.utc)).hour, 12)  # utc-ok: an instant in, Pacific out
 def reply_at(stamp):
-    return tail([PROMPT, line('assistant', [{'type': 'text', 'text': f'{stamp} PT\n\nDone.\n\n— {stamp} PT'}])])
+    return tail([PROMPT, line('assistant', [{'type': 'text', 'text': f'{stamp} PT · ticket: #671\n\nDone.\n\n— {stamp} PT · ticket: #671'}])])
 
 
 # 1.4.0, Gene 10/20/26 12:19 AM PT: "Your time stamp is drifting badly from my iOS time" (a reply said 12:22 at 12:19);
@@ -78,7 +94,7 @@ check('  drift: a minute ahead or a minute behind passes',
       [S.decide({}, reply_at(s), NOON) for s in ('10/13/26 5:50 AM', '10/13/26 5:48 AM')], [None, None])
 out = S.decide({}, reply_at('10/13/26 5:52 AM'), NOON)
 check('  drift: three minutes ahead blocks, naming the clock to copy',
-      (out['decision'], '3 minute(s) ahead' in out['reason'], '"— 10/13/26 5:49 AM PT"' in out['reason']), ('block', True, True))
+      (out['decision'], '3 minute(s) ahead' in out['reason'], '"— 10/13/26 5:49 AM PT · ticket: #N"' in out['reason']), ('block', True, True))
 out = S.decide({}, reply_at('10/13/26 5:47 AM'), NOON)
 check('  drift: two minutes behind blocks', (out['decision'], '2 minute(s) behind' in out['reason']), ('block', True))
 check('  drift: across midnight by the date', S.drift('x\n— 10/12/26 11:59 PM PT', S.pacific_now(

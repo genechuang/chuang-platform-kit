@@ -58,7 +58,7 @@ check('advance, done and start replay to the right step',
 # Through stamp-gate.sh, as every session runs it: a stamped line, then the stale list.
 d = tempfile.mkdtemp()
 path = os.path.join(d, 't.jsonl')
-stamp = json.dumps({'type': 'assistant', 'uuid': 'st', 'message': {'content': [{'type': 'text', 'text': '1/1/26 12:00 AM PT: go'}]}},
+stamp = json.dumps({'type': 'assistant', 'uuid': 'st', 'message': {'content': [{'type': 'text', 'text': '1/1/26 12:00 AM PT · ticket: #1: go'}]}},
                    separators=(',', ':'))
 
 
