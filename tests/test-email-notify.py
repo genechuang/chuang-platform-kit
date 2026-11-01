@@ -65,5 +65,17 @@ check("dry_run returns True without a username",
       EN.send_notification_email('a@b.c', 's', 'b', dry_run=True), True)
 check("no recipient returns False", EN.send_notification_email('', 's', 'b'), False)
 
+# whatsapp_to_html (0.20.0): a code block is a <pre>, a block of its own, so the fence's own newlines and the one
+# after it draw no empty line (the games table followed by "We need 1 more player": an extra blank line until then).
+table = 'Games:\n```\nTue | 7 PM\nThu | 7 PM\n```\nWe need 1 more player to fill it.\n\nBring a friend.'
+html = EN.whatsapp_to_html(table)
+check("a table followed by a line: the <pre> opens and closes on its rows, and no <br> sits between </pre> and the line",
+      ('<pre style="font-family:monospace;white-space:pre">Tue | 7 PM\nThu | 7 PM</pre>We need 1 more player' in html,
+       '</pre><br>' in html, html.count('<br>')),
+      (True, False, 3))
+check("  a paragraph break after the block stays one empty line, a block with no newline inside is untouched, text without a block is as before",
+      (EN.whatsapp_to_html('```a```\n\nnext').count('<br>'), EN.whatsapp_to_html('```a```next'), EN.whatsapp_to_html('one\ntwo')),
+      (1, '<pre style="font-family:monospace;white-space:pre">a</pre>next', 'one<br>\ntwo'))
+
 print("\n%d failure(s)" % len(fails))
 sys.exit(1 if fails else 0)

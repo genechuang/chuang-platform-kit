@@ -32,9 +32,10 @@ PickleBot's `ci_claim.access_token`, the one token reader its functions, jobs, r
     token = google_auth.access_token()                 # '' when no source answers; never raises
 
 `access_token()` takes the first source that answers: the environment variable `env_name` (CI_ACCESS_TOKEN: a
-pipeline job minting one token for every step), a service-account key under GOOGLE_APPLICATION_CREDENTIALS (a
-path, or the key's JSON itself, as a cloud environment's variable holds it) minted in-process by google-auth when
-it is installed and else by `key_file_token()` (the key's RS256 JWT signed with the openssl CLI and exchanged at
+pipeline job minting one token for every step), an impersonated service account's credential file under
+GOOGLE_APPLICATION_CREDENTIALS through google-auth (`impersonated_token()`, 0.20.0), a service-account key under the
+same variable (a path, or the key's JSON itself, as a cloud environment's variable holds it) minted in-process by
+google-auth when it is installed and else by `key_file_token()` (the key's RS256 JWT signed with the openssl CLI and exchanged at
 Google's token endpoint, a fraction of a second where gcloud's first start is 5 to 37 s), the metadata server
 (Cloud Run, Cloud Functions, Cloud Build), then `gcloud auth print-access-token` (a desktop, a runner after the
 auth action), bounded by `gcloud_timeout`.
@@ -107,16 +108,55 @@ def key_file_token(path: str, opener=None, run=subprocess.run, now=None, scope: 
         return ''
 
 
+IMPERSONATED = 'impersonated_service_account'
+_IMPERSONATED = {}   # file path: google-auth's credentials, kept so a token is minted once an hour, not once a call
+
+
+def impersonated_token(path: str, scope: str = CLOUD_PLATFORM, load=None, request=None) -> str:
+    """A token for the service account an `impersonated_service_account` credential file names (the kind `gcloud auth
+    application-default login --impersonate-service-account` writes, and a container given one under
+    GOOGLE_APPLICATION_CREDENTIALS), through google-auth, minted once and refreshed at expiry, or '' (0.20.0: a desktop
+    worker's container had only that kind, which Google's own clients read but this reader did not, so every job start
+    there had no token until its project kept a copy of this). Only that type and only the file given, never
+    google-auth's own discovery, so a shell that names no such file never picks up a person's sign-in; `load` and
+    `request` are google-auth's, a test's stand-ins otherwise. Never raises."""
+    path = (path or '').strip()
+    if not path or not os.path.isfile(path):
+        return ''
+    try:
+        with open(path, encoding='utf-8') as f:
+            if json.load(f).get('type') != IMPERSONATED:
+                return ''
+        creds = _IMPERSONATED.get(path)
+        if creds is None:
+            if load is None:
+                import google.auth   # '' where the library is absent: the standard-library sources stay the fallback
+                load = google.auth.load_credentials_from_file
+            creds = _IMPERSONATED[path] = load(path, scopes=[scope])[0]
+        if not creds.valid:
+            if request is None:
+                from google.auth.transport.requests import Request
+                request = Request()
+            creds.refresh(request)
+        return creds.token or ''
+    except Exception:   # noqa: BLE001 - the library missing, an unreadable file, a refused mint: '' says none
+        return ''
+
+
 def access_token(env=None, opener=None, run=subprocess.run, gcloud_timeout=30, env_name: str = 'CI_ACCESS_TOKEN',
                  scope: str = CLOUD_PLATFORM) -> str:
     """An OAuth access token for Google's REST APIs, or '' when no source answers (module docstring): `env_name`,
-    the key under GOOGLE_APPLICATION_CREDENTIALS (google-auth in-process when installed, else key_file_token), the
+    the credential under GOOGLE_APPLICATION_CREDENTIALS (an impersonated service account through google-auth,
+    `impersonated_token`, 0.20.0; a service-account key through google-auth when installed, else key_file_token), the
     metadata server, then gcloud bounded by `gcloud_timeout`. Never raises."""
     env = os.environ if env is None else env
     if env.get(env_name):
         return env[env_name].strip()
     key = (env.get(KEY_ENV) or '').strip()
     if key:
+        tok = impersonated_token(key, scope=scope)
+        if tok:
+            return tok
         if os.path.exists(key):
             try:
                 from google.auth.transport.requests import Request

@@ -179,11 +179,19 @@ def whatsapp_to_html(text: str) -> str:
     # Collapse triple+ newlines to double (fixes empty-section gaps, preserves paragraph breaks)
     text = re.sub(r'\n{3,}', '\n\n', text)
 
-    # Convert newlines to <br>, but not inside <pre> blocks (pre preserves whitespace)
+    # Convert newlines to <br>, but not inside <pre> blocks (pre preserves whitespace). A <pre> is a block of its
+    # own, so the newline that opened the fence, the one that closed it and the one right after it draw nothing in
+    # the text and would each be an empty line in the email (0.20.0: "There's an extra newline before 'We need 1
+    # more player to' - remove it", a games table followed by a line): dropped, one each.
     parts = re.split(r'(<pre[^>]*>.*?</pre>)', text, flags=re.DOTALL)
     for i, part in enumerate(parts):
-        if not part.startswith('<pre'):
-            parts[i] = part.replace('\n', '<br>\n')
+        if part.startswith('<pre'):
+            part = re.sub(r'^(<pre[^>]*>)\n', r'\1', part)
+            parts[i] = part[:-len('\n</pre>')] + '</pre>' if part.endswith('\n</pre>') else part
+            continue
+        if i and parts[i - 1].startswith('<pre') and part.startswith('\n'):
+            part = part[1:]
+        parts[i] = part.replace('\n', '<br>\n')
     text = ''.join(parts)
 
     return text

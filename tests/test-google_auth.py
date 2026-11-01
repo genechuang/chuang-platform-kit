@@ -317,6 +317,61 @@ with tempfile.TemporaryDirectory() as d:
     else:
         print("  (no openssl here: the key cases are not run)")
 
+print("impersonated_token() (0.20.0): an impersonated_service_account file, through google-auth, minted once and refreshed at expiry; access_token takes it before any other source but the environment's")
+
+
+class _Creds:
+    def __init__(self):
+        self.valid, self.token, self.refreshed = False, None, 0
+
+    def refresh(self, request):
+        self.refreshed += 1
+        self.valid, self.token = True, f'imp{self.refreshed}'
+
+
+_loads, _probes = [], []
+
+
+def _load(path, scopes=None):
+    _loads.append((os.path.basename(path), scopes))
+    return _Creds(), 'a-project'
+
+
+def _refused(path, scopes=None):
+    raise OSError('IAM Credentials refused the mint')
+
+
+def _probe(req, timeout=None):
+    _probes.append(req.full_url)
+    raise OSError('no metadata server')
+
+
+with tempfile.TemporaryDirectory() as d:
+    imp, other = os.path.join(d, 'adc.json'), os.path.join(d, 'key.json')
+    with open(imp, 'w', encoding='utf-8') as f:
+        f.write('{"type": "impersonated_service_account", "service_account_impersonation_url": "x", '
+                '"source_credentials": {"type": "authorized_user"}, "delegates": []}')
+    with open(other, 'w', encoding='utf-8') as f:
+        f.write('{"type": "service_account"}')
+    G._IMPERSONATED.clear()
+    first = G.impersonated_token(imp, load=_load, request=object())
+    again = G.impersonated_token(imp, load=_load, request=object())
+    check("minted once through google-auth, then kept", (first, again, _loads), ('imp1', 'imp1', [('adc.json', [G.CLOUD_PLATFORM])]))
+    G._IMPERSONATED[imp].valid = False
+    check("  refreshed when it expires", (G.impersonated_token(imp, load=_load, request=object()), len(_loads)), ('imp2', 1))
+    G._IMPERSONATED[imp] = G._IMPERSONATED[imp]   # kept: access_token's read below answers from it without google-auth
+    check("  access_token answers with it before the metadata server, and the environment's token first",
+          (G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': imp}, opener=_probe), _probes,
+           G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': imp, 'CI_ACCESS_TOKEN': 'ci'}, opener=_probe)),
+          ('imp2', [], 'ci'))
+    G._IMPERSONATED.clear()
+    check("  another type, no file, an empty path, a refused mint: '' and the next source",
+          (G.impersonated_token(other, load=_load), G.impersonated_token(os.path.join(d, 'none.json'), load=_load),
+           G.impersonated_token('', load=_load), G.impersonated_token(imp, load=_refused), len(_loads),
+           G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': other}, opener=meta)),
+          ('', '', '', '', 1, 'meta'))
+    G._IMPERSONATED.clear()
+
 print("credentials() answers None without google-auth installed")
 for name in ('google.auth.transport.requests', 'google.oauth2.credentials'):
     sys.modules[name] = None   # importing it raises ImportError

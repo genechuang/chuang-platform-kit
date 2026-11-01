@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.20.0 - 2026-11-01 PT
+
+Two additions; no host call site changes. `google_auth.impersonated_token(path)` reads an
+`impersonated_service_account` credential file through google-auth (the kind `gcloud auth application-default login
+--impersonate-service-account` writes, and a container given one under GOOGLE_APPLICATION_CREDENTIALS), minted once and
+refreshed at expiry, and `access_token()` takes it before the key, the metadata server and gcloud; only that type and
+only the file given, never google-auth's own discovery. SMAD PickleBot #756 retires its own copy (#755's production fix).
+And `email_notify.whatsapp_to_html` no longer turns a code block's own newlines, or the one right after it, into `<br>`:
+a `<pre>` is a block, so each had been an empty line under every table in an email (SMAD PickleBot #765).
+
 ## 0.19.1 - 2026-10-31 PT
 
 A fix; no host call site changes. `github.cli(..., check=True)` raises CalledProcessError on a failed run, a missing
