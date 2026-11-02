@@ -60,8 +60,11 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   gmail              one Gmail client per mailbox on its stored token: search threads, read a thread's senders and
                      subjects, the never-send-twice check, reply-all with an explicit `to`, send; a host's map names
                      each mailbox's token once
+  slack              Slack, one client for every project: a message posted as the bot to a channel with text and
+                     blocks, a post redrawn, any Web API call, and the incoming-webhook send as the second door; a
+                     refusal is `SlackError` with the status and Slack's error, never the token or the URL
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.20.0'
+__version__ = '0.22.0'
