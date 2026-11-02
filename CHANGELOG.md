@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.22.0 - 2026-11-01 PT
+
+Additive; no host call site changes. `slack`, Slack's one client for every project (SMAD PickleBot #683: "every
+third-party API call goes through chuang-platform-kit's one client for that vendor"; two hand-written copies until now,
+SMAD's `slack_app.api` and five `chat.postMessage` calls beside it, and ChuangFinance's webhook `send_slack`):
+`post(token, channel, text, blocks=None, thread_ts=None, unfurl_links=False, unfurl_media=None, opener=None,
+timeout=15)` over `chat.postMessage`, Slack's answer with the message's `ts` and `channel`; `update(token, channel, ts,
+text, blocks=None)` over `chat.update`; `call(method, token, payload)` for any other Web API method as JSON and
+`form(method, token, params)` for one that takes form fields; and `webhook_post(url, payload)` for an incoming webhook,
+the second door a host keeps until it moves to a bot token. A refusal is `SlackError` with the HTTP `status` (200 for
+Slack's `ok: false`, 0 when nothing answered) and `error` (Slack's string, else the failure's kind); the token and the
+webhook URL are in no exception text, and nothing is printed or logged. Standard library; `opener=` is the seam.
+
 ## 0.21.0 - 2026-11-01 PT
 
 Additive; no host call site changes. `github` gains the verbs a ticket tool needs so a production job runs no gh CLI
