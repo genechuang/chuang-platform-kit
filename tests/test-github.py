@@ -72,9 +72,98 @@ check('create_release: made at the target; an existing tag returns its release',
       (made, calls[0][2]['tag_name'], calls[0][2]['target_commitish'], GH.create_release('tok', REPO, 'v1', 'abc', 'R', 'n', opener=op2)),
       ('https://r/1', 'v1', 'abc', 'https://r/old'))
 
-op = fake([('GET', '/issues/7', 200, {'title': ' A title ', 'state': 'open', 'labels': [{'name': 'Bug'}, {'name': 'area:product'}]})], [])
-check('issue: the title trimmed, the labels lower-cased', GH.issue('tok', REPO, 7, op),
-      {'number': 7, 'title': 'A title', 'state': 'open', 'labels': ['bug', 'area:product']})
+op = fake([('GET', '/issues/7', 200, {'title': ' A title ', 'state': 'open', 'labels': [{'name': 'Bug'}, {'name': 'area:product'}],
+                                       'id': 9007, 'node_id': 'I_7', 'body': 'b', 'state_reason': None, 'html_url': 'u/7',
+                                       'created_at': '2026-11-01T00:00:00Z'})], [])
+got = GH.issue('tok', REPO, 7, op)
+check('issue: the title trimmed, the labels lower-cased; 0.21.0: the ids, body, reason, url, stamp and pull_request beside them',
+      ({k: got[k] for k in ('number', 'title', 'state', 'labels')}, got['label_names'], got['id'], got['node_id'], got['body'],
+       got['state_reason'], got['html_url'], got['created_at'], got['pull_request']),
+      ({'number': 7, 'title': 'A title', 'state': 'open', 'labels': ['bug', 'area:product']}, ['Bug', 'area:product'], 9007, 'I_7', 'b',
+       None, 'u/7', '2026-11-01T00:00:00Z', False))
+
+# The ticket verbs (0.21.0; SMAD PickleBot #685: the ticket tools smad-commands runs leave the gh CLI).
+calls = []
+op = fake([('POST', '/issues/7/labels', 200, [{'name': 'bug'}, {'name': 'needs-triage'}]),
+           ('DELETE', '/issues/7/labels/told%3Afiled', 200, []), ('DELETE', '/issues/7/labels/gone', 404, {'message': 'Label does not exist'}),
+           ('POST', '/labels', 422, {'message': 'Validation Failed'}), ('PATCH', '/labels/needs-triage', 200, {'name': 'needs-triage'}),
+           ('POST', '/issues/7/assignees', 201, {'assignees': [{'login': 'gene'}]}),
+           ('DELETE', '/issues/7/assignees', 200, {'assignees': []}),
+           ('POST', '/issues/40/sub_issues', 201, {}), ('PATCH', '/issues/comments/77', 200, {'html_url': 'c/77'})], calls)
+labels = (GH.add_labels('tok', REPO, 7, ['bug', 'needs-triage'], op), GH.remove_label('tok', REPO, 7, 'told:filed', op),
+          GH.remove_label('tok', REPO, 7, 'gone', op))
+made = GH.create_label('tok', REPO, 'needs-triage', '#D93F0B', 'waiting for triage', op)
+people = (GH.add_assignees('tok', REPO, 7, ['gene'], op), GH.remove_assignees('tok', REPO, 7, ['gene'], op))
+GH.add_sub_issue('tok', REPO, 40, 9300, op)
+edited = GH.edit_comment('tok', REPO, 77, 'new body', op)
+check('the positive case: labels added and one removed (a 404 is False, never an error); an existing label updated on a 422 '
+      '(gh\'s --force) with the # dropped; assignees on and off; a sub-issue linked by its id; a comment edited',
+      (labels, made, [c[2] for c in calls if '/labels' in c[1] and c[0] in ('POST', 'PATCH') and '/issues/' not in c[1]],
+       people, [c[2] for c in calls if c[1].endswith('/sub_issues')], edited, [c[2] for c in calls if c[1].endswith('/comments/77')]),
+      ((['bug', 'needs-triage'], True, False), 'needs-triage',
+       [{'name': 'needs-triage', 'color': 'D93F0B', 'description': 'waiting for triage'}, {'color': 'D93F0B', 'description': 'waiting for triage'}],
+       (['gene'], []), [{'sub_issue_id': 9300}], 'c/77', [{'body': 'new body'}]))
+
+calls = []
+op = fake([('PATCH', '/issues/7', 200, {}), ('POST', '/issues/7/comments', 201, {'html_url': 'c/1'}),
+           ('GET', '/issues/7', 200, {'title': 'T', 'state': 'closed', 'labels': []})], calls)
+GH.close_issue('tok', REPO, 7, 'completed', 'Live in release abc.', op)
+GH.reopen_issue('tok', REPO, 7, op)
+after = GH.edit_issue('tok', REPO, 7, title='New title', opener=op)
+check('close_issue comments first then closes with its reason; reopen opens; edit_issue sends only what was given and reads back',
+      ([(c[0], c[1].rsplit('/', 2)[-2:], c[2]) for c in calls if c[0] in ('PATCH', 'POST')], after['state']),
+      ([('POST', ['7', 'comments'], {'body': 'Live in release abc.'}), ('PATCH', ['issues', '7'], {'state': 'closed', 'state_reason': 'completed'}),
+        ('PATCH', ['issues', '7'], {'state': 'open'}), ('PATCH', ['issues', '7'], {'title': 'New title'})], 'closed'))
+
+
+def issues_answer(nodes, more=None, search=False):
+    page = {'pageInfo': {'hasNextPage': bool(more), 'endCursor': more}, 'nodes': nodes}
+    return {'data': {'search': page} if search else {'repository': {'issues': page}}}
+
+
+def gql(answers, calls):
+    """A GraphQL opener answering each POST /graphql from `answers` in turn; the variables kept in `calls`."""
+    answers = list(answers)
+
+    def opener(req, timeout=None):
+        body = json.loads(req.data)
+        calls.append(body['variables'])
+        return Resp(200, answers.pop(0))
+    return opener
+
+
+node = {'number': 5, 'title': 'Five', 'body': 'Sentry feedback: X', 'state': 'OPEN', 'stateReason': None, 'createdAt': '2026-11-01T01:00:00Z',
+        'url': 'u/5', 'labels': {'nodes': [{'name': 'feedback'}]},
+        'comments': {'nodes': [{'databaseId': 9, 'body': 'Triage: P2', 'createdAt': '2026-11-01T02:00:00Z', 'author': {'login': 'gene'}}]}}
+calls = []
+listed = GH.issues('tok', REPO, 'open', ['feedback'], limit=51, comments=30,
+                   opener=gql([issues_answer([node], more='C1'), issues_answer([dict(node, number=6, comments={'nodes': []})])], calls))
+calls2 = []
+found = GH.issues('tok', REPO, 'open', search='smoke in:title', limit=10, opener=gql([issues_answer([node], search=True)], calls2))
+check("issues: the repository's issues in gh's --json shape, labels and the last comments with their authors, the cursor followed "
+      "to the limit; a search puts repo:, is:issue and the state before the words",
+      ([(i['number'], i['title'], i['state'], i['labels'], [(c['databaseId'], c['author']['login'], c['body']) for c in i['comments']])
+        for i in listed], [(v['states'], v['labels'], v['first'], v['after']) for v in calls],
+       [i['number'] for i in found], calls2[0]['q'], calls2[0]['first']),
+      ([(5, 'Five', 'OPEN', [{'name': 'feedback'}], [(9, 'gene', 'Triage: P2')]), (6, 'Five', 'OPEN', [{'name': 'feedback'}], [])],
+       [(['OPEN'], ['feedback'], 51, None), (['OPEN'], ['feedback'], 50, 'C1')],
+       [5], 'repo:owner/repo is:issue is:open smoke in:title', 10))
+
+calls = []
+op = gql([{'data': {'addProjectV2ItemById': {'item': {'id': 'PVTI_1'}}}}, {'data': {'addProjectV2DraftIssue': {'projectItem': {'id': 'PVTI_2'}}}},
+          {'data': {'updateProjectV2ItemFieldValue': {'projectV2Item': {'id': 'PVTI_1'}}}},
+          {'data': {'updateProjectV2ItemFieldValue': {'projectV2Item': {'id': 'PVTI_1'}}}},
+          {'data': {'clearProjectV2ItemFieldValue': {'projectV2Item': {'id': 'PVTI_1'}}}},
+          {'data': {'updateProjectV2ItemPosition': {'items': {'nodes': []}}}}], calls)
+project = (GH.project_add_item('tok', 'PVT_1', 'I_7', op), GH.project_add_draft('tok', 'PVT_1', '— Dock —', 'why', op),
+           GH.project_set_field('tok', 'PVT_1', 'PVTI_1', 'F_status', option_id='abc', opener=op),
+           GH.project_set_field('tok', 'PVT_1', 'PVTI_1', 'F_release', text='abcdef12', opener=op),
+           GH.project_clear_field('tok', 'PVT_1', 'PVTI_1', 'F_light', op), GH.project_item_to_top('tok', 'PVT_1', 'PVTI_1', op))
+check('the Projects v2 mutations: an item added by content id, a draft by title, a single-select by option id and a text field, '
+      'a field cleared, an item to the top',
+      (project, [v.get('v') for v in calls[2:5]], calls[0], calls[1]['t']),
+      (('PVTI_1', 'PVTI_2', True, True, True, True), [{'singleSelectOptionId': 'abc'}, {'text': 'abcdef12'}, None],
+       {'p': 'PVT_1', 'c': 'I_7'}, '— Dock —'))
 
 calls = []
 GH.dispatch('tok', REPO, 'deploy.yml', 'main', {'component': 'api', 'n': 3}, fake([('POST', '/dispatches', 204, None)], calls))

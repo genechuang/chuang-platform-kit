@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.21.0 - 2026-11-01 PT
+
+Additive; no host call site changes. `github` gains the verbs a ticket tool needs so a production job runs no gh CLI
+(SMAD PickleBot #685): `issues(tok, repo, state, labels, search, limit, comments)` lists or searches a repository's
+issues over one GraphQL call a page, in the shape `gh issue list --json` gave (state OPEN/CLOSED, stateReason,
+createdAt, labels [{name}], comments with their authors when asked); `add_labels`, `remove_label` (a 404 is False, never
+an error), `create_label` (an existing name updated, gh's `--force`), `add_assignees`, `remove_assignees`, `edit_issue`,
+`close_issue` (a comment first when given), `reopen_issue`, `add_sub_issue` and `edit_comment` over REST; and the
+Projects v2 mutations `project_add_item`, `project_add_draft`, `project_set_field` (a single-select by option id or a
+text), `project_clear_field` and `project_item_to_top`. `issue()` answers more keys beside the four it had (`id`,
+`node_id`, `body`, `state_reason`, `html_url`, `created_at`, `pull_request`, `label_names`), and `create_issue()` the
+new issue's `node_id`.
+
 ## 0.20.0 - 2026-11-01 PT
 
 Two additions; no host call site changes. `google_auth.impersonated_token(path)` reads an

@@ -11,6 +11,13 @@ only: it rides into functions that install nothing else.
     url = gh.create_release(tok, 'owner/repo', 'v1', head, 'Release v1', 'notes')
     gh.dispatch(tok, 'owner/repo', 'deploy.yml', 'main', {'component': 'api'})
 
+**The ticket verbs** (0.21.0; SMAD PickleBot #685: the ticket tools a production job runs leave the gh CLI): issues()
+lists or searches a repository's issues in gh's `--json` shape over one GraphQL call a page; add_labels, remove_label,
+create_label, add_assignees, remove_assignees, edit_issue, close_issue, reopen_issue, add_sub_issue and edit_comment
+are the REST writes `gh issue edit`, `close` and `label create` made; project_add_item, project_add_draft,
+project_set_field, project_clear_field and project_item_to_top are the Projects v2 mutations `gh project item-add` and
+`item-edit` ran, by the Project's and the field's ids.
+
 A refusal is GitHubError with the status and GitHub's own message; a 401 or 403 names the token permission the call
 needs (`NEEDS`), so a missing right reads as one line. Nothing here prints or logs a token.
 
@@ -288,22 +295,208 @@ def cli(args, run=subprocess.run, timeout: int = 60, check: bool = False, **kw) 
 
 
 def issue(tok, repo, number, opener=None) -> dict:
-    """{'number', 'title', 'labels' (lower-case names), 'state'}; GitHubError (404) when there is none."""
+    """{'number', 'title', 'labels' (lower-case names), 'state'}, and since 0.21.0 what a ticket tool reads too: 'id'
+    (GitHub's numeric id, a sub-issue link's), 'node_id' (the GraphQL id, a Project add's), 'body', 'state_reason'
+    (completed, not_planned, reopened or None), 'html_url', 'created_at', 'pull_request' (whether it is one) and
+    'label_names' (the names as written); GitHubError (404) when there is none."""
     got = get(tok, f'/repos/{repo}/issues/{int(number)}', opener)
+    labels = [lb for lb in got.get('labels') or [] if isinstance(lb, dict)]
     return {'number': int(number), 'title': str(got.get('title') or '').strip(), 'state': got.get('state'),
-            'labels': [str(lb.get('name', '')).lower() for lb in got.get('labels') or [] if isinstance(lb, dict)]}
+            'labels': [str(lb.get('name', '')).lower() for lb in labels],
+            'label_names': [str(lb.get('name', '')) for lb in labels],
+            'id': got.get('id'), 'node_id': got.get('node_id') or '', 'body': got.get('body') or '',
+            'state_reason': got.get('state_reason'), 'html_url': got.get('html_url') or '',
+            'created_at': got.get('created_at') or '', 'pull_request': got.get('pull_request') is not None}
 
 
 def create_issue(tok, repo, title, body='', labels=(), opener=None) -> dict:
-    """The new issue's {'number', 'html_url'}."""
+    """The new issue's {'number', 'html_url'}, and since 0.21.0 its 'node_id' (for a Project add)."""
     got = request(tok, 'POST', f'/repos/{repo}/issues', {'title': title, 'body': body, 'labels': list(labels)},
                   opener)[1]
-    return {'number': got.get('number'), 'html_url': got.get('html_url', '')}
+    return {'number': got.get('number'), 'html_url': got.get('html_url', ''), 'node_id': got.get('node_id') or ''}
 
 
 def comment(tok, repo, number, body, opener=None) -> str:
     """The comment's URL."""
     return request(tok, 'POST', f'/repos/{repo}/issues/{int(number)}/comments', {'body': body}, opener)[1].get('html_url', '')
+
+
+def edit_comment(tok, repo, comment_id, body, opener=None) -> str:
+    """An issue comment's body replaced (PATCH /issues/comments/<id>); its URL. 0.21.0."""
+    return request(tok, 'PATCH', f'/repos/{repo}/issues/comments/{int(comment_id)}', {'body': body}, opener)[1].get('html_url', '')
+
+
+def edit_issue(tok, repo, number, title=None, body=None, state=None, state_reason=None, opener=None) -> dict:
+    """An issue's title, body, state ('open' or 'closed') and state_reason ('completed', 'not_planned', 'reopened')
+    changed, only the ones given (PATCH); the issue as issue() reads it. 0.21.0."""
+    fields = {'title': title, 'body': body, 'state': state, 'state_reason': state_reason}
+    sent = {k: v for k, v in fields.items() if v is not None}
+    request(tok, 'PATCH', f'/repos/{repo}/issues/{int(number)}', sent, opener)
+    return issue(tok, repo, number, opener)
+
+
+def close_issue(tok, repo, number, reason='completed', comment_body='', opener=None) -> None:
+    """An issue closed with `reason` (completed or not_planned), a comment posted first when `comment_body` is given
+    (gh's `issue close --comment`). 0.21.0."""
+    if comment_body:
+        comment(tok, repo, number, comment_body, opener)
+    request(tok, 'PATCH', f'/repos/{repo}/issues/{int(number)}', {'state': 'closed', 'state_reason': reason}, opener)
+
+
+def reopen_issue(tok, repo, number, opener=None) -> None:
+    """An issue reopened. 0.21.0."""
+    request(tok, 'PATCH', f'/repos/{repo}/issues/{int(number)}', {'state': 'open'}, opener)
+
+
+def add_labels(tok, repo, number, labels, opener=None) -> list:
+    """`labels` added to an issue (POST .../labels); the issue's label names after. A label the repository lacks is
+    GitHub's own call (gh's `--add-label` refused one before asking), so a caller that wants its color and description
+    runs create_label first, or on a refusal. 0.21.0."""
+    got = request(tok, 'POST', f'/repos/{repo}/issues/{int(number)}/labels', {'labels': [str(lb) for lb in labels]}, opener)[1]
+    return [str(lb.get('name', '')) for lb in (got if isinstance(got, list) else []) if isinstance(lb, dict)]
+
+
+def remove_label(tok, repo, number, label, opener=None) -> bool:
+    """One label taken off an issue; True, or False when the issue did not carry it (GitHub's 404), which is the state
+    the caller wanted, so never an error. 0.21.0."""
+    try:
+        request(tok, 'DELETE', f'/repos/{repo}/issues/{int(number)}/labels/{urllib.parse.quote(str(label), safe="")}', None, opener)
+    except GitHubError as e:
+        if e.status == 404:
+            return False
+        raise
+    return True
+
+
+def create_label(tok, repo, name, color='ededed', description='', opener=None) -> str:
+    """A repository label made, or an existing one of that name given this color and description (gh's `label create
+    --force`); the label's name. `color` is six hex digits with no '#'. 0.21.0."""
+    body = {'name': str(name), 'color': str(color).lstrip('#'), 'description': str(description)[:100]}
+    try:
+        return request(tok, 'POST', f'/repos/{repo}/labels', body, opener)[1].get('name', str(name))
+    except GitHubError as e:
+        if e.status != 422:
+            raise
+    got = request(tok, 'PATCH', f'/repos/{repo}/labels/{urllib.parse.quote(str(name), safe="")}',
+                  {'color': body['color'], 'description': body['description']}, opener)[1]
+    return got.get('name', str(name))
+
+
+def add_assignees(tok, repo, number, logins, opener=None) -> list:
+    """`logins` assigned to an issue; the issue's assignee logins after. 0.21.0."""
+    got = request(tok, 'POST', f'/repos/{repo}/issues/{int(number)}/assignees', {'assignees': [str(x) for x in logins]}, opener)[1]
+    return [str(a.get('login', '')) for a in got.get('assignees') or [] if isinstance(a, dict)]
+
+
+def remove_assignees(tok, repo, number, logins, opener=None) -> list:
+    """`logins` unassigned from an issue; the issue's assignee logins after. 0.21.0."""
+    got = request(tok, 'DELETE', f'/repos/{repo}/issues/{int(number)}/assignees', {'assignees': [str(x) for x in logins]}, opener)[1]
+    return [str(a.get('login', '')) for a in got.get('assignees') or [] if isinstance(a, dict)]
+
+
+def add_sub_issue(tok, repo, parent, child_id, opener=None) -> None:
+    """An issue (by its numeric `id`, issue()['id']) made a sub-issue of #parent. 0.21.0."""
+    request(tok, 'POST', f'/repos/{repo}/issues/{int(parent)}/sub_issues', {'sub_issue_id': int(child_id)}, opener)
+
+
+# The issue list's GraphQL shape (0.21.0), the one `gh issue list --json` gave: state OPEN or CLOSED, stateReason
+# COMPLETED, NOT_PLANNED or REOPENED, labels [{name}], createdAt, and comments [{databaseId, author {login}, body,
+# createdAt}] when asked. One GraphQL call a page (100 issues) whatever the comments, where REST would be a call an issue.
+_ISSUE_FIELDS = 'number title body state stateReason createdAt url labels(first: 30) { nodes { name } }'
+_COMMENT_FIELDS = 'comments(last: %d) { nodes { databaseId body createdAt author { login } } }'
+_ISSUES_QUERY = ('query($owner: String!, $name: String!, $states: [IssueState!], $labels: [String!], $first: Int!, $after: String) { '
+                 'repository(owner: $owner, name: $name) { issues(first: $first, after: $after, states: $states, labels: $labels, '
+                 'orderBy: {field: CREATED_AT, direction: DESC}) { pageInfo { hasNextPage endCursor } nodes { %s } } } }')
+_SEARCH_QUERY = ('query($q: String!, $first: Int!, $after: String) { search(query: $q, type: ISSUE, first: $first, after: $after) { '
+                 'pageInfo { hasNextPage endCursor } nodes { ... on Issue { %s } } } }')
+
+
+def _issue_node(node: dict) -> dict:
+    return {'number': node.get('number'), 'title': node.get('title') or '', 'body': node.get('body') or '',
+            'state': node.get('state') or '', 'stateReason': node.get('stateReason') or '', 'createdAt': node.get('createdAt') or '',
+            'url': node.get('url') or '',
+            'labels': [{'name': lb.get('name', '')} for lb in (node.get('labels') or {}).get('nodes') or [] if isinstance(lb, dict)],
+            'comments': [{'databaseId': c.get('databaseId'), 'body': c.get('body') or '', 'createdAt': c.get('createdAt') or '',
+                          'author': {'login': (c.get('author') or {}).get('login') or ''}}
+                         for c in (node.get('comments') or {}).get('nodes') or [] if isinstance(c, dict)]}
+
+
+def issues(tok, repo, state='open', labels=(), search='', limit=100, comments=0, opener=None) -> list:
+    """The repository's issues (never pull requests) over GraphQL, newest first, in gh's `issue list --json` shape
+    (number, title, body, state OPEN/CLOSED, stateReason, createdAt, url, labels [{name}], and comments [{databaseId,
+    body, createdAt, author {login}}], the last `comments` of each when it is over 0): `state` open, closed or all;
+    `labels` every one of which an issue must carry; `search` GitHub's own search words (`in:title` and the rest),
+    which puts the call on the search connection with repo:, is:issue and the state added; up to `limit`, a page of
+    100 a call. 0.21.0."""
+    limit = max(1, int(limit))
+    fields = _ISSUE_FIELDS + ((' ' + _COMMENT_FIELDS % min(100, int(comments))) if comments else '')
+    out, after = [], None
+    while len(out) < limit:
+        first = min(100, limit - len(out))
+        if search:
+            q = f'repo:{repo} is:issue' + ('' if state == 'all' else f' is:{state}') + ''.join(f' label:"{lb}"' for lb in labels) + f' {search}'
+            data = graphql(tok, _SEARCH_QUERY % fields, {'q': q, 'first': first, 'after': after}, opener)
+            page = (data.get('search') or {})
+        else:
+            owner, name = repo.split('/', 1)
+            variables = {'owner': owner, 'name': name, 'first': first, 'after': after,
+                         'states': None if state == 'all' else [state.upper()], 'labels': list(labels) or None}
+            data = graphql(tok, _ISSUES_QUERY % fields, variables, opener)
+            page = ((data.get('repository') or {}).get('issues') or {})
+        out += [_issue_node(n) for n in page.get('nodes') or [] if isinstance(n, dict) and n.get('number') is not None]
+        info = page.get('pageInfo') or {}
+        if not info.get('hasNextPage') or not info.get('endCursor'):
+            break
+        after = info['endCursor']
+    return out[:limit]
+
+
+# Projects v2 over GraphQL (0.21.0): the mutations `gh project item-add`, `item-edit` and a draft add ran, by the
+# Project's node id and a field's id, which a project keeps in its own config; the field and option lookups stay the
+# caller's, since their names are the project's.
+_ITEM_ADD = 'mutation($p: ID!, $c: ID!) { addProjectV2ItemById(input: {projectId: $p, contentId: $c}) { item { id } } }'
+_DRAFT_ADD = ('mutation($p: ID!, $t: String!, $b: String!) { addProjectV2DraftIssue(input: {projectId: $p, title: $t, body: $b}) '
+              '{ projectItem { id } } }')
+_FIELD_SET = ('mutation($p: ID!, $i: ID!, $f: ID!, $v: ProjectV2FieldValue!) { updateProjectV2ItemFieldValue(input: '
+              '{projectId: $p, itemId: $i, fieldId: $f, value: $v}) { projectV2Item { id } } }')
+_FIELD_CLEAR = ('mutation($p: ID!, $i: ID!, $f: ID!) { clearProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $f}) '
+                '{ projectV2Item { id } } }')
+_ITEM_TOP = ('mutation($p: ID!, $i: ID!) { updateProjectV2ItemPosition(input: {projectId: $p, itemId: $i}) '
+             '{ items(first: 1) { nodes { id } } } }')
+
+
+def project_add_item(tok, project_id, content_id, opener=None) -> str:
+    """An issue or pull request (its node id) added to a Project; the item's id, the one already there for a content
+    on it (GitHub's add is idempotent). 0.21.0."""
+    data = graphql(tok, _ITEM_ADD, {'p': project_id, 'c': content_id}, opener)
+    return (((data.get('addProjectV2ItemById') or {}).get('item') or {}).get('id')) or ''
+
+
+def project_add_draft(tok, project_id, title, body='', opener=None) -> str:
+    """A draft issue added to a Project; its item id. 0.21.0."""
+    data = graphql(tok, _DRAFT_ADD, {'p': project_id, 't': title, 'b': body}, opener)
+    return (((data.get('addProjectV2DraftIssue') or {}).get('projectItem') or {}).get('id')) or ''
+
+
+def project_set_field(tok, project_id, item_id, field_id, option_id=None, text=None, opener=None) -> bool:
+    """A Project item's field set: a single-select by its option's id, or a text field by `text`; True once GitHub
+    answered the item. 0.21.0."""
+    value = {'singleSelectOptionId': option_id} if option_id is not None else {'text': '' if text is None else str(text)}
+    data = graphql(tok, _FIELD_SET, {'p': project_id, 'i': item_id, 'f': field_id, 'v': value}, opener)
+    return bool(((data.get('updateProjectV2ItemFieldValue') or {}).get('projectV2Item') or {}).get('id'))
+
+
+def project_clear_field(tok, project_id, item_id, field_id, opener=None) -> bool:
+    """A Project item's field emptied (gh's `item-edit --clear`); True once GitHub answered the item. 0.21.0."""
+    data = graphql(tok, _FIELD_CLEAR, {'p': project_id, 'i': item_id, 'f': field_id}, opener)
+    return bool(((data.get('clearProjectV2ItemFieldValue') or {}).get('projectV2Item') or {}).get('id'))
+
+
+def project_item_to_top(tok, project_id, item_id, opener=None) -> bool:
+    """A Project item put at the top of its column (updateProjectV2ItemPosition with no afterId); True once GitHub
+    answered. 0.21.0."""
+    data = graphql(tok, _ITEM_TOP, {'p': project_id, 'i': item_id}, opener)
+    return 'updateProjectV2ItemPosition' in data
 
 
 def compare(tok, repo, base, head, opener=None) -> list:
