@@ -92,7 +92,10 @@ def gate(lines, extra=None):
 def main():
     check('a stamped line before the call passes', gate([prompt(), text('10/17/26 12:45 AM PT · ticket: #671 Checking the deploy now:'), tool_use()])[0], 0)
     code, err = gate([prompt(), text('Checking the deploy now:'), tool_use()])
-    check('an unstamped line is refused (exit 2) with the clock to copy', (code, 'Stamp first' in err, ' PT · ticket: #N"' in err), (2, True, True))
+    # 1.13.1: the refusal is ASCII, the separator named as "the middle dot (U+00B7)": a session reading the hook's bytes under
+    # a non-UTF-8 code page (GBK read C2 B7 as 路) copied the mangled dot into every stamp (Gene, 11/2/26 12:41 PM PT).
+    check('an unstamped line is refused (exit 2) with the clock to copy, in ASCII', (code, 'Stamp first' in err, ' PT", the middle dot (U+00B7) and "ticket: #N"' in err,
+                                                                                    all(ord(c) < 128 for c in err)), (2, True, True, True))
     check('  bold and leading blank lines still count as a stamp', gate([prompt(), text('\n\n**10/17/26 9:05 PM PT · ticket: #671** next:'), tool_use()])[0], 0)
     check('  a lowercase am/pm counts', gate([prompt(), text('10/17/26 9:05 pm PT · ticket: none: next'), tool_use()])[0], 0)
     check('  no space before AM counts', gate([prompt(), text('10/17/26 7:05AM PT | ticket: #12 go'), tool_use()])[0], 0)
@@ -101,7 +104,7 @@ def main():
                                                               '10/17/26 next', '5:21 AM PT · ticket: #1 next')],
           [0, 0, 2, 2])
     dated_err = gate([prompt(), text('no stamp here'), tool_use()])[1]
-    check('  the refusal names the dated form', bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT · ticket: #N"', dated_err)), True)
+    check('  the refusal names the dated form', bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT", the middle dot', dated_err)), True)
 
     # 1.13.0 (SMADPickleBot #671; Gene, 10/31/26 11:45 AM PT: "also write the ticket # you're working on - if none, then
     # say ticket: none"): the stamp's line names the ticket.
@@ -116,8 +119,9 @@ def main():
           [0, 0, 0, 0, 0])
     code, err = gate([prompt(), text('10/31/26 11:45 AM PT: next'), tool_use()])
     check('  a stamp with no ticket is refused, naming the form with the clock',
-          (code, 'Name the ticket' in err, bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT · ticket: #N"', err))),
-          (2, True, True))
+          (code, 'Name the ticket' in err, bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT", the middle dot \(U\+00B7\) and "ticket: #N"', err)),
+           all(ord(c) < 128 for c in err)),
+          (2, True, True, True))
     check('  the ticket is on the stamp\'s own line, and is a number or none',
           [gate([prompt(), text(t), tool_use()])[0] for t in ('10/31/26 11:45 AM PT\nticket: #667', '10/31/26 11:45 AM PT · ticket: TBD',
                                                               '10/31/26 11:45 AM PT · the ticket is #667')],

@@ -131,12 +131,12 @@ fi
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 clock="${clock/ 0/ }"
 if [ "$kind" = ahead ]; then
-  printf 'Stamp ahead of the clock: your last message says "%s" but it is %s PT now. A stamp is copied from the latest "Pacific clock:" hook line, never advanced by felt time. Write one line that starts "%s PT · ticket: #N", then make the call again. (gene-hooks stamp-gate.sh; Gene 10/20/26: "Your time stamp is drifting badly from my iOS time".)\n' "$stamped" "${clock:-<the PT clock>}" "${clock:-<the PT clock>}" >&2
+  printf 'Stamp ahead of the clock: your last message says "%s" but it is %s PT now. A stamp is copied from the latest "Pacific clock:" hook line, never advanced by felt time. Write one line that starts "%s PT", the middle dot (U+00B7) and "ticket: #N", then make the call again. (gene-hooks stamp-gate.sh; Gene 10/20/26: "Your time stamp is drifting badly from my iOS time".)\n' "$stamped" "${clock:-<the PT clock>}" "${clock:-<the PT clock>}" >&2
   exit 2
 fi
 if [ "$kind" = noticket ]; then
-  printf 'Name the ticket: your last message'"'"'s stamp names no ticket. Write one line that starts "%s PT · ticket: #N" (the ticket this turn works on, several as "#N, #M", or "ticket: none" when no ticket owns it), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/31/26: "also write the ticket # you'"'"'re working on - if none, then say ticket: none".)\n' "${clock:-<the PT clock>}" >&2
+  printf 'Name the ticket: your last message'"'"'s stamp names no ticket. Write one line that starts "%s PT", the middle dot (U+00B7) and "ticket: #N" (the ticket this turn works on, several as "#N, #M", or "ticket: none" when no ticket owns it), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/31/26: "also write the ticket # you'"'"'re working on - if none, then say ticket: none".)\n' "${clock:-<the PT clock>}" >&2
   exit 2
 fi
-printf 'Stamp first: your last message opened without the Pacific date and time. Start every message with the stamp: write one line that starts "%s PT · ticket: #N" (copy the clock from the latest hook line, never estimate; "ticket: none" when no ticket owns the turn), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp; 10/17/26: the date too, mm/dd/yy; 10/31/26: the ticket too.)\n' "${clock:-<the PT clock>}" >&2
+printf 'Stamp first: your last message opened without the Pacific date and time. Start every message with the stamp: write one line that starts "%s PT", the middle dot (U+00B7) and "ticket: #N" (copy the clock from the latest hook line, never estimate; "ticket: none" when no ticket owns the turn), then make the call again. (gene-hooks stamp-gate.sh; Gene 10/14/26: every message carries the PT stamp; 10/17/26: the date too, mm/dd/yy; 10/31/26: the ticket too.)\n' "${clock:-<the PT clock>}" >&2
 exit 2
