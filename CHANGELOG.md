@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.23.0 - 2026-11-02 PT
+
+Additive; no host call site changes. `github.project_set_fields(tok, project_id, item_id, {field_id: value, ...})`:
+several fields of one Project item in ONE GraphQL request, an aliased `updateProjectV2ItemFieldValue` (a single-select
+option's id, or a ProjectV2FieldValue dict) or `clearProjectV2ItemFieldValue` (None) per field in one mutation
+document (SMADPickleBot #817; Gene, 11/2/26: a feedback card placed in six calls, "the boards 6 GraphQL writes which
+seems highly inefficient ... should belong in Chuang-kit Github kit and all should use so we don't reinvent a super
+inefficient wheel"). The one-field verbs stay. A host that keeps its own copy of the Project mutations (SMAD's
+`ticket_moves` did, beside 0.21.0's) replaces it with these.
+
 ## 0.22.0 - 2026-11-01 PT
 
 Additive; no host call site changes. `slack`, Slack's one client for every project (SMAD PickleBot #683: "every

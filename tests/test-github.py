@@ -165,6 +165,33 @@ check('the Projects v2 mutations: an item added by content id, a draft by title,
       (('PVTI_1', 'PVTI_2', True, True, True, True), [{'singleSelectOptionId': 'abc'}, {'text': 'abcdef12'}, None],
        {'p': 'PVT_1', 'c': 'I_7'}, '— Dock —'))
 
+queries, calls = [], []
+
+
+def gql_q(answers):
+    """A GraphQL opener that also keeps each request's query text."""
+    inner = gql(answers, calls)
+
+    def opener(req, timeout=None):
+        queries.append(json.loads(req.data)['query'])
+        return inner(req, timeout)
+    return opener
+
+
+batched = GH.project_set_fields('tok', 'PVT_1', 'PVTI_1', {'F_status': 'abc', 'F_kind': 'def', 'F_light': None, 'F_release': {'text': 'abcdef12'}},
+                                gql_q([{'data': {'s0': {'projectV2Item': {'id': 'PVTI_1'}}, 's1': {'projectV2Item': {'id': 'PVTI_1'}},
+                                                 's2': {'projectV2Item': {'id': 'PVTI_1'}}, 's3': {'projectV2Item': {'id': 'PVTI_1'}}}}]))
+short = GH.project_set_fields('tok', 'PVT_1', 'PVTI_1', {'F_status': 'abc'}, gql_q([{'data': {'s0': {'projectV2Item': {}}}}]))
+none = GH.project_set_fields('tok', 'PVT_1', 'PVTI_1', {}, gql_q([]))
+check('0.23.0 project_set_fields: four fields in ONE request, an aliased update per set field (an option id, a text value) and a clear '
+      'for None, the variables beside them; an alias answered without the item is False; no fields is True with no call',
+      (batched, short, none, len(queries), queries[0].count('updateProjectV2ItemFieldValue'), queries[0].count('clearProjectV2ItemFieldValue'),
+       queries[0].startswith('mutation($p: ID!, $i: ID!, $f0: ID!, $v0: ProjectV2FieldValue!, $f1: ID!, $v1: ProjectV2FieldValue!, $f2: ID!, $f3: ID!, $v3: ProjectV2FieldValue!)'),
+       calls[0]),
+      (True, False, True, 2, 3, 1, True,
+       {'p': 'PVT_1', 'i': 'PVTI_1', 'f0': 'F_status', 'v0': {'singleSelectOptionId': 'abc'}, 'f1': 'F_kind', 'v1': {'singleSelectOptionId': 'def'},
+        'f2': 'F_light', 'f3': 'F_release', 'v3': {'text': 'abcdef12'}}))
+
 calls = []
 GH.dispatch('tok', REPO, 'deploy.yml', 'main', {'component': 'api', 'n': 3}, fake([('POST', '/dispatches', 204, None)], calls))
 check('dispatch: the ref and the inputs as strings', (calls[0][1].endswith('/actions/workflows/deploy.yml/dispatches'), calls[0][2]),

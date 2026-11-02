@@ -486,6 +486,34 @@ def project_set_field(tok, project_id, item_id, field_id, option_id=None, text=N
     return bool(((data.get('updateProjectV2ItemFieldValue') or {}).get('projectV2Item') or {}).get('id'))
 
 
+def project_set_fields(tok, project_id, item_id, fields, opener=None) -> bool:
+    """Several fields of ONE Project item in ONE GraphQL request (0.23.0; SMADPickleBot #817, Gene 11/2/26: a card
+    placed in six calls, "the boards 6 GraphQL writes which seems highly inefficient ... should belong in Chuang-kit
+    Github kit and all should use"): `fields` is {field_id: value}, each value a single-select option's id (a str), a
+    ProjectV2FieldValue dict as GitHub takes it ({'text': …}, {'number': …}, {'date': …}, {'iterationId': …}), or None
+    to clear the field; an aliased updateProjectV2ItemFieldValue or clearProjectV2ItemFieldValue per field in one
+    mutation document, which GitHub applies in order (and for which it still sends one project-item webhook each).
+    True once GitHub answered every alias with the item; no fields is True with no call. The one-field verbs above
+    stay for a caller with one."""
+    fields = dict(fields or {})
+    if not fields:
+        return True
+    decl, body, variables = ['$p: ID!', '$i: ID!'], [], {'p': project_id, 'i': item_id}
+    for k, (field_id, value) in enumerate(fields.items()):
+        variables[f'f{k}'] = field_id
+        decl.append(f'$f{k}: ID!')
+        if value is None:
+            body.append(f's{k}: clearProjectV2ItemFieldValue(input: {{projectId: $p, itemId: $i, fieldId: $f{k}}}) '
+                        f'{{ projectV2Item {{ id }} }}')
+            continue
+        variables[f'v{k}'] = value if isinstance(value, dict) else {'singleSelectOptionId': str(value)}
+        decl.append(f'$v{k}: ProjectV2FieldValue!')
+        body.append(f's{k}: updateProjectV2ItemFieldValue(input: {{projectId: $p, itemId: $i, fieldId: $f{k}, value: $v{k}}}) '
+                    f'{{ projectV2Item {{ id }} }}')
+    data = graphql(tok, 'mutation(' + ', '.join(decl) + ') { ' + ' '.join(body) + ' }', variables, opener)
+    return all(((data.get(f's{k}') or {}).get('projectV2Item') or {}).get('id') for k in range(len(fields)))
+
+
 def project_clear_field(tok, project_id, item_id, field_id, opener=None) -> bool:
     """A Project item's field emptied (gh's `item-edit --clear`); True once GitHub answered the item. 0.21.0."""
     data = graphql(tok, _FIELD_CLEAR, {'p': project_id, 'i': item_id, 'f': field_id}, opener)
