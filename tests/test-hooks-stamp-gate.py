@@ -57,7 +57,14 @@ class Session:
     def __init__(self):
         self.dir = tempfile.mkdtemp()
         self.path = os.path.join(self.dir, 't.jsonl')
+        self.activity_path = os.path.join(self.dir, 'ticket-activity.log')
         self.sid = f's{next(_ids)}'
+
+    def activity(self):
+        """The activity lines this session's gate appended, without their epoch: [(session, tickets)]."""
+        if not os.path.exists(self.activity_path):
+            return []
+        return [tuple(l.split()[1:]) for l in open(self.activity_path, encoding='utf-8').read().splitlines()]
 
     def gate(self, lines, extra=None, wait='', lands=None):
         """Run the gate over `lines`; `lands` (seconds, line) appends a line while it waits, as Claude Code does."""
@@ -68,7 +75,8 @@ class Session:
         # UTF-8 both ways, as Claude Code reads a hook (the refusals name the "·" form; Windows' default is cp1252).
         p = subprocess.Popen([BASH, GATE], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace',
-                             env=dict(os.environ, TMPDIR=self.dir, TEMP=self.dir, STAMP_GATE_WAIT=wait))
+                             env=dict(os.environ, TMPDIR=self.dir, TEMP=self.dir, STAMP_GATE_WAIT=wait,
+                                      TICKET_ACTIVITY_LOG=self.activity_path))
         if lands:
             p.stdin.write(json.dumps(event))
             p.stdin.close()
@@ -117,6 +125,18 @@ def main():
               text('10/31/26 11:45 AM PT · ticket: #669, #244: both'), raw('10/31/26 11:45 AM PT · ticket: none: a question'),
               text('**10/31/26 11:45 AM PT — Ticket: #667**'))],
           [0, 0, 0, 0, 0])
+    # 1.14.0 (SMADPickleBot #858; Gene, 11/3/26 5:53 AM PT): each passing call appends "<epoch> <session> <tickets>"
+    # to the activity log, the tickets the stamp names and none of the ones later on its line; a refusal appends nothing.
+    s = Session()
+    for t in ('11/03/26 5:55 AM PT · ticket: #858: and #850 later on the line', '11/03/26 5:55 AM PT · ticket: #857, #858: both',
+              '11/03/26 5:55 AM PT · ticket: none: a question', 'no stamp'):
+        s.gate([prompt(), text(t), tool_use()])
+    before = time.time()
+    s.gate([prompt(), text('11/03/26 5:55 AM PT · ticket: #12 go'), tool_use()])
+    epoch = int(open(s.activity_path, encoding='utf-8').read().splitlines()[-1].split()[0])
+    check('#858: the activity line per passing call, the stamp\'s tickets alone, a refusal none, the epoch now',
+          (s.activity(), before - 2 <= epoch <= time.time() + 2),
+          ([(s.sid, '858'), (s.sid, '857,858'), (s.sid, 'none'), (s.sid, '12')], True))
     code, err = gate([prompt(), text('10/31/26 11:45 AM PT: next'), tool_use()])
     check('  a stamp with no ticket is refused, naming the form with the clock',
           (code, 'Name the ticket' in err, bool(re.search(r'starts "\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} [AP]M PT", the middle dot \(U\+00B7\) and "ticket: #N"', err)),

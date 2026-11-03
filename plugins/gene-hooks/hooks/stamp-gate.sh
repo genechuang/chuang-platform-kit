@@ -72,8 +72,26 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
     # write the ticket # you are working on - if none, then say ticket: none"): "PT · ticket: #N" or "ticket: none". Any
     # separator but a letter, a digit or a backslash (the JSON "\n" ends the line); a "·" escape counts as one.
     if (substr(last, sl + 1) !~ /^[ \t]*(PT)?([^A-Za-z0-9#\\]|\\u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])*[Tt][Ii][Cc][Kk][Ee][Tt]:[ \t]*([Nn][Oo][Nn][Ee]|#[0-9])/) { print "noticket " id; exit }
-    print "ok"
+    # The tickets it names, "858" or "857,858", "none" for ticket: none (1.14.0, SMADPickleBot #858): the activity line.
+    r = substr(last, sl + 1); r = substr(r, index(tolower(r), "ticket:") + 7); tk = ""
+    if (match(r, /^[ \t]*#[0-9]+([ \t]*,[ \t]*#[0-9]+)*/)) {
+      r = substr(r, 1, RLENGTH)
+      while (match(r, /#[0-9]+/)) { tk = tk (tk == "" ? "" : ",") substr(r, RSTART + 1, RLENGTH - 1); r = substr(r, RSTART + RLENGTH) }
+    }
+    print "ok " (tk == "" ? "none" : tk)
   }'; }
+# The activity line (1.14.0, SMADPickleBot #858; Gene, 11/3/26 5:53 AM PT: a ticket's actual is the time its session
+# worked on it, measured "async via event bus so all this loe calculation doesn't actually impact prompt answer or
+# commit time"): one appended line per tool call, "<epoch> <session id> <tickets>", by bash builtins alone, no program
+# and no network; the Stop hook appends "<epoch> <session id> stop". The project's own tools sum it, off the prompt.
+activity() {
+  local tk="${1#ok}"; tk="${tk# }"
+  [ -n "$tk" ] || return 0
+  local s now; s="$(field session_id)" || s=default
+  printf -v now '%(%s)T' -1 2>/dev/null || return 0
+  printf '%s %s %s\n' "$now" "${s//[^A-Za-z0-9-]/}" "$tk" >> "${TICKET_ACTIVITY_LOG:-$HOME/.claude/ticket-activity.log}" 2>/dev/null
+  return 0
+}
 # The task-list gate rides this hook too (1.11.0, Gene 10/30/26 12:34 AM PT: "update your steps progress in real time"):
 # one awk counts the tool calls since the newest plan call (a tool named *update_plan or TodoWrite) or list close
 # (*wrap_up); only at PLAN_GATE_LIMIT or more does plan-gate.py start, to replay the list and refuse when a step is
@@ -95,7 +113,7 @@ plan_gate() {
   return 0
 }
 verdict=$(judge)
-case "$verdict" in no*|ahead*) ;; *) plan_gate; exit 0 ;; esac
+case "$verdict" in no*|ahead*) ;; *) activity "$verdict"; plan_gate; exit 0 ;; esac
 
 # A miss is read again before it is refused (1.5.0, Gene 10/20/26 1:55 PM PT; Snow White's transcript that afternoon):
 # Claude Code stamps a text entry when it is made but appends it to the file later, so the gate often judged the line
@@ -110,6 +128,7 @@ for w in ${STAMP_GATE_WAIT-0.25 0.25 0.5}; do
     no*|ahead*) verdict="$again" ;;
     *) sid="$(field session_id)" || sid=default
        printf 'rescued %s\n' "${verdict#* }" >> "${TMPDIR:-${TEMP:-/tmp}}/stamp-gate-${sid//[^A-Za-z0-9-]/}" 2>/dev/null
+       activity "$again"
        exit 0 ;;
   esac
 done

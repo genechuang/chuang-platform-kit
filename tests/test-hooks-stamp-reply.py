@@ -110,6 +110,19 @@ with open(tp, 'w', encoding='utf-8') as f:
     f.write('\n'.join([PROMPT, line('assistant', [{'type': 'text', 'text': 'unstamped'}])]) + '\n')
 r = subprocess.run([sys.executable, PATH], input=json.dumps({'transcript_path': tp}), capture_output=True, text=True)
 check('  end to end: a real transcript file blocks', json.loads(r.stdout or '{}').get('decision'), 'block')
+# 1.14.0 (SMADPickleBot #858): the launcher appends "<epoch> <session> stop" to the activity log, then hands Python the
+# same event, so the turn's verdict is unchanged; a helper's Stop (agent_id) appends nothing.
+import shutil  # noqa: E402
+log = os.path.join(d, 'activity.log')
+env = dict(os.environ, TICKET_ACTIVITY_LOG=log)
+sh = os.path.join(os.path.dirname(PATH), 'stamp-reply.sh')
+r = subprocess.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-1'}),
+                   capture_output=True, text=True, env=env)
+subprocess.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-2', 'agent_id': 'x'}),
+               capture_output=True, text=True, env=env)
+lines = open(log, encoding='utf-8').read().split('\n') if os.path.exists(log) else []
+check('#858: the launcher logs the turn\'s stop and still blocks the unstamped reply; a helper\'s stop is not logged',
+      ([l.split()[1:] for l in lines if l], json.loads(r.stdout or '{}').get('decision')), ([['abc-1', 'stop']], 'block'))
 print(f'\n{len(failures)} failure(s)' + (':' if failures else ''))
 for f in failures:
     print(f'  - {f}')
