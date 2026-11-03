@@ -98,8 +98,21 @@ cap = Cap()
 G.logger.addHandler(cap)
 G.logger.setLevel(logging.DEBUG)
 _keep = (G.requests.post, G.requests.get, G.time.sleep)
+_kept_session = list(G._SESSION)
 slept = []
 G.requests.post, G.requests.get = fake_post, fake_get
+
+
+class _Forward:
+    """greenapi calls through its session since SMADPickleBot #664; this one hands each call to the stubs above."""
+    def post(self, *a, **k):
+        return G.requests.post(*a, **k)
+
+    def get(self, *a, **k):
+        return G.requests.get(*a, **k)
+
+
+G._SESSION[:] = [_Forward()]
 G.time.sleep = slept.append
 try:
     print("\n-- the send helpers: endpoint, payload, timeout")
@@ -201,6 +214,7 @@ try:
     check("no line logged by this module carries the API token", FAKE_TOKEN in cap.text(), False)
 finally:
     G.requests.post, G.requests.get, G.time.sleep = _keep
+    G._SESSION[:] = _kept_session
     G.logger.removeHandler(cap)
 
 print("\n-- redact.secret_values(): what is masked")

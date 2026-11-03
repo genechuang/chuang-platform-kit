@@ -63,7 +63,18 @@ class _Levels(logging.Handler):
         self.lines.append(record.getMessage())
 
 
-_post, _sleep = requests.post, ga.time.sleep
+class _Forward:
+    """The module's session stood in by one that hands each call to requests.post / get, which the cases script
+    (SMADPickleBot #664: greenapi calls through _session())."""
+    def post(self, *a, **k):
+        return requests.post(*a, **k)
+
+    def get(self, *a, **k):
+        return requests.get(*a, **k)
+
+
+_post, _sleep, _kept_session = requests.post, ga.time.sleep, list(ga._SESSION)
+ga._SESSION[:] = [_Forward()]
 ga.time.sleep = lambda s: sleeps.append(s)
 h = _Levels()
 ga.logger.addHandler(h)
@@ -93,7 +104,16 @@ try:
           any('waInstance' in line or '/t' in line.split(' ')[0] for line in h.lines), False)
 finally:
     requests.post, ga.time.sleep = _post, _sleep
+    ga._SESSION[:] = _kept_session
     ga.logger.removeHandler(h)
+
+# SMADPickleBot #664: one kept-alive session for every call, its adapter's own retries off, so the loop above is the
+# only retry budget.
+ga._SESSION.clear()
+s1, s2 = ga._session(), ga._session()
+check("one session, reused; the adapter never retries on its own",
+      (s1 is s2, s1.get_adapter('https://7105.api.greenapi.com').max_retries.total), (True, 0))
+ga._SESSION.clear()
 
 # (Which host callers ask for retries is each host's own check: SMADPickleBot's
 # tests/test-greenapi-connect-retry.py pins its member sync at connect_retries=2.)

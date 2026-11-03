@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.24.0 - 2026-11-02 PT
+
+Additive; no host call site changes. `greenapi` calls through one module-level kept-alive `requests.Session`
+(`_session()`), its adapter's own retries off (`max_retries=0`), so a warm process reuses its TLS connection to the
+instance host (SMADPickleBot #664: 362 ms off a warm send) and `call_api`'s `connect_retries` loop stays the only
+retry budget. A host suite that stubbed `requests.post` / `get` for greenapi now stubs the session (`_SESSION`), or
+hands it one that forwards to its stubs.
+
 ## 0.23.0 - 2026-11-02 PT
 
 Additive; no host call site changes. `github.project_set_fields(tok, project_id, item_id, {field_id: value, ...})`:
