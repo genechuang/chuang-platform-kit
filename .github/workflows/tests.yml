@@ -5,7 +5,10 @@ name: Tests
 # from a green main: the host projects pin the kit by tag.
 
 on:
+  # Branches only (SMADPickleBot #665): a bare `push:` also fired for the release tag pushed on the same commit, two
+  # runs per release. A tag is cut from a green main, so it needs no run of its own.
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
