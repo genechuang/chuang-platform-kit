@@ -117,7 +117,8 @@ def changes(mb, cursor: str, label: str = '', resync_query: str = '') -> tuple:
     """([gmail.message() dicts], the new cursor) for the messages added since `cursor` (in `label` when given). A
     cursor Gmail can no longer replay (404) is caught up with `resync_query` (a Gmail search, e.g.
     'label:"Google Play Console" newer_than:8d'), its matches returned once each with the mailbox's current history id
-    as the new cursor; with no `resync_query` the 404 is raised (WatchFailed, status 404)."""
+    as the new cursor; with no `resync_query` the 404 is raised (WatchFailed, status 404). A message history names
+    that Gmail no longer has (404 on its read) is skipped, never a failure of the batch (0.25.1)."""
     ids, newest, token = [], str(cursor or ''), ''
     try:
         while True:
@@ -139,7 +140,20 @@ def changes(mb, cursor: str, label: str = '', resync_query: str = '') -> tuple:
         got = call(mb, 'GET', 'messages', query={'q': resync_query, 'maxResults': 100})
         ids = [m['id'] for m in got.get('messages') or []]
         newest = str(call(mb, 'GET', 'profile').get('historyId') or newest)
-    return [_meta(mb, mid) for mid in dict.fromkeys(ids)], newest
+    out, gone = [], 0
+    for mid in dict.fromkeys(ids):
+        try:
+            out.append(_meta(mb, mid))
+        except WatchFailed as e:
+            # History names a message deleted or moved before this read (0.25.1). One 404 must not fail the whole
+            # batch: the host's cursor would never advance and Pub/Sub would redeliver the same window forever
+            # (ChuangFinance's financewatch, 10/5-10/6/26). Any other failure still raises.
+            if e.status != 404:
+                raise
+            gone += 1
+    if gone:
+        log.warning('gmail_watch: %d message(s) named by history are gone (404), skipped', gone)
+    return out, newest
 
 
 # Labels and filters as code.
