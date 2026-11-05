@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.25.0 - 2026-11-05 PT
+
+Additive; no host call site changes. `gmail_watch` (SMADPickleBot #969): Gmail's push as a webhook, one copy for every
+host (SMAD's Venmo trigger, ChuangFinance's financewatch, SMAD's Play Console Watch each had their own): `watch`,
+`renew_due` / `renew` (the stored cursor kept), `changes` over history.list with a catch-up search when Gmail answers
+404 for a stale cursor, `push` / `is_gmail_push`; and labels and filters as code from a declared JSON file,
+`plan` / `apply`, `python -m chuang_platform_kit.gmail_watch apply FILE --secret PROJECT:SECRET [--dry-run]`. REST with
+the standard library on a `gmail.Mailbox`'s token; filters need gmail.settings.basic on that token.
+
 ## 0.24.0 - 2026-11-02 PT
 
 Additive; no host call site changes. `greenapi` calls through one module-level kept-alive `requests.Session`
