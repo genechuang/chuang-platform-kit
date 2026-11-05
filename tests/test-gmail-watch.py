@@ -90,6 +90,27 @@ def test_changes_reads_every_page_since_the_cursor():
     check('  history asked from the cursor in the label', (box.calls[0][2]['startHistoryId'], box.calls[0][2]['labelId']), ('40', 'Label_21'))
 
 
+def test_a_message_gone_before_the_read_is_skipped_and_the_cursor_still_advances():
+    def routes(m, p, q, b):
+        if p == 'history':
+            return {'history': [{'messagesAdded': [{'message': {'id': 'ghost'}}, {'message': {'id': 'm1'}}]}], 'historyId': '60'}
+        if p == 'messages/ghost':
+            return 404
+        return meta('m1', 'noreply-play-console@google.com', 'kept')
+    msgs, cursor = W.changes(Box(routes), '40', 'Label_21')
+    check('gone (404): skipped, the rest returned, cursor advanced', ([m['id'] for m in msgs], cursor), (['m1'], '60'))
+
+    def down(m, p, q, b):
+        if p == 'history':
+            return {'history': [{'messagesAdded': [{'message': {'id': 'm1'}}]}], 'historyId': '60'}
+        return 503
+    try:
+        W.changes(Box(down), '40', 'Label_21')
+        check('  any other failure raised', 'no raise', 503)
+    except W.WatchFailed as e:
+        check('  any other failure raised', e.status, 503)
+
+
 def test_a_stale_cursor_catches_up_by_search():
     def routes(m, p, q, b):
         if p == 'history':

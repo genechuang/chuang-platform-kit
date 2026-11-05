@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.25.1 - 2026-11-05 PT
+
+Fix; no host call site changes. `gmail_watch.changes` skips a message history names but Gmail answers 404 for (deleted
+or moved before the read) and logs the count, instead of raising for the whole batch: one gone message had left the host
+cursor unmoved and Pub/Sub redelivering the same window forever (ChuangFinance's financewatch, 10/5-10/6/26). Any other
+failure still raises. `__version__` caught up (it still said 0.24.0 in 0.25.0). For ChuangFinance's move onto the
+module (SMADPickleBot #999).
+
 ## 0.25.0 - 2026-11-05 PT
 
 Additive; no host call site changes. `gmail_watch` (SMADPickleBot #969): Gmail's push as a webhook, one copy for every
