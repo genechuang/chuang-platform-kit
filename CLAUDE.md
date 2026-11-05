@@ -16,7 +16,8 @@ a league, a sheet or a specific group**: a module that needs a project fact
 takes it as a parameter or reads a documented environment variable
 (`CHUANG_PLATFORM_TZ` is the only one the kit itself defines, in `clock.py`).
 
-Modules: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
+Every module and public name is in `KIT-REGISTRY.md` (generated; below); the list here is a few of them, never the
+whole kit. Modules include: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
 `request_scope`, `whatsapp_message`, `whatsapp_publisher`, `pubsub` (every
 publish, over REST: no host needs google-cloud-pubsub), `greenapi`,
 `email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk), `push_gate` (git's pre-push gate over a
