@@ -94,12 +94,15 @@ def check(reply: str, lines: list, names: list) -> dict:
         if m and not any(n == 'Bash' and GIT_HISTORY.search(str(i.get('command') or '')) for n, i in uses):
             return {'decision': 'block', 'reason': (
                 f'evidence-gate: your reply says who built or owns something ("{m.group(0)}") but this turn ran no git '
-                'log, blame or show. Run git log on the file and name the session its Session trailers show, or drop '
-                'the attribution (Gene, 10/29/26: a session called its own code another\'s).')}
+                'log, blame or show (Gene, 10/29/26: a session called its own code another\'s). Your reply has '
+                'already reached Gene: do NOT send it again. Run git log on the file, then send ONE short line: the '
+                'commit and the session its Session trailer shows, or a correction if it was not that session '
+                '(Gene, 11/5/26: a full rewrite arrives as a second copy).')}
     m = PRODUCTION.search(reply or '')
     if m and not any(n in READ_TOOLS or n.startswith('mcp__') for n, _ in uses):
         return {'decision': 'block', 'reason': (
-            f'evidence-gate: your reply states how production stands ("{m.group(0)}") but this turn read nothing. '
-            'Read the log, run or record that shows it and cite it, or say it is unverified (Gene, 10/29/26: "stop '
-            'bullshitting me").')}
+            f'evidence-gate: your reply states how production stands ("{m.group(0)}") but this turn read nothing '
+            '(Gene, 10/29/26: "stop bullshitting me"). Your reply has already reached Gene: do NOT send it again. '
+            'Read the log, run or record that shows it, then send ONE short line citing it, or saying the claim is '
+            'unverified (Gene, 11/5/26: a full rewrite arrives as a second copy).')}
     return None

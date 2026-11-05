@@ -62,6 +62,10 @@ check("each ownership form is caught; a session's note, review or receipt is not
        [bool(block(t, [asked()])) for t in ("Red Fox's landing note", "Blue Owl's review came back",
                                            'I sent Red Fox the note', "Blue Owl's receipt")]),
       ([True] * 5, [False] * 4))
+reasons = [(G.check(owner, [asked(), said(owner)], NAMES) or {}).get('reason', ''),
+           (G.check('#553 is live on web and iPhone.', [asked(), said('#553 is live on web and iPhone.')], NAMES) or {}).get('reason', '')]
+check('both holds ask for one short line, never the reply again (Gene, 11/5/26: a report arrived twice)',
+      [('do NOT send it again' in r, 'ONE short line' in r) for r in reasons], [(True, True), (True, True)])
 check('no session names (outside a repo): the ownership check is off', block(owner, [asked(), said(owner)], names=[]), None)
 live = '#553 is live on web and iPhone.'
 check('a production claim with nothing read this turn holds it', block(live, [asked(), said(live)]), 'block')
