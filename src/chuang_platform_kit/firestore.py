@@ -67,7 +67,7 @@ class Conflict(Exception):
 
 # ------------------------------------------------------------------ values
 def _utc_text(when: datetime) -> str:
-    when = when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when.astimezone(timezone.utc)
+    when = when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when.astimezone(timezone.utc)  # utc-ok: Firestore's timestampValue is a UTC instant
     return when.isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
 
@@ -139,9 +139,9 @@ def instant(value):
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, datetime):
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value  # utc-ok: a naive instant from a machine source is UTC
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value, tz=timezone.utc)
+        return datetime.fromtimestamp(value, tz=timezone.utc)  # utc-ok: epoch seconds name a UTC instant
     if isinstance(value, str):
         text = value.strip().replace('Z', '+00:00')
         if '.' in text:   # Firestore writes up to nine digits; fromisoformat takes six
@@ -152,7 +152,7 @@ def instant(value):
             when = datetime.fromisoformat(text)
         except ValueError:
             return None
-        return when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when
+        return when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when  # utc-ok: a naive instant from a machine source is UTC
     return None
 
 

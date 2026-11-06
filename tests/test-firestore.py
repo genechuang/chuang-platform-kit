@@ -94,7 +94,7 @@ check("encode: an int is integerValue text", enc['i'], {'integerValue': '7'})
 check("encode: a datetime is a UTC timestampValue with a Z", enc['when'], {'timestampValue': '2026-11-06T08:00:00.000000Z'})
 check("encode: a naive datetime is read as UTC", F.encode(datetime(2026, 11, 6, 8, 0)), enc['when'])
 check("encode: a zoned datetime is put in UTC",
-      F.encode(datetime(2026, 11, 6, 0, 0, tzinfo=timezone(timedelta(hours=-8)))), enc['when'])
+      F.encode(datetime(2026, 11, 6, 0, 0, tzinfo=timezone(timedelta(hours=-8)))), enc['when'])  # local-ok: a fixed offset is the case under test
 check("encode: None is nullValue", enc['n'], {'nullValue': None})
 check("encode: a map nests", enc['map'], {'mapValue': {'fields': {'k': {'booleanValue': False}}}})
 back = F.from_fields({'name': 'x', 'fields': enc})

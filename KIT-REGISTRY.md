@@ -148,12 +148,53 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `maybe_send_email(player, message, subject=, dry_run=, append_date=)` | Send email to player if they have an email address on file. |
 | `maybe_send_extra_notifications(player, message, subject=, dry_run=, append_date=)` | Send supplemental email notification to player if they have an email on file. |
 
+## `firestore`: Firestore over REST with the standard library: documents, commits, queries, create-only claims and…
+
+| Name | Purpose |
+|---|---|
+| `class Unreachable` | Firestore could not be read or written: no token, a network error, a refusal, a 5xx. The message names the HTTP status and Firestore's status word, or the exception's kind; never a token. |
+| `class Conflict` | A commit's precondition did not hold (the document exists for a create-only write, or it changed since the read an update named): Firestore's ALREADY_EXISTS, FAILED_PRECONDITION or ABORTED. |
+| `encode(value)` | One Python value as a Firestore REST value, decode's inverse: None, bool, int, float, str, bytes, a datetime (a timestampValue in UTC; a naive one is read as UTC), lists or tuples and dicts of them; anything else as its str(). |
+| `decode(value)` | One Firestore REST value as plain Python: integers and doubles as numbers, arrays and maps in kind, null as None, bytes as bytes, a timestamp, a reference or a geo point as Firestore wrote it (text, or a {latitude, longitude} dict). None for anything that is… |
+| `to_fields(data)` | A plain dict as a document body's `fields` (encode() on each value). |
+| `from_fields(doc)` | A document's fields as a plain dict (decode() on each): `doc` is the document ({'fields': ...}) or its `fields` map itself (told apart by the document's own keys, so pass the document when its only field is named `fields`). |
+| `instant(value)` | An aware UTC datetime from a decoded timestamp (RFC 3339 text), a number of epoch seconds or a datetime (naive read as UTC); None for anything else. |
+| `class Client` | Firestore's REST API for one project and database. `token` is a string, a callable answering one, or None for `google_auth.access_token` (kept TOKEN_KEEP_SECONDS); `opener` is urlopen-shaped (default the kit's kept-alive pool); `retry_waits` are the seconds b… |
+| `Client.name(collection, doc_id)` | The document's full resource name, 'projects/p/databases/(default)/documents/<collection>/<id>' (the id percent-encoded). |
+| `Client.get(collection, doc_id, raw=)` | The document's fields as a plain dict, or None when it does not exist; with `raw`, Firestore's document itself ({name, fields, createTime, updateTime}). |
+| `Client.create(collection, doc_id, data)` | Create the document unless it exists: True when this call created it, False when it was there. `doc_id` None lets Firestore choose the id, and the answer is that id (a meter's reading, an append-only log). |
+| `Client.set(collection, doc_id, data)` | Write the document whole: created, or replaced with exactly these fields. |
+| `Client.merge(collection, doc_id, data=, paths=, increment=, append=, remove=)` | Write these fields alone, the rest of the document kept (a missing document is created with them): `data`'s top-level keys are the mask unless `paths` names it (dotted paths into a map, `a.b`, with backticks round a segment that is not a plain name). `increme… |
+| `Client.delete(collection, doc_id)` | Delete the document; a missing one is fine. |
+| `Client.commit(writes)` | One atomic commit of `writes` (REST Write objects, `update()`, `delete_write()` or hand-built), all or none: a name in them may be relative to the database's documents ('chat_days/x') or full. Firestore's answer ({writeResults, commitTime}). Conflict when a p… |
+| `Client.batch_get(refs)` | Several documents in one round trip: each (collection, doc_id) in `refs` as its fields, None for one that does not exist, in `refs`' order. |
+| `Client.run_query(collection, where=, order_by=, limit=, select=, all_descendants=, query=, raw=)` | The documents of `collection` that match, as [(doc_id, fields)] (the id unquoted); with `raw`, Firestore's documents themselves. `where` is (field, op, value) triples ANDed, `op` Firestore's word ('EQUAL') or its symbol ('==', '>=', 'in', 'array-contains'); `… |
+| `Client.claim(collection, doc_id, data=, ttl=, more_ids=)` | Take `collection/doc_id` once: a create-only commit (precondition exists=false). True when this call made it, False when it was already there, so two deliveries of one message act once. `ttl` (seconds or a timedelta) adds EXPIRES_FIELD for Firestore's TTL pol… |
+| `Client.release(collection, doc_id)` | Give back a claim or a lock (delete it) so a retry can take it at once: True when deleted (or already gone), False, never an exception, when Firestore could not be reached (a TTL then frees it). |
+| `Client.lock(collection, doc_id, ttl, data=)` | An exclusive lease on `collection/doc_id` for `ttl` (seconds or a timedelta): True when this call holds it, False while another holder's lease runs. A free document is taken create-only; an expired one is taken over only if unchanged since it was read (an upd… |
+| `update(name, data=, mask=, exists=, update_time=, increment=, append=, remove=)` | A commit's update Write for document `name` (full, or relative to the database's documents): `data` encoded; `mask` the field paths to change (None replaces the document whole); `exists` True / False a precondition that the document is / is not there; `update… |
+| `delete_write(name, exists=)` | A commit's delete Write for document `name` (full, or relative); `exists` True a precondition that it is there. |
+| `client(project=, **kw)` | The process's client for `project` (GOOGLE_CLOUD_PROJECT, then GCP_PROJECT, when None), kept and shared; with any keyword (`token`, `opener`, `database`, `timeout`, `retry_waits`, `sleep`, `now`) a new one, not kept. |
+| `reset()` | Forget the kept clients (tests, and a process whose credentials changed). |
+| `get(project, collection, doc_id, raw=)` | client(project).get: the document's fields, or None when it does not exist. |
+| `create(project, collection, doc_id, data)` | client(project).create: True when created, False when it was there (doc_id None: the new id). |
+| `set(project, collection, doc_id, data)` | client(project).set: the document written whole. |
+| `merge(project, collection, doc_id, data=, **kw)` | client(project).merge: these fields alone (and `paths`, `increment`, `append`, `remove`). |
+| `delete(project, collection, doc_id)` | client(project).delete: the document deleted; a missing one is fine. |
+| `commit(project, writes)` | client(project).commit: `writes` in one atomic commit. |
+| `batch_get(project, refs)` | client(project).batch_get: each (collection, doc_id) as its fields or None, in order. |
+| `run_query(project, collection, **kw)` | client(project).run_query: [(doc_id, fields)] that match `where` (and `order_by`, `limit`, `select`, ...). |
+| `claim(project, collection, doc_id, data=, ttl=, more_ids=)` | client(project).claim: True once for the first caller, False for every later one. |
+| `release(project, collection, doc_id)` | client(project).release: the claim or lock deleted; False, never raising, when Firestore is unreachable. |
+| `lock(project, collection, doc_id, ttl, data=)` | client(project).lock: True when this call holds the lease, False while another holder's runs. |
+
 ## `gitguardian`: GitGuardian's incidents for a repository, read and closed: list the open ones, attach their occurre…
 
 | Name | Purpose |
 |---|---|
 | `source_id(key, repo, opener=)` | GitGuardian's id for `repo` ("owner/name"); RuntimeError when the workspace does not watch it. |
-| `incidents(key, repo, states=, opener=, per_page=)` | The repository's secret incidents in `states` (the open ones by default), newest first, without occurrences (the list never embeds them). |
+| `incidents(key, repo, states=, opener=, per_page=)` | The repository's secret incidents in `states` (the open ones by default), newest first, without occurrences (the list never embeds them). Each state is asked for by its own `status` query (0.27.0), so a page of resolved incidents never hides an older open one… |
+| `incident(key, incident_id, opener=)` | One secret incident by its id, whatever its state (a closed issue's incident read back to learn whether it was resolved); urllib's HTTPError when GitGuardian answers 404 or refuses. |
 | `with_occurrences(key, incident, opener=, limit=)` | The incident with its occurrences attached (the file and line each match is in), read from the occurrences endpoint; the incident unchanged, with `occurrences_error`, when that read fails. |
 | `open_incidents(key, repo, opener=)` | The repository's open incidents, each with its occurrences. |
 | `detector(incident)` | The detector's display name ('Google API Key'), never the match. |
@@ -253,11 +294,53 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `key_file_token(path, opener=, run=, now=, scope=)` | An access token from a service-account key (`path`: the key file's path, the key's JSON itself, or either behind a pasted `GOOGLE_APPLICATION_CREDENTIALS=`) with the standard library and the openssl CLI, or '' for anything else: the key's RS256-signed JWT exc… |
 | `impersonated_token(path, scope=, load=, request=)` | A token for the service account an `impersonated_service_account` credential file names (the kind `gcloud auth application-default login --impersonate-service-account` writes, and a container given one under GOOGLE_APPLICATION_CREDENTIALS), through google-aut… |
 | `access_token(env=, opener=, run=, gcloud_timeout=, env_name=, scope=)` | An OAuth access token for Google's REST APIs, or '' when no source answers (module docstring): `env_name`, the credential under GOOGLE_APPLICATION_CREDENTIALS (an impersonated service account through google-auth, `impersonated_token`, 0.20.0; a service-accoun… |
+| `class TokenFailed` | A token that was asked for and not minted (`metadata_token`, `impersonate`): the source and Google's code ("IAM Credentials answered HTTP 403: <Google's message>"), or the error's kind ("the metadata server could not be reached (URLError)"), never a token. `c… |
+| `forget()` | Drop every kept metadata token (a 401 from Google, or a test). |
+| `metadata_token(scopes=, opener=, timeout=, keep=, now=, early=)` | The attached service account's access token from the metadata server (Cloud Run, Cloud Functions, Cloud Build), kept until `early` seconds before it expires when it comes from the real server (`keep` None means: kept when no `opener`, or urlopen itself, was g… |
+| `impersonate(account, scopes=, source=, opener=, lifetime=, delegates=, timeout=)` | An access token for the service account `account` (its email), minted by IAM Credentials' generateAccessToken from `source`'s token (a callable, `access_token` by default: a desktop's sign-in, or a function's own account, which needs Token Creator on `account… |
+| `id_token(audience, impersonate_account=, source=, opener=, timeout=)` | An OpenID Connect ID token for `audience` (a Cloud Run or function URL that admits no public caller), or '' when none can be had. From the metadata server as the attached service account (a function calling another), or, with `impersonate_account`, from IAM C… |
+| `adc_token(scopes=, fallback=, default=, request=)` | Application Default Credentials' access token for `scopes` (a scope or a list; cloud-platform by default), refreshed: a job's service account on Google Cloud, `gcloud auth application-default login` on a desktop, a key under GOOGLE_APPLICATION_CREDENTIALS. ''… |
+| `authorized_session(scopes=, default=, fallback=)` | A requests-style session for Google's REST APIs: google-auth's AuthorizedSession on Application Default Credentials for `scopes` (a scope or a list; cloud-platform by default) where google-auth finds some; else, with `fallback`, `secrets.TokenSession` over `a… |
 | `class RefreshFailed` | The authorized-user token was not refreshed: Google's code ("Google answered 400"), the error's kind ("Google could not be reached (TimeoutError)") or the token's own lack ("the token has no refresh token"); never a token. |
 | `token_info(token_json=, token_file=, token_env=, secret=, session=, logger=)` | The stored authorized-user token itself (refresh_token, client_id, client_secret, token_uri) from the first source that parses, in `credentials()`'s order (json > file > env > secret), with the standard library alone (0.19.0): for a host without google-auth t… |
 | `refresh_access_token(info, opener=, timeout=)` | (access token, the seconds it lives) for an authorized-user token dict, over REST with the standard library alone (0.19.0): grant_type=refresh_token at the token's own `token_uri` (Google's by default). RefreshFailed on a refusal, with Google's code or the er… |
 | `credentials(scopes, token_json=, token_file=, token_env=, secret=, write_back=, session=, request=, logger=, service_account_file=)` | google.oauth2 Credentials for `scopes` from the first token source that parses, refreshed when expired, the refresh written back (module docstring); None when no source yields a usable token. Warnings go to `logger` (this module's by default). `service_accoun… |
 | `service(api, version, scopes, logger=, **sources)` | A `googleapiclient.discovery` service for `api`/`version` on credentials() from the same sources (`token_json`, `token_file`, `token_env`, `secret`, `write_back`, `session`); None without a usable token or the client library. |
+
+## `google_rest`: Google's REST APIs without the client libraries: one JSON call with Google's own error, and Cloud T…
+
+| Name | Purpose |
+|---|---|
+| `class GoogleError` | A Google REST call was refused or could not be made: `status` (the HTTP code, 0 for no answer or no token), `method`, `url` and Google's own `message`; the text names which call and why, never a token. |
+| `class RefusedHere` | A real call refused before it was made, because this process is not where one is meant (`live_allowed`): a configuration fault no retry fixes, so a caller logs it at ERROR. |
+| `configure(allow_env=, platform_env=)` | Name the project's opt-in variable for a real call off Cloud Run (`allow_env`, read as on when it is `1`) and, rarely, the platform variables that mean "on Cloud Run" (`platform_env`, K_SERVICE and CLOUD_RUN_JOB by default). Called once from the project's own… |
+| `live_allowed(env=)` | True where a real call is meant: a platform variable is set (on Cloud Run) or the configured opt-in variable is `1`. `env` is os.environ unless given. |
+| `call(method, url, token=, body=, opener=, timeout=, guard=, label=, what=, error=, refused=)` | One Google REST call, JSON both ways: `body` (a dict, or None for no body) sent as JSON, the answer parsed ({} for an empty one). The live guard first (module docstring; `guard` 'writes', 'all' or 'none'), then the token (a string, a callable, or None for goo… |
+| `list_all(url, key, token=, page_size=, limit=, **kw)` | Every item under `key` of a Google list answer, following `nextPageToken` (pageSize and pageToken added to `url`'s query), up to `limit` items when given. `kw` goes to `call` (opener, timeout, guard, error...). A GET, so the default guard lets it read from an… |
+| `queue_path(project, location, queue)` | A queue's resource name, `projects/<p>/locations/<l>/queues/<q>`. |
+| `task_name(queue, name)` | A task's full resource name from its queue and its short name; a name already full is kept. |
+| `http_task(url, body=, queue=, name=, at=, method=, headers=, oidc=, oauth=)` | A Cloud Tasks task that sends one HTTP request: `body` (bytes, str, or a dict sent as JSON) base64'd, `headers` (JSON's content type by default), due `at` (a datetime, naive read as UTC, or Google's own stamp; now when None), named `name` in `queue` when give… |
+| `create_task(queue, task, token=, exists_ok=, **kw)` | Queue `task` (the task itself, or a body already shaped {'task': ...}) on `queue` (its resource name): the created task as Google answers it, or None when a task of its name is already there or has just run (409) and `exists_ok`. GoogleError for any other ref… |
+| `delete_task(name, token=, queue=, **kw)` | Take one task off its queue: `name` full, or short with its `queue`. True when deleted, False when there was none (404: it ran, or was deleted). GoogleError for any other refusal. |
+| `list_tasks(queue, token=, **kw)` | Every task waiting on `queue`, every page (Cloud Tasks tasks.list), as Google gives them; their `name`s are what `delete_task` takes. |
+| `location_path(project, location)` | A location's resource name, `projects/<p>/locations/<l>`: Cloud Scheduler's parent of its jobs. |
+| `scheduler_job_name(parent, job_id)` | A scheduler job's full resource name from its parent and its id; a name already full is kept. |
+| `http_job(uri, schedule, name=, parent=, time_zone=, body=, method=, headers=, oidc=, oauth=, description=, retry_count=, max_retry_seconds=)` | A Cloud Scheduler job (REST's shape) that sends one HTTP request on `schedule` (cron) in `time_zone` (a zone the caller names; the kit assumes none but UTC): `body` (bytes, str or a dict sent as JSON), `headers`, signed with `oidc=(account, audience)` or `oau… |
+| `create_job(parent, job, token=, replace=, **kw)` | Create the scheduler `job` under `parent`: the job as Google answers it. With `replace`, a job of the same name is deleted first (re-scheduling replaces it; none there is fine). GoogleError on a refusal (409 when it exists and `replace` is off). |
+| `delete_job(name, token=, parent=, **kw)` | Delete one scheduler job: `name` full, or its id with `parent`. True when deleted, False when there was none (404). GoogleError for any other refusal. |
+| `get_job(name, token=, parent=, **kw)` | One scheduler job as Google gives it (`name` full, or its id with `parent`). |
+| `list_jobs(parent, token=, **kw)` | Every scheduler job under `parent`, every page (500 a page unless `page_size` says otherwise). |
+| `run_job_url(project, region, job)` | The Cloud Run Admin API's address of a job (v2): `.../jobs/<job>`; `:run`, `/executions` go after it. |
+| `run_url(project, region, job)` | The Cloud Run Admin API's run endpoint for `job` (what a scheduler job or task POSTs to start it). |
+| `service_url(project, region, service)` | The Cloud Run Admin API's address of a service (v2). |
+| `run_body(args=, env=, timeout_seconds=)` | The `:run` request body: `args` (a list handed to the container as its argv, never a shell line; it replaces ALL of the job's deployed arguments, so a job deployed as `python -u <file>` needs its file first) and `env` as one container override, `timeout_secon… |
+| `console_url(project, region, execution)` | An execution's page in the Cloud console (its tasks and their logs), or '' for no execution. |
+| `run_job(project, region, job, args=, env=, timeout_seconds=, token=, **kw)` | Start one execution of `job` (run_body's `args`, `env`, `timeout_seconds`): {'job', 'execution' (its short name, '' when the answer named none), 'url' (console_url)}. Guarded on every transport but a stand-in (a start is a write); GoogleError headed by the jo… |
+| `get_job_spec(project, region, job, token=, **kw)` | One Cloud Run job as Google gives it (its template, image and settings). |
+| `get_service(project, region, service, token=, **kw)` | One Cloud Run service as Google gives it (v2: its template and `trafficStatuses`). |
+| `list_executions(project, region, job, token=, limit=, **kw)` | A job's executions, newest first as Google lists them, up to `limit` when given (one page of `limit` then). |
+| `get_execution(project, region, job, execution, token=, **kw)` | One execution of a job (its short name, or the full one) as Google gives it. |
+| `execution_state(ex)` | 'running', 'succeeded', 'failed' or 'cancelled', from an execution's counts and its completion time. |
 
 ## `greenapi`: GREEN-API helper functions - shared between webhook, Cloud Functions, and CLI.
 
@@ -266,7 +349,7 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `api_host(instance_id, env=)` | The instance's API host: the GREENAPI_API_URL variable when set (the console's apiUrl, for an instance whose host does not follow the pattern), else https://<first four digits>.api.greenapi.com. Never the shared api.green-api.com, which went dark on 10/10/26… |
 | `get_api_url(instance_id, api_token, method)` | Build a GREEN-API endpoint URL on the instance's own host (api_host()). |
 | `get_state_instance(instance_id, api_token, timeout=)` | Ask GREEN-API whether the WhatsApp instance is still authorized. |
-| `call_api(instance_id, api_token, method, payload=, timeout=, connect_retries=)` | Call a GREEN-API endpoint. |
+| `call_api(instance_id, api_token, method, payload=, timeout=, connect_retries=, status_retries=)` | Call a GREEN-API endpoint. |
 | `get_group_data(instance_id, api_token, group_id, connect_retries=)` | Fetch group data including participants and admin status. |
 | `get_group_description(instance_id, api_token, group_id)` | Fetch a group's description — the text WhatsApp shows under Group Info. |
 | `get_group_admin_ids(instance_id, api_token, group_id)` | Get the set of phone IDs that are admins of a WhatsApp group. |
@@ -418,6 +501,8 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `TokenSession.post(url, json=, timeout=)` | (no docstring) |
 | `default_session()` | google-auth's AuthorizedSession on the default credentials where google-auth is installed and finds some (a job's service account on Cloud Run, `gcloud auth application-default login` on a desktop); else a `TokenSession` over `google_auth.access_token`, which… |
 | `access(project, name, version=, session=)` | The bytes of one secret version. Raises on a refusal (the status, never the data). |
+| `access_url(project, name, version=)` | Secret Manager's address for one secret version's `:access` read. |
+| `resolve_env(entries, project, get_json=, session=)` | {name: value} of a Cloud Run container's `env` entries (a service's or a job's, as the v2 API lists them): each literal value as it is, each `valueSource.secretKeyRef` read from Secret Manager at its version ('latest' when none), so a desktop run gets the con… |
 | `load_json(project, name, into_env=, overwrite=, version=, session=)` | A secret holding a JSON object, parsed; with `into_env`, each key set in os.environ (an existing variable kept unless `overwrite`), so a job's logins live in one secret and reach the code as the environment it already reads. |
 | `add_version(project, name, data, session=)` | A new version of the secret holding `data` (bytes or str); the version's resource name. Raises on a refusal: the caller reports its kind, never the data. |
 | `ensure(project, name, session=)` | The secret `name` exists in `project` (automatic replication, no versions yet): True when this call created it, False when it was there. `add_version()` answers 404 to a secret that was never created, so a provisioning script calls this first. |
@@ -468,6 +553,15 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `scan_file(path)` | (no docstring) |
 | `check_source(source)` | (line, rule, text) for each finding in one module's source. Code is what is left after strings and comments. |
 | `main(argv=)` | (no docstring) |
+
+## `webhook_auth`: Every inbound webhook's proof of its sender, in one place: a Google-signed push (a Pub/Sub push sub…
+
+| Name | Purpose |
+|---|---|
+| `class WebhookAuthError` | A webhook's credential was refused; the message says why (safe to log: it never carries the token). |
+| `google_push_claims(authorization, path, email, verifier=, clock_skew_seconds=)` | The claims of a Google-signed OIDC push token, or WebhookAuthError naming why not. Checked: the `Authorization: Bearer <token>` shape; the token's signature against Google's keys and its expiry (google-auth's verify_token, `clock_skew_seconds` of leeway); an… |
+| `google_push(authorization, path, email, verifier=, clock_skew_seconds=)` | The claims of a Google-signed OIDC push token from `email` for an address ending in `path`, or None for any refusal: google_push_claims' checks, for a caller that answers 401 without saying why. |
+| `hmac_sha256(secret, body, signature, prefix=, prefix_required=, encoding=, strip_secret=)` | True when `signature` is the HMAC-SHA256 of `body` (the exact bytes the sender signed: the raw request body, or a vendor's own string such as Slack's `v0:<timestamp>:<body>`) under `secret` (str or bytes). `prefix` is the scheme the header carries before the… |
 
 ## `whatsapp_message`: WhatsApp Message Schema for Pub/Sub Event-Driven Architecture
 

@@ -60,8 +60,15 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   slack              Slack, one client for every project: a message posted as the bot to a channel with text and
                      blocks, a post redrawn, any Web API call, and the incoming-webhook send as the second door; a
                      refusal is `SlackError` with the status and Slack's error, never the token or the URL
+  firestore          Firestore over REST, the standard library alone: get, create, set, merge (masks and server-side
+                     transforms), delete, an atomic commit, batch_get, run_query, the value codec, a create-only
+                     claim, a release, and a lease on an updateTime precondition
+  google_rest        one Google REST JSON call with Google's error and a live guard a test cannot pass by accident,
+                     and on it Cloud Tasks, Cloud Scheduler and Cloud Run (job starts, specs, executions)
+  webhook_auth       every webhook's proof of its sender: a Google-signed OIDC push and an HMAC-SHA256 signature,
+                     refusing by default, constant-time
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.26.0'
+__version__ = '0.27.0'

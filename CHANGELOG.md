@@ -2,6 +2,27 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.27.0 - 2026-11-06 PT
+
+Additive; no host call site changes. The graduations of SMADPickleBot's #971 audit, each replacing the project's own
+copies in its phase 2:
+- `firestore` (#1015): Firestore over REST with the standard library, `Client` and project-first wrappers: get, create,
+  set, merge (masks, increment, append, remove), delete, commit, batch_get, run_query, the codec (`encode`, `decode`,
+  `to_fields`, `from_fields`, `instant`), `claim` (create-only, `more_ids` all or none, a TTL), `release`, `lock` (a lease
+  taken over only on the updateTime read). `Unreachable` and `Conflict`.
+- `google_rest` (#1016): `call` with `GoogleError` and a live guard (`configure(allow_env=)` names the host's opt-in
+  variable; a guarded write off Cloud Run on the real transport is `RefusedHere` before any token), `list_all`, and Cloud
+  Tasks (`http_task`, `create_task`, `delete_task`, `list_tasks`), Cloud Scheduler (`http_job`, `create_job`,
+  `delete_job`, `get_job`, `list_jobs`) and Cloud Run (`run_job`, `run_body`, `get_job_spec`, `get_service`,
+  `list_executions`, `get_execution`, `execution_state`).
+- `webhook_auth` (#1017): `google_push` / `google_push_claims` (google-auth, imported lazily) and `hmac_sha256` (prefix,
+  hex or base64, constant-time, a non-ASCII signature refused, never a TypeError).
+- `google_auth` (#1018): `metadata_token` (kept to two minutes before expiry), `impersonate`, `id_token` (the metadata
+  server's, or generateIdToken as an account), `adc_token`, `authorized_session`, `forget`, `TokenFailed`.
+- #1020: `gitguardian.incidents` asks for each state by its `status` query and `incident(key, id)` reads one by id;
+  `greenapi.call_api(status_retries=)` asks again after a 429 or 5xx (off by default); `secrets.resolve_env` reads a
+  Cloud Run container's env with its secret references, `secrets.access_url` the one address.
+
 ## 0.26.0 - 2026-11-05 PT
 
 Removed: `push_gate` and the `chuang-push-gate` script (SMADPickleBot #1019, from #971's audit). git's pre-push gate is
