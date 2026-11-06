@@ -102,6 +102,29 @@ try:
           (ga.get_group_data('i', 't', 'g@g.us'), len(calls)), (None, 1))
     check("  no log line carries the URL, where the API token is a path segment",
           any('waInstance' in line or '/t' in line.split(' ')[0] for line in h.lines), False)
+
+    # 0.27.0, status_retries (SMADPickleBot #1020): a 429 or 5xx answer is GREEN-API's refusal, so a sender that
+    # must get out (the watchdog's alarm) may ask again; a 4xx other than 429 never is.
+    def answer(code):
+        r = _Resp()
+        r.status_code = code
+        return r
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(answer(429), answer(503), _Resp())
+    got = ga.call_api('i', 't', 'sendMessage', {'chatId': 'x'}, status_retries=2)
+    check("a 429 then a 503, then the answer: retried, 5s then 10s, each at WARNING",
+          (bool(got), len(calls), sleeps, h.levels), (True, 3, [5, 10], ['WARNING', 'WARNING']))
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(answer(500), answer(500))
+    check("  still refused after the last retry: None and one ERROR",
+          (ga.call_api('i', 't', 'sendMessage', status_retries=1), len(calls), h.levels[-1]), (None, 2, 'ERROR'))
+    calls.clear(); sleeps.clear()
+    requests.post = script(answer(400), _Resp())
+    check("  a 400 is never retried", (ga.call_api('i', 't', 'sendMessage', status_retries=2), len(calls), sleeps),
+          (None, 1, []))
+    calls.clear(); sleeps.clear()
+    requests.post = script(answer(503), _Resp())
+    check("  off by default: one 503 is one call", (ga.call_api('i', 't', 'sendMessage'), len(calls)), (None, 1))
 finally:
     requests.post, ga.time.sleep = _post, _sleep
     ga._SESSION[:] = _kept_session

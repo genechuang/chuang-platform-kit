@@ -115,7 +115,7 @@ CONNECT_BACKOFF_SECONDS = 5
 
 def call_api(instance_id: str, api_token: str, method: str,
              payload: dict = None, timeout: int = REQUEST_TIMEOUT,
-             connect_retries: int = 0) -> dict | None:
+             connect_retries: int = 0, status_retries: int = 0) -> dict | None:
     """Call a GREEN-API endpoint.
 
     Args:
@@ -131,23 +131,33 @@ def call_api(instance_id: str, api_token: str, method: str,
             callers opt in (the member sync's get_group_data). A single 10s connect timeout
             failed the 9/29 1:55 PM PT sync-members run, which since a9873cf
             fails the run on any error and so emailed Gene.
+        status_retries: extra attempts after a 429 or 5xx answer, 5s then 10s
+            apart (0.27.0): GREEN-API refused the request, so repeating it cannot
+            post twice. For a sender that must get out when nothing else can (an
+            alarm). Off (0) by default.
 
     Returns:
         Response JSON dict on success, None on error
     """
     url = get_api_url(instance_id, api_token, method)
     try:
-        for attempt in range(connect_retries + 1):
-            try:
-                resp = _session().post(url, json=payload or {}, timeout=timeout)
+        for status_attempt in range(status_retries + 1):
+            for attempt in range(connect_retries + 1):
+                try:
+                    resp = _session().post(url, json=payload or {}, timeout=timeout)
+                    break
+                except requests.exceptions.ConnectTimeout:
+                    if attempt == connect_retries:
+                        raise
+                    # Never log the URL -- the API token is a path segment in it.
+                    logger.warning(f"{method}: connect timeout (attempt {attempt + 1} of {connect_retries + 1}); "
+                                   f"retrying in {CONNECT_BACKOFF_SECONDS * (attempt + 1)}s")
+                    time.sleep(CONNECT_BACKOFF_SECONDS * (attempt + 1))
+            if not (resp.status_code == 429 or resp.status_code >= 500) or status_attempt == status_retries:
                 break
-            except requests.exceptions.ConnectTimeout:
-                if attempt == connect_retries:
-                    raise
-                # Never log the URL -- the API token is a path segment in it.
-                logger.warning(f"{method}: connect timeout (attempt {attempt + 1} of {connect_retries + 1}); "
-                               f"retrying in {CONNECT_BACKOFF_SECONDS * (attempt + 1)}s")
-                time.sleep(CONNECT_BACKOFF_SECONDS * (attempt + 1))
+            logger.warning(f"{method}: HTTP {resp.status_code} (retry {status_attempt + 1} of {status_retries}); "
+                           f"retrying in {CONNECT_BACKOFF_SECONDS * (status_attempt + 1)}s")
+            time.sleep(CONNECT_BACKOFF_SECONDS * (status_attempt + 1))
         if resp.status_code == 200:
             return resp.json()
         else:
