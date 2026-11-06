@@ -50,6 +50,18 @@ Google client library):
 `gmail.Mailbox` sends over REST on these. A service account's key (`service_account_file=`, 0.19.0) is one more
 source for `credentials()` and `service()`: `google.oauth2.service_account` Credentials for `scopes`, the way a sheet
 shared to that account is read (ChuangFinance's ledger sheets); it is never refreshed here or written back.
+
+Every other kind of Google token, so a project mints none by hand (0.27.0):
+
+    token = google_auth.metadata_token()                     # kept until 2 minutes before expiry; TokenFailed off Google Cloud
+    pub = google_auth.impersonate('publisher@p.iam.gserviceaccount.com', SCOPE)    # IAM Credentials; TokenFailed
+    idt = google_auth.id_token('https://svc-xyz.a.run.app')  # the metadata server's ID token, '' when none
+    idt = google_auth.id_token(url, impersonate_account='deploy@p.iam.gserviceaccount.com')   # a desktop's
+    adc = google_auth.adc_token(fallback=google_auth.access_token)   # Application Default Credentials, then gcloud
+    sess = google_auth.authorized_session(SCOPES)            # AuthorizedSession on ADC, else a TokenSession
+
+The raising two (`metadata_token`, `impersonate`) are for callers that must say why there is no token; the rest
+answer '' (or a fallback session) and never raise.
 """
 import json
 import logging
@@ -187,6 +199,172 @@ def access_token(env=None, opener=None, run=subprocess.run, gcloud_timeout=30, e
         return (p.stdout or '').strip() if p.returncode == 0 else ''
     except Exception:   # noqa: BLE001 - no gcloud, or none signed in
         return ''
+
+
+METADATA_IDENTITY = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity'
+IAM_CREDENTIALS = 'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{account}:{method}'
+EARLY_SECONDS = 120   # a kept metadata token is renewed this long before Google says it expires
+
+
+class TokenFailed(RuntimeError):
+    """A token that was asked for and not minted (`metadata_token`, `impersonate`): the source and Google's code ("IAM
+    Credentials answered HTTP 403: <Google's message>"), or the error's kind ("the metadata server could not be reached
+    (URLError)"), never a token. `code` is the HTTP status, 0 when there was none."""
+
+    def __init__(self, message: str, code: int = 0):
+        super().__init__(message)
+        self.code = code
+
+
+def _scopes(scopes) -> list:
+    """A scope or a list of scopes as a list; None or empty is cloud-platform."""
+    if not scopes:
+        return [CLOUD_PLATFORM]
+    return [scopes] if isinstance(scopes, str) else list(scopes)
+
+
+_KEPT = {}   # metadata URL: (token, monotonic deadline), so a service asks the metadata server once a token's life
+
+
+def forget() -> None:
+    """Drop every kept metadata token (a 401 from Google, or a test)."""
+    _KEPT.clear()
+
+
+def metadata_token(scopes=None, opener=None, timeout: float = 3, keep=None, now=None, early: float = EARLY_SECONDS) -> str:
+    """The attached service account's access token from the metadata server (Cloud Run, Cloud Functions, Cloud Build),
+    kept until `early` seconds before it expires when it comes from the real server (`keep` None means: kept when no
+    `opener`, or urlopen itself, was given; a test's opener is asked every call). `scopes` None asks for the account's
+    own; a scope or a list asks the server for those. Raises TokenFailed off Google Cloud or on a refusal, so a caller
+    that must have a token says why (access_token() is the never-raising reader over every source)."""
+    url = METADATA_TOKEN if scopes is None else METADATA_TOKEN + '?' + urllib.parse.urlencode({'scopes': ','.join(_scopes(scopes))})
+    if keep is None:
+        keep = opener is None or opener is urllib.request.urlopen
+    clock = now or time.monotonic
+    if keep:
+        kept = _KEPT.get(url)
+        if kept and kept[0] and clock() < kept[1]:
+            return kept[0]
+    req = urllib.request.Request(url, headers={'Metadata-Flavor': 'Google'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+            body = json.loads(r.read().decode('utf-8') or '{}')
+    except urllib.error.HTTPError as e:
+        raise TokenFailed(f'the metadata server answered HTTP {e.code}', e.code)
+    except Exception as e:   # noqa: BLE001 - not on Google Cloud, a timeout, a garbled answer: one kind to the caller
+        raise TokenFailed(f'the metadata server could not be reached ({type(e).__name__})')
+    token = body.get('access_token') if isinstance(body, dict) else None
+    if not token:
+        raise TokenFailed('the metadata server gave no access token')
+    if keep:
+        _KEPT[url] = (token, clock() + max(0.0, float(body.get('expires_in') or 0) - early))
+    return token
+
+
+def _iam(account: str, method: str, body: dict, source, opener, timeout) -> dict:
+    """One IAM Credentials call (`generateAccessToken`, `generateIdToken`) for `account` on `source`'s token; its JSON.
+    TokenFailed on no source token, a refusal (Google's code and message) or a failure's kind."""
+    src = (source or access_token)()
+    if not src:
+        raise TokenFailed('no Google token to impersonate from')
+    req = urllib.request.Request(IAM_CREDENTIALS.format(account=account, method=method), data=json.dumps(body).encode(),
+                                 method='POST', headers={'Authorization': f'Bearer {src}', 'Content-Type': 'application/json'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+            got = json.loads(r.read().decode('utf-8') or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read().decode('utf-8') or '{}').get('error', {}).get('message', '')
+        except Exception:   # noqa: BLE001 - an answer with no JSON body: the code alone
+            msg = ''
+        raise TokenFailed(f'IAM Credentials answered HTTP {e.code}' + (f': {msg}' if msg else ''), e.code)
+    except Exception as e:   # noqa: BLE001 - a timeout, a refused connection, a garbled answer
+        raise TokenFailed(f'IAM Credentials could not be reached ({type(e).__name__})')
+    return got if isinstance(got, dict) else {}
+
+
+def impersonate(account: str, scopes=None, source=None, opener=None, lifetime: int = 3600, delegates=None,
+                timeout: float = 30) -> str:
+    """An access token for the service account `account` (its email), minted by IAM Credentials' generateAccessToken
+    from `source`'s token (a callable, `access_token` by default: a desktop's sign-in, or a function's own account,
+    which needs Token Creator on `account`), for `scopes` (a scope or a list; cloud-platform by default) and `lifetime`
+    seconds. The way a keyless account is used from a desktop or another account (a publisher account, a worker's own
+    account). Not kept: the caller keeps it for its life. Raises TokenFailed, never with a token in its text."""
+    body = {'scope': _scopes(scopes), 'lifetime': f'{int(lifetime)}s'}
+    if delegates:
+        body['delegates'] = [d if d.startswith('projects/') else f'projects/-/serviceAccounts/{d}' for d in delegates]
+    token = _iam(account, 'generateAccessToken', body, source, opener, timeout).get('accessToken') or ''
+    if not token:
+        raise TokenFailed('IAM Credentials gave no access token')
+    return token
+
+
+def id_token(audience: str, impersonate_account: str = '', source=None, opener=None, timeout: float = 5) -> str:
+    """An OpenID Connect ID token for `audience` (a Cloud Run or function URL that admits no public caller), or '' when
+    none can be had. From the metadata server as the attached service account (a function calling another), or, with
+    `impersonate_account`, from IAM Credentials' generateIdToken as that account on `source`'s token (`access_token` by
+    default; a user's sign-in cannot mint one with an audience, so a desktop impersonates an account that may).
+    `timeout` bounds each call. Never raises."""
+    if not audience:
+        return ''
+    try:
+        if impersonate_account:
+            got = _iam(impersonate_account, 'generateIdToken', {'audience': audience, 'includeEmail': True}, source,
+                       opener, timeout)
+            return got.get('token') or ''
+        req = urllib.request.Request(f'{METADATA_IDENTITY}?audience={urllib.parse.quote(audience, safe="")}',
+                                     headers={'Metadata-Flavor': 'Google'})
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+            return r.read().decode('utf-8').strip()
+    except Exception:   # noqa: BLE001 - off Google Cloud, a refused mint: '' says none
+        return ''
+
+
+def adc_token(scopes=None, fallback=None, default=None, request=None) -> str:
+    """Application Default Credentials' access token for `scopes` (a scope or a list; cloud-platform by default),
+    refreshed: a job's service account on Google Cloud, `gcloud auth application-default login` on a desktop, a key
+    under GOOGLE_APPLICATION_CREDENTIALS. '' when google-auth is absent or finds none, unless `fallback` (a callable,
+    `access_token` for the gcloud sign-in after it) answers. `default` and `request` are google-auth's
+    (`google.auth.default`, its transport Request), a test's stand-ins otherwise. Never raises."""
+    try:
+        if default is None:
+            import google.auth
+            default = google.auth.default
+        creds = default(scopes=_scopes(scopes))[0]
+        if request is None:
+            from google.auth.transport.requests import Request
+            request = Request()
+        creds.refresh(request)
+        if creds.token:
+            return creds.token
+    except Exception:   # noqa: BLE001 - the library missing, no default credentials, a refused refresh: the fallback
+        pass
+    if fallback is None:
+        return ''
+    try:
+        return fallback() or ''
+    except Exception:   # noqa: BLE001
+        return ''
+
+
+def authorized_session(scopes=None, default=None, fallback: bool = True):
+    """A requests-style session for Google's REST APIs: google-auth's AuthorizedSession on Application Default
+    Credentials for `scopes` (a scope or a list; cloud-platform by default) where google-auth finds some; else, with
+    `fallback`, `secrets.TokenSession` over `access_token` (the standard library, ending at gcloud's sign-in), and
+    without it None, so a caller with its own fallback (a CLI) takes it. `default` is `google.auth.default`, a test's
+    stand-in otherwise. Never raises."""
+    try:
+        from google.auth.transport.requests import AuthorizedSession
+        if default is None:
+            import google.auth
+            default = google.auth.default
+        return AuthorizedSession(default(scopes=_scopes(scopes))[0])
+    except Exception:   # noqa: BLE001 - the library missing, or no default credentials
+        pass
+    if not fallback:
+        return None
+    from .secrets import TokenSession
+    return TokenSession()
 
 
 TOKEN_URI = 'https://oauth2.googleapis.com/token'

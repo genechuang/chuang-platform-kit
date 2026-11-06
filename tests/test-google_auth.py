@@ -372,10 +372,181 @@ with tempfile.TemporaryDirectory() as d:
           ('', '', '', '', 1, 'meta'))
     G._IMPERSONATED.clear()
 
+print("metadata_token() (0.27.0): the metadata server's token, kept until two minutes before expiry from the real server only; TokenFailed otherwise")
+_meta_calls = []
+
+
+class _Clock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _meta(req, timeout=None):
+    _meta_calls.append((req.full_url, req.get_header('Metadata-flavor'), timeout))
+    return Resp({'access_token': f'm{len(_meta_calls)}', 'expires_in': 3600})
+
+
+G.forget()
+check("the positive case: a test's opener is asked and nothing is kept",
+      (G.metadata_token(opener=_meta), G.metadata_token(opener=_meta), G._KEPT, _meta_calls[0]),
+      ('m1', 'm2', {}, (G.METADATA_TOKEN, 'Google', 3)))
+clock = _Clock()
+check("  kept when asked to keep, renewed 120 s before it expires",
+      (G.metadata_token(opener=_meta, keep=True, now=clock), G.metadata_token(opener=_meta, keep=True, now=clock),
+       (setattr(clock, 't', 1000.0 + 3600 - 121), G.metadata_token(opener=_meta, keep=True, now=clock))[1],
+       (setattr(clock, 't', 1000.0 + 3600 - 119), G.metadata_token(opener=_meta, keep=True, now=clock))[1]),
+      ('m3', 'm3', 'm3', 'm4'))
+G.forget()
+check("  forget() drops it; scopes go on the query", (G._KEPT, G.metadata_token(scopes=['a', 'b'], opener=_meta) and _meta_calls[-1][0]),
+      ({}, G.METADATA_TOKEN + '?scopes=a%2Cb'))
+
+
+def _raise(exc):
+    def o(req, timeout=None):
+        raise exc
+    return o
+
+
+def _said(fn):
+    try:
+        return fn()
+    except G.TokenFailed as e:
+        return (str(e), e.code)
+
+
+check("  off Google Cloud, a refusal, no token: TokenFailed with the kind, never kept",
+      (_said(lambda: G.metadata_token(opener=no_meta)),
+       _said(lambda: G.metadata_token(opener=_raise(urllib.error.HTTPError('u', 404, 'no', {}, io.BytesIO(b''))))),
+       _said(lambda: G.metadata_token(opener=lambda req, timeout=None: Resp({}), keep=True)), G._KEPT),
+      (('the metadata server could not be reached (OSError)', 0), ('the metadata server answered HTTP 404', 404),
+       ('the metadata server gave no access token', 0), {}))
+
+print("impersonate() (0.27.0): IAM Credentials' generateAccessToken on the source's token; TokenFailed with Google's message")
+_iam_sent = []
+
+
+def _iam_ok(req, timeout=None):
+    _iam_sent.append((req.full_url, req.get_method(), req.get_header('Authorization'), json.loads(req.data), timeout))
+    if req.full_url.endswith(':generateIdToken'):
+        return Resp({'token': 'idt'})
+    return Resp({'accessToken': 'imp-at', 'expireTime': '2026-11-06T09:00:00Z'})
+
+
+ACCOUNT = 'pub@example.iam.gserviceaccount.com'
+check("the positive case: minted for the account, the scopes and the lifetime, on the source's token",
+      (G.impersonate(ACCOUNT, 'https://www.googleapis.com/auth/androidpublisher', source=lambda: 'src', opener=_iam_ok), _iam_sent[-1]),
+      ('imp-at', (f'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{ACCOUNT}:generateAccessToken', 'POST',
+                  'Bearer src', {'scope': ['https://www.googleapis.com/auth/androidpublisher'], 'lifetime': '3600s'}, 30)))
+G.impersonate(ACCOUNT, source=lambda: 'src', opener=_iam_ok, lifetime=600, delegates=['mid@example.iam.gserviceaccount.com'])
+check("  cloud-platform by default; delegates named as resources",
+      _iam_sent[-1][3], {'scope': [G.CLOUD_PLATFORM], 'lifetime': '600s',
+                         'delegates': ['projects/-/serviceAccounts/mid@example.iam.gserviceaccount.com']})
+_n = len(_iam_sent)
+check("  no source token, a refusal with Google's message, a failure's kind, no token: TokenFailed, nothing sent without a source",
+      (_said(lambda: G.impersonate(ACCOUNT, source=lambda: '', opener=_iam_ok)), len(_iam_sent) - _n,
+       _said(lambda: G.impersonate(ACCOUNT, source=lambda: 's', opener=_raise(urllib.error.HTTPError(
+           'u', 403, 'no', {}, io.BytesIO(b'{"error": {"message": "Permission iam.serviceAccounts.getAccessToken denied"}}'))))),
+       _said(lambda: G.impersonate(ACCOUNT, source=lambda: 's', opener=_raise(urllib.error.HTTPError('u', 500, 'no', {}, io.BytesIO(b'oops'))))),
+       _said(lambda: G.impersonate(ACCOUNT, source=lambda: 's', opener=no_meta)),
+       _said(lambda: G.impersonate(ACCOUNT, source=lambda: 's', opener=lambda req, timeout=None: Resp({})))),
+      (('no Google token to impersonate from', 0), 0,
+       ('IAM Credentials answered HTTP 403: Permission iam.serviceAccounts.getAccessToken denied', 403),
+       ('IAM Credentials answered HTTP 500', 500), ('IAM Credentials could not be reached (OSError)', 0),
+       ('IAM Credentials gave no access token', 0)))
+
+print("id_token() (0.27.0): the metadata server's ID token for the audience, or an impersonated account's by generateIdToken; '' when none")
+_id_sent = []
+
+
+def _ident(req, timeout=None):
+    _id_sent.append((req.full_url, req.get_header('Metadata-flavor'), timeout))
+    return RestResp(b'eyJ.id.tok\n')
+
+
+AUD = 'https://svc-xyz.a.run.app/path?x=1'
+check("the positive case: the metadata server's, the audience quoted, stripped",
+      (G.id_token(AUD, opener=_ident), _id_sent[-1]),
+      ('eyJ.id.tok', (G.METADATA_IDENTITY + '?audience=https%3A%2F%2Fsvc-xyz.a.run.app%2Fpath%3Fx%3D1', 'Google', 5)))
+check("  impersonated: generateIdToken with the email included", (G.id_token(AUD, impersonate_account=ACCOUNT, source=lambda: 'src', opener=_iam_ok, timeout=9),
+                                                               _iam_sent[-1]),
+      ('idt', (f'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{ACCOUNT}:generateIdToken', 'POST', 'Bearer src',
+               {'audience': AUD, 'includeEmail': True}, 9)))
+check("  off Google Cloud, a refused mint, no source, no audience: ''",
+      (G.id_token(AUD, opener=no_meta), G.id_token(AUD, impersonate_account=ACCOUNT, source=lambda: 's', opener=no_meta),
+       G.id_token(AUD, impersonate_account=ACCOUNT, source=lambda: '', opener=_iam_ok), G.id_token('', opener=_ident)),
+      ('', '', '', ''))
+
+print("adc_token() and authorized_session() (0.27.0): Application Default Credentials for the scopes, else the fallback")
+
+
+class _ADC:
+    def __init__(self, token='adc', fails=False):
+        self.token, self.fails, self.refreshed = None, fails, []
+        self._t = token
+
+    def refresh(self, request):
+        if self.fails:
+            raise RuntimeError('refresh refused')
+        self.refreshed.append(request)
+        self.token = self._t
+
+
+_asked = []
+
+
+def _default(creds):
+    def d(scopes=None):
+        _asked.append(scopes)
+        return creds, 'proj'
+    return d
+
+
+def _no_adc(scopes=None):
+    raise RuntimeError('DefaultCredentialsError')
+
+
+_c = _ADC()
+check("the positive case: the credentials refreshed, their token, cloud-platform by default",
+      (G.adc_token(default=_default(_c), request='rq'), _c.refreshed, _asked[-1]), ('adc', ['rq'], [G.CLOUD_PLATFORM]))
+check("  the scopes as given, a scope alone as a list",
+      (G.adc_token('s1', default=_default(_ADC()), request='rq') and _asked[-1],
+       G.adc_token(['s1', 's2'], default=_default(_ADC()), request='rq') and _asked[-1]), (['s1'], ['s1', 's2']))
+check("  none, a refused refresh, an empty token: '' or the fallback's; a fallback that raises is ''",
+      (G.adc_token(default=_no_adc), G.adc_token(default=_no_adc, fallback=lambda: 'gc'),
+       G.adc_token(default=_default(_ADC(fails=True)), request='rq', fallback=lambda: 'gc'),
+       G.adc_token(default=_default(_ADC(token='')), request='rq'),
+       G.adc_token(default=_no_adc, fallback=lambda: (_ for _ in ()).throw(RuntimeError('x')))),
+      ('', 'gc', 'gc', '', ''))
+check("  the library's own default, absent from this fake, is '' and never a real credential", G.adc_token(), '')
+
+
+class _AuthSession:
+    def __init__(self, creds):
+        self.creds = creds
+
+
+fake_requests.AuthorizedSession = _AuthSession
+_c = _ADC()
+s = G.authorized_session(['s1'], default=_default(_c))
+check("the positive case: AuthorizedSession on the default credentials for the scopes", (type(s).__name__, s.creds is _c, _asked[-1]),
+      ('_AuthSession', True, ['s1']))
+from chuang_platform_kit import secrets as _kit_secrets  # noqa: E402
+check("  no default credentials: a TokenSession, or None without the fallback",
+      (type(G.authorized_session(default=_no_adc)).__name__ == _kit_secrets.TokenSession.__name__,
+       G.authorized_session(default=_no_adc, fallback=False), type(G.authorized_session()).__name__),
+      (True, None, 'TokenSession'))
+del fake_requests.AuthorizedSession
+
 print("credentials() answers None without google-auth installed")
 for name in ('google.auth.transport.requests', 'google.oauth2.credentials'):
     sys.modules[name] = None   # importing it raises ImportError
 check("no library", G.credentials(SCOPES, token_json={'token': 'x'}), None)
+check("  adc_token() takes the fallback, authorized_session() the TokenSession",
+      (G.adc_token(default=_default(_ADC()), fallback=lambda: 'gc'), type(G.authorized_session(default=_default(_ADC()))).__name__,
+       G.authorized_session(default=_default(_ADC()), fallback=False)), ('gc', 'TokenSession', None))
 
 G.log.removeHandler(handler)
 print()
