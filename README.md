@@ -38,7 +38,6 @@ Python package. It was extracted from [SMAD PickleBot](https://github.com/genech
 | `gitguardian` | A repository's secret incidents: `open_incidents(key, repo)` with occurrences, `detector()`/`files()` (the safe parts), `ignore(key, id, reason, note)` and `resolve(key, id, note)` — those two need a key with `incidents:write` (a read-only key is a `PermissionError` naming the scope). |
 | `slack` | Slack, one client for every project (0.22.0): `post(token, channel, text, blocks=, thread_ts=, unfurl_links=)` over `chat.postMessage` (Slack's answer with the message's `ts` and `channel`), `update(token, channel, ts, text, blocks=)` over `chat.update`, `call(method, token, payload)` for any other Web API method as JSON and `form()` for one taking form fields, and `webhook_post(url, payload)` for an incoming webhook, the second door a host keeps until it moves to a bot token. A refusal is `SlackError` with the HTTP `status` (0 when nothing answered) and Slack's `error` string, never the token or the URL. Standard library; `opener=` is the seam for a suite. |
 
-| `push_gate` | git's pre-push gate over a repo's `.push-gate.toml` (`chuang-push-gate`, `python -m chuang_platform_kit.push_gate`): a stale base refused first, each check skipped on its mark, and a main that moved during the checks rebased onto for the second push. See [The push gate](#the-push-gate). Standard library. |
 
 ## Install
 
@@ -113,56 +112,15 @@ every change under `plugins/gene-hooks/`; it needs no package tag, since no host
 
 ## The push gate
 
-`push_gate` runs a repo's checks in git's pre-push hook, so a push leaves the box tested. A repo turns it on with a
-hook that calls it and a config at its root:
+git's pre-push gate is not in the kit since 0.26.0 (SMADPickleBot #1019): it is claude-shared's
+`hooks/push_gate.py`, standard library only, over a repo's `.push-gate.toml`, and its docstring is the
+reference for the config. A repo's hook runs it as the sibling checkout:
 
 ```sh
 # .githooks/pre-push  (then: git config core.hooksPath .githooks)
 #!/bin/sh
-exec python -m chuang_platform_kit.push_gate "$@"
+exec python "$(dirname "$0")/../../claude-shared/hooks/push_gate.py" "$@"
 ```
-
-```toml
-# .push-gate.toml
-remote = "origin"
-branch = "main"
-override = "MY_PUSH_UNCHECKED"     # MY_PUSH_UNCHECKED=1 git push: no gate
-gate = ["**"]                      # a push touching none of these goes unchecked (told which marks are missing)
-
-[[check]]
-name = "tests"
-run = ["{python}", "-m", "pytest", "-q"]           # an argv; nonzero refuses the push
-paths = ["src/**", "tests/**"]                     # what its result depends on; `!x/**` excludes
-when = ["**"]                                      # what makes it run (default: its paths)
-mark_url = "https://storage.example/marks/{tree}.json"   # a 200 means it already ran for this tree; or
-# mark = ["{python}", "is_marked.py", "{sha}"]     # a command answering 0
-carry = ["{python}", "carry.py", "{old}", "{new}"] # moves the mark across a rebase
-missing = "has no test mark: CI runs the suites"   # said to a push outside `gate` without the mark
-refusal = "fix the suite, then push"
-skip_codes = [2]                                   # exits that mean "not applicable", not a failure
-```
-
-Placeholders: `{python}`, `{root}`, `{sha}`, `{tree}`, `{base}` (the remote's old sha), `{old}` / `{new}` (across
-a rebase), `{remote}`, `{branch}`. Globs: `**` any folders, `*` within one, a trailing `/` the folder.
-`paths_command` (an argv printing one glob a line) adds paths a script computes.
-
-For each commit pushed to the branch, one line per decision:
-
-1. The branch is fetched, and a head that does not descend from it is refused at once (git would refuse it after the
-   checks anyway).
-2. Each check whose `when` the push touches runs, unless its mark answers; a failure refuses the push. The checks
-   test the checkout, so the pushed commit must be its HEAD (`require_head = false` turns that off).
-3. The branch is fetched again. If it moved during the checks, the pushed commits are rebased onto it (a dirty
-   checkout or a conflict refuses the push with nothing rewritten); the checks whose `paths` the rebase changed run
-   again on the new head, the others' marks are carried; and the push is refused with "rebased onto <sha>; push
-   again, the gate is satisfied", since git pushes the sha it gave the hook. The second push clears on the marks.
-
-Every check it looks at says its seconds and how it ended (`push-gate: tests 4.1 s (mark answered)`; `ran`,
-`ran again`, `failed, exit 1`, `skipped, exit 2`, `mark carried`), and each pushed commit ends with the split,
-`push-gate: checks 31.2 s, rebase check 1.0 s, base check 0.9 s` (steps 2, 3 and 1), so a slow push says where its
-time went. A check that hands its work elsewhere and exits 0 reads as `ran`.
-
-A config that cannot be read refuses the push; a repo without one is not gated.
 
 ## Develop
 

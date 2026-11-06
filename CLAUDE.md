@@ -20,8 +20,8 @@ Every module and public name is in `KIT-REGISTRY.md` (generated; below); the lis
 whole kit. Modules include: `redact`, `cloud_logging`, `lazy_import`, `phone_utils`,
 `request_scope`, `whatsapp_message`, `whatsapp_publisher`, `pubsub` (every
 publish, over REST: no host needs google-cloud-pubsub), `greenapi`,
-`email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk), `push_gate` (git's pre-push gate over a
-repo's `.push-gate.toml`, `chuang-push-gate`; the hosts' hooks are shims over it). The host projects' own rules about them (every
+`email_notify`, `clock`, `monitoring` (the only importer of sentry_sdk). git's pre-push gate is not here: it is
+claude-shared's `hooks/push_gate.py` alone since 0.26.0 (SMADPickleBot #1019), every host's hook calling it. The host projects' own rules about them (every
 WhatsApp send through the publisher, every log line through `setup_logging()`,
 every new secret in `redact.SECRET_ENV_NAMES`) still apply where they are used.
 

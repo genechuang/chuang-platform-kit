@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.26.0 - 2026-11-05 PT
+
+Removed: `push_gate` and the `chuang-push-gate` script (SMADPickleBot #1019, from #971's audit). git's pre-push gate is
+claude-shared's `hooks/push_gate.py` alone; the kit's copy had the same logic, 14 lines of usage text apart. Every host
+hook calls claude-shared's now: SMADPickleBot's since 10/22/26, ChuangFinance's (1d06431) and SMPDReport's (715270b)
+since 11/5/26. No service imports it, so no host's pin needs to move for this release.
+
 ## 0.25.1 - 2026-11-05 PT
 
 Fix; no host call site changes. `gmail_watch.changes` skips a message history names but Gmail answers 404 for (deleted

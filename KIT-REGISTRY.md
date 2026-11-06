@@ -380,35 +380,6 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `envelope(type, data, source, subject=, actor=, correlation_id=, version=, at=, id=, **extra)` | An event as a host publishes it on its event topic: what happened (`type`, e.g. `match.recorded`, and its schema version `v`), a unique `id` for the consumers' dedup, when (`at`, ISO UTC), who said so (`source`), what about (`subject`), by whom (`actor`), wha… |
 | `decode(delivery)` | (payload, attributes, message_id) from one delivery: a push subscription's JSON body ({"message": {...}}), an Eventarc CloudEvent (its `.data` holds the same), or the message dict itself. The payload is the decoded JSON, or the text when it is not JSON. Value… |
 
-## `push_gate`: A push gate for git's pre-push hook: checks run before a push leaves the box, each skipped when its…
-
-| Name | Purpose |
-|---|---|
-| `class Check` | One check of the gate (see the module docstring for each field). |
-| `class Config` | A repo's `.push-gate.toml`. |
-| `load(path)` | The Config in a TOML file; an unknown key or a check without `name` and `run` is a ValueError, so a typo never quietly turns a check off. |
-| `matches(patterns, path)` | True when `path` matches one of `patterns` and none of its `!` exclusions. |
-| `touched(patterns, files)` | The files among `files` that `patterns` cover. |
-| `class Gate` | One run of the gate in a checkout. `say` prints a decision; `env` is the environment the override is read from; `execute` runs a command (an argv, in the checkout) and answers its exit code; `head` answers a URL's HTTP status; `clock` answers seconds (time.mo… |
-| `Gate.enter(phase)` | Close the running phase's lap and start `phase` (None closes it alone). |
-| `Gate.timed(c, start, outcome)` | (no docstring) |
-| `Gate.git(*args)` | (no docstring) |
-| `Gate.rev(ref)` | (no docstring) |
-| `Gate.fetch()` | The remote branch's tip as fetched now; '' when the fetch fails (offline: git's own push decides). |
-| `Gate.is_ancestor(a, b)` | (no docstring) |
-| `Gate.changed(a, b)` | The paths that differ between two commits; None when git cannot say. |
-| `Gate.subject(sha)` | (no docstring) |
-| `Gate.fill(text, **kw)` | (no docstring) |
-| `Gate.argv(cmd, **kw)` | (no docstring) |
-| `Gate.paths(c)` | A check's paths: its `paths` and whatever its `paths_command` prints (once per run). |
-| `Gate.marked(c, **kw)` | True when the check's mark answers for these values; never true for a check without one. |
-| `Gate.run_check(c, start=, again=, **kw)` | Run one check and say its seconds since `start` (its mark's ask included); True when it passed or answered a skip code. |
-| `Gate.refuse(line)` | (no docstring) |
-| `Gate.ref(local_sha, remote_sha)` | The gate for one pushed commit: 0 lets it go, 1 refuses it. Ends, whatever the answer, with the line splitting its seconds by phase. |
-| `Gate.after(local_sha, due)` | Step 3: the branch fetched again after the checks; if it moved, the rebase and the refusal. |
-| `run(lines, root, cfg, **seams)` | The gate over git's pre-push stdin lines (`<local ref> <local sha> <remote ref> <remote sha>`). |
-| `main(argv=, stdin=)` | The console entry: `chuang-push-gate [--config FILE] [remote url]`, the refs on stdin. |
-
 ## `redact`: Scrub tokens and keys out of text before it reaches a log line, an email or a GitHub issue.
 
 | Name | Purpose |
