@@ -176,9 +176,10 @@ print("resolve_env: a Cloud Run container's env, each literal as it is and each 
 reads = []
 
 
-def fake_read(project, name, version):
-    reads.append((project, name, version))
-    return {'TOKEN': b'tok', 'OTHER': b'o'}[name]
+def fake_read(url):
+    reads.append(url.replace(S.API, ''))
+    name = url.split('/secrets/')[1].split('/')[0]
+    return {'payload': {'data': base64.b64encode({'TOKEN': b'tok', 'OTHER': b'o'}[name]).decode()}}
 
 
 ENV = [{'name': 'MODE', 'value': 'live'},
@@ -186,17 +187,18 @@ ENV = [{'name': 'MODE', 'value': 'live'},
        {'name': 'X', 'valueSource': {'secretKeyRef': {'secret': 'projects/other/secrets/OTHER'}}},
        {'name': 'EMPTY'}]
 check("the positive case: literals, a pinned version, latest by default, a full resource name's own project",
-      (S.resolve_env(ENV, 'p', read=fake_read), reads),
-      ({'MODE': 'live', 'API_TOKEN': 'tok', 'X': 'o', 'EMPTY': ''}, [('p', 'TOKEN', '3'), ('other', 'OTHER', 'latest')]))
-check("no entries: an empty dict, nothing read", (S.resolve_env(None, 'p', read=lambda *a: 1 / 0)), {})
+      (S.resolve_env(ENV, 'p', get_json=fake_read), reads),
+      ({'MODE': 'live', 'API_TOKEN': 'tok', 'X': 'o', 'EMPTY': ''},
+       ['/projects/p/secrets/TOKEN/versions/3:access', '/projects/other/secrets/OTHER/versions/latest:access']))
+check("no entries: an empty dict, nothing read", (S.resolve_env(None, 'p', get_json=lambda u: 1 / 0)), {})
 
 
-def refusing(project, name, version):
-    raise RuntimeError(f'403 reading {name}')
+def refusing(url):
+    raise RuntimeError(f"403 reading {url.split('/secrets/')[1].split('/')[0]}")
 
 
 try:
-    S.resolve_env(ENV, 'p', read=refusing)
+    S.resolve_env(ENV, 'p', get_json=refusing)
     refused = None
 except RuntimeError as e:
     refused = str(e)

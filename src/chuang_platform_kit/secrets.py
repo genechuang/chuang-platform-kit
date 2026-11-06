@@ -96,20 +96,29 @@ def default_session():
 def access(project: str, name: str, version: str = 'latest', session=None) -> bytes:
     """The bytes of one secret version. Raises on a refusal (the status, never the data)."""
     session = session or default_session()
-    url = f'{API}/projects/{project}/secrets/{name}/versions/{version}:access'
-    resp = session.get(url, timeout=20)
+    resp = session.get(access_url(project, name, version), timeout=20)
     resp.raise_for_status()
     data = (resp.json().get('payload') or {}).get('data', '')
     return base64.b64decode(data) if data else b''
 
 
-def resolve_env(entries, project: str, read=None, session=None) -> dict:
+def access_url(project: str, name: str, version: str = 'latest') -> str:
+    """Secret Manager's address for one secret version's `:access` read."""
+    return f'{API}/projects/{project}/secrets/{name}/versions/{version}:access'
+
+
+def resolve_env(entries, project: str, get_json=None, session=None) -> dict:
     """{name: value} of a Cloud Run container's `env` entries (a service's or a job's, as the v2 API lists them):
     each literal value as it is, each `valueSource.secretKeyRef` read from Secret Manager at its version ('latest'
     when none), so a desktop run gets the configuration the cloud deployed. A secret named by its full resource name
-    (`projects/<p>/secrets/<name>`) is read from that project. `read(project, name, version) -> bytes` is the seam
-    (default: `access` on `session`); a refusal raises, naming the secret, never a value (0.27.0)."""
-    read = read or (lambda p, n, v: access(p, n, v, session))
+    (`projects/<p>/secrets/<name>`) is read from that project. `get_json(url) -> dict` is the caller's own reader of
+    Google's REST answers (the one it read the service or job with, which its tests already fake); without it,
+    `access` on `session`. A refusal raises, naming the secret, never a value (0.27.0)."""
+    def read(p, n, v):
+        if get_json is None:
+            return access(p, n, v, session)
+        data = ((get_json(access_url(p, n, v)) or {}).get('payload') or {}).get('data', '')
+        return base64.b64decode(data) if data else b''
     out = {}
     for e in entries or []:
         ref = (e.get('valueSource') or {}).get('secretKeyRef')
