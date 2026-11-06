@@ -97,6 +97,8 @@ def hmac_sha256(secret, body: bytes, signature: str, *, prefix: str = '', prefix
     if not got:
         return False
     digest = hmac.new(secret, body or b'', hashlib.sha256).digest()
+    # As bytes: compare_digest raises TypeError on a str that is not ASCII, which a hostile header would turn into a
+    # 500 where the answer is a refusal.
     if encoding == 'hex':
-        return hmac.compare_digest(digest.hex(), got.lower())
-    return hmac.compare_digest(base64.b64encode(digest).decode('ascii'), got)
+        return hmac.compare_digest(digest.hex().encode('ascii'), got.lower().encode('utf-8'))
+    return hmac.compare_digest(base64.b64encode(digest), got.encode('utf-8'))

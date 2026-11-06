@@ -163,5 +163,11 @@ try:
 except ValueError:
     check('an unknown encoding raises', 'ValueError', 'ValueError')
 
+# Snow White's review: hmac.compare_digest raises TypeError on a non-ASCII str, which would make a hostile header a 500.
+check('a non-ASCII hex signature is a refusal, never an exception',
+      W.hmac_sha256('s3cret', body, 'sha256=é' + gh[8:], prefix='sha256='), False)
+check('a non-ASCII base64 signature is a refusal, never an exception',
+      W.hmac_sha256('s3cret', body, 'ünicode', encoding='base64'), False)
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
