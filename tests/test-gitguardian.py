@@ -53,7 +53,13 @@ def fake(calls, writes_ok=True):
         if path.startswith('/sources?'):
             return Resp(json.dumps([{'id': 9, 'full_name': 'Other/Repo'}, {'id': 42, 'full_name': 'genechuang/SMADPickleBot'}]).encode())
         if path.startswith('/sources/42/incidents/secrets'):
-            return Resp(json.dumps(INCIDENTS).encode())
+            status = path.split('status=')[1].split('&')[0] if 'status=' in path else None
+            return Resp(json.dumps([i for i in INCIDENTS if not status or i['status'] == status]).encode())
+        if path.startswith('/incidents/secrets/') and req.get_method() == 'GET':
+            iid = int(path.split('/')[3])
+            for i in INCIDENTS:
+                if i['id'] == iid:
+                    return Resp(json.dumps(i).encode())
         if path.startswith('/occurrences/secrets?'):
             iid = int(path.split('incident_id=')[1].split('&')[0])
             if iid == 3:
@@ -73,9 +79,35 @@ found = GG.open_incidents('k', 'genechuang/SMADPickleBot', opener=fake(calls))
 check("open", ([i['id'] for i in found], GG.detector(found[0]), GG.files(found[0]), GG.detector(found[1]), found[1].get('occurrences_error')),
       ([1, 3], 'Google API Key', ['a.py', 'b.env'], 'secret', 'HTTPError'))
 check("the calls", [(m, p.split('?')[0]) for m, p, _b, _a in calls],
-      [('GET', '/sources'), ('GET', '/sources/42/incidents/secrets'), ('GET', '/occurrences/secrets'), ('GET', '/occurrences/secrets')])
+      [('GET', '/sources'), ('GET', '/sources/42/incidents/secrets'), ('GET', '/sources/42/incidents/secrets'),
+       ('GET', '/occurrences/secrets'), ('GET', '/occurrences/secrets')])
+check("each open state asked for by its own status query",
+      [p.split('status=')[1].split('&')[0] for _m, p, _b, _a in calls if 'incidents/secrets?' in p], ['TRIGGERED', 'ASSIGNED'])
 check("the token header", calls[0][3], 'Token k')
-check("every state", [i['id'] for i in GG.incidents('k', 'genechuang/SMADPickleBot', states=(), opener=fake([]))], [1, 2, 3])
+calls = []
+check("every state: one page, no status query", ([i['id'] for i in GG.incidents('k', 'genechuang/SMADPickleBot', states=(), opener=fake(calls))],
+                                                 any('status=' in p for _m, p, _b, _a in calls)), ([1, 2, 3], False))
+
+
+def dated(req, timeout=None):
+    path = req.full_url.replace(GG.API, '')
+    if path.startswith('/sources?'):
+        return Resp(json.dumps([{'id': 42, 'full_name': 'genechuang/SMADPickleBot'}]).encode())
+    if 'status=TRIGGERED' in path:
+        return Resp(json.dumps([{'id': 7, 'status': 'TRIGGERED', 'date': '2026-11-01T00:00:00Z'}]).encode())
+    return Resp(json.dumps([{'id': 8, 'status': 'ASSIGNED', 'date': '2026-11-03T00:00:00Z'},
+                            {'id': 7, 'status': 'TRIGGERED', 'date': '2026-11-01T00:00:00Z'}]).encode())
+
+
+check("the newest first across states, each incident once",
+      [i['id'] for i in GG.incidents('k', 'genechuang/SMADPickleBot', opener=dated)], [8, 7])
+check("one incident by id, whatever its state", GG.incident('k', 2, opener=fake([]))['status'], 'RESOLVED')
+try:
+    GG.incident('k', 99, opener=fake([]))
+    missing = None
+except urllib.error.HTTPError as e:
+    missing = e.code
+check("an unknown id is GitGuardian's 404", missing, 404)
 
 print("ignore() posts the note then the reason; a reason outside the list is refused before any call")
 calls = []
