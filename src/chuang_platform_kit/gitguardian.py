@@ -58,12 +58,31 @@ def source_id(key, repo, opener=None):
 
 def incidents(key, repo, states=OPEN_STATES, opener=None, per_page=100):
     """The repository's secret incidents in `states` (the open ones by default),
-    newest first, without occurrences (the list never embeds them)."""
+    newest first, without occurrences (the list never embeds them). Each state is
+    asked for by its own `status` query (0.27.0), so a page of resolved incidents
+    never hides an older open one; empty `states` lists one page of every state.
+    The answer is filtered by state too, in case the API ignores the parameter."""
     sid = source_id(key, repo, opener=opener)
-    q = urllib.parse.urlencode({'per_page': per_page, 'ordering': '-date'})
-    found = _call(f'/sources/{sid}/incidents/secrets?{q}', key, opener=opener) or []
-    wanted = {s.upper() for s in states} if states else None
-    return [i for i in found if not wanted or (i.get('status') or '').upper() in wanted]
+    wanted = [s.upper() for s in states] if states else []
+    found, seen = [], set()
+    for status in wanted or [None]:
+        params = {'per_page': per_page, 'ordering': '-date'}
+        if status:
+            params['status'] = status
+        for i in _call(f'/sources/{sid}/incidents/secrets?{urllib.parse.urlencode(params)}', key, opener=opener) or []:
+            if i.get('id') not in seen and (not wanted or (i.get('status') or '').upper() in wanted):
+                seen.add(i.get('id'))
+                found.append(i)
+    if len(wanted) > 1:
+        found.sort(key=lambda i: i.get('date') or '', reverse=True)
+    return found
+
+
+def incident(key, incident_id, opener=None):
+    """One secret incident by its id, whatever its state (a closed issue's
+    incident read back to learn whether it was resolved); urllib's HTTPError
+    when GitGuardian answers 404 or refuses."""
+    return _call(f'/incidents/secrets/{int(incident_id)}', key, opener=opener)
 
 
 def with_occurrences(key, incident, opener=None, limit=MAX_OCCURRENCES):
