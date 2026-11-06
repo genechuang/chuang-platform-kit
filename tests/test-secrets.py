@@ -172,6 +172,36 @@ finally:
             sys.modules[k] = v
 check("default_session without google-auth", fallback, 'TokenSession')
 
+print("resolve_env: a Cloud Run container's env, each literal as it is and each secret reference read at its version")
+reads = []
+
+
+def fake_read(project, name, version):
+    reads.append((project, name, version))
+    return {'TOKEN': b'tok', 'OTHER': b'o'}[name]
+
+
+ENV = [{'name': 'MODE', 'value': 'live'},
+       {'name': 'API_TOKEN', 'valueSource': {'secretKeyRef': {'secret': 'TOKEN', 'version': '3'}}},
+       {'name': 'X', 'valueSource': {'secretKeyRef': {'secret': 'projects/other/secrets/OTHER'}}},
+       {'name': 'EMPTY'}]
+check("the positive case: literals, a pinned version, latest by default, a full resource name's own project",
+      (S.resolve_env(ENV, 'p', read=fake_read), reads),
+      ({'MODE': 'live', 'API_TOKEN': 'tok', 'X': 'o', 'EMPTY': ''}, [('p', 'TOKEN', '3'), ('other', 'OTHER', 'latest')]))
+check("no entries: an empty dict, nothing read", (S.resolve_env(None, 'p', read=lambda *a: 1 / 0)), {})
+
+
+def refusing(project, name, version):
+    raise RuntimeError(f'403 reading {name}')
+
+
+try:
+    S.resolve_env(ENV, 'p', read=refusing)
+    refused = None
+except RuntimeError as e:
+    refused = str(e)
+check("a refused secret raises, naming the secret", refused, '403 reading TOKEN')
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

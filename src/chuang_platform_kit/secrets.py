@@ -103,6 +103,27 @@ def access(project: str, name: str, version: str = 'latest', session=None) -> by
     return base64.b64decode(data) if data else b''
 
 
+def resolve_env(entries, project: str, read=None, session=None) -> dict:
+    """{name: value} of a Cloud Run container's `env` entries (a service's or a job's, as the v2 API lists them):
+    each literal value as it is, each `valueSource.secretKeyRef` read from Secret Manager at its version ('latest'
+    when none), so a desktop run gets the configuration the cloud deployed. A secret named by its full resource name
+    (`projects/<p>/secrets/<name>`) is read from that project. `read(project, name, version) -> bytes` is the seam
+    (default: `access` on `session`); a refusal raises, naming the secret, never a value (0.27.0)."""
+    read = read or (lambda p, n, v: access(p, n, v, session))
+    out = {}
+    for e in entries or []:
+        ref = (e.get('valueSource') or {}).get('secretKeyRef')
+        if not ref:
+            out[e['name']] = e.get('value', '')
+            continue
+        name, where = ref['secret'], project
+        if name.startswith('projects/'):
+            parts = name.split('/')
+            where, name = parts[1], parts[3]
+        out[e['name']] = read(where, name, ref.get('version') or 'latest').decode('utf-8')
+    return out
+
+
 def load_json(project: str, name: str, into_env: bool = False, overwrite: bool = False,
               version: str = 'latest', session=None) -> dict:
     """A secret holding a JSON object, parsed; with `into_env`, each key set in
