@@ -23,7 +23,11 @@
 # and a session wrote "1:00" at 12:48): every tool result carries the clock too, so a
 # reply written mid-turn opens with a fresh stamp, never an extrapolated one. Wired as
 # `hooks.PostToolUse` (no matcher) beside the UserPromptSubmit entry.
+#
+# Since 11/7/26 (1.16.0) the prompt branch also carries the model check (SMADPickleBot #423): model-check.lib.sh, sourced
+# below, hands the prompted desktop session the hour's check once an hour per box and nothing otherwise.
 input=""
+MODEL_CHECK_TEXT=""
 [ -t 0 ] || IFS= read -r -d '' -t 1 input 2>/dev/null
 case "$input" in
   *'"hook_event_name"'*'"UserPromptSubmit"'*) event=UserPromptSubmit ;;
@@ -42,6 +46,13 @@ if [ "$event" = UserPromptSubmit ]; then
       done ;;
   esac
   shopt -u nocasematch
+  # The model check rides this prompt (SMADPickleBot #423; Gene, 11/7/26 11:37 AM PT: "add the model check to pre-prompt
+  # hook, if this doesn't add much latency"): model-check.lib.sh, builtins only, sets MODEL_CHECK_TEXT once an hour per
+  # box and leaves it empty otherwise, found beside this script in the version boot.sh chose, so every open session
+  # carries it at its next prompt with no reload. The clock's line is unchanged when it has nothing to say.
+  mcdir="${BASH_SOURCE[0]%/*}"
+  [ "$mcdir" = "${BASH_SOURCE[0]}" ] && mcdir=.
+  [ -f "$mcdir/model-check.lib.sh" ] && . "$mcdir/model-check.lib.sh" && model_check
 fi
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%a %m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 [ -n "$clock" ] || exit 0
@@ -49,5 +60,5 @@ if [ "$event" = PostToolUse ]; then
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT), copied, never estimated."}}' "$clock"
   exit 0
 fi
-printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT."}}' "$clock"
+printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT.%s"}}' "$clock" "${MODEL_CHECK_TEXT:+ $MODEL_CHECK_TEXT}"
 exit 0
