@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.29.0 - 2026-11-07 PT
+
+Additive; no host call site changes. `secrets` is the one place a secret is written (SMADPickleBot #1109; Gene, 11/7/26:
+"secrets write and management should be done in ONE place in chuang-kit"): `add_version` now destroys the versions it
+replaced once the new one is in (`keep=1` by default, `keep=0` to skip; a refused destroy is a WARNING, never the
+write's failure), since Secret Manager bills every version not destroyed and readers take `latest`; `versions`,
+`prune` and `delete` beside it; `python -m chuang_platform_kit.secrets add|prune|delete PROJECT NAME` (the value on
+stdin, never printed) for a script or a person; and `writers(root)`, the check a host's suite runs to refuse any other
+Secret Manager write in its tree. A writer whose role adds versions but cannot destroy them (`secretVersionAdder`)
+needs `roles/secretmanager.secretVersionManager` on that secret for the prune.
+
 ## 0.28.0 - 2026-11-07 PT
 
 Additive; no host call site changes. `greenapi.post` (SMADPickleBot #1064): one POST to a GREEN-API method with the

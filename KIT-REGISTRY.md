@@ -500,15 +500,21 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `class TokenSession` | The session over the standard library and a bearer token, for a box with no application-default credentials and no google-auth: `token` is a string or a callable asked at each call, by default `google_auth.access_token` (a job's variable, a service-account ke… |
 | `TokenSession.get(url, timeout=)` | (no docstring) |
 | `TokenSession.post(url, json=, timeout=)` | (no docstring) |
+| `TokenSession.delete(url, timeout=)` | (no docstring) |
 | `default_session()` | google-auth's AuthorizedSession on the default credentials where google-auth is installed and finds some (a job's service account on Cloud Run, `gcloud auth application-default login` on a desktop); else a `TokenSession` over `google_auth.access_token`, which… |
 | `access(project, name, version=, session=)` | The bytes of one secret version. Raises on a refusal (the status, never the data). |
 | `access_url(project, name, version=)` | Secret Manager's address for one secret version's `:access` read. |
 | `resolve_env(entries, project, get_json=, session=)` | {name: value} of a Cloud Run container's `env` entries (a service's or a job's, as the v2 API lists them): each literal value as it is, each `valueSource.secretKeyRef` read from Secret Manager at its version ('latest' when none), so a desktop run gets the con… |
 | `load_json(project, name, into_env=, overwrite=, version=, session=)` | A secret holding a JSON object, parsed; with `into_env`, each key set in os.environ (an existing variable kept unless `overwrite`), so a job's logins live in one secret and reach the code as the environment it already reads. |
-| `add_version(project, name, data, session=)` | A new version of the secret holding `data` (bytes or str); the version's resource name. Raises on a refusal: the caller reports its kind, never the data. |
+| `add_version(project, name, data, session=, keep=)` | A new version of the secret holding `data` (bytes or str); the version's resource name. Raises on a refusal: the caller reports its kind, never the data. Then the versions it replaced are destroyed (`prune`, the newest `keep` kept; 0.29.0): Secret Manager bil… |
+| `versions(project, name, session=)` | [(number, state)] of every version of the secret, newest first; the state ENABLED, DISABLED or DESTROYED. Metadata only: no value is read. Raises on a refusal. |
+| `prune(project, name, keep=, session=)` | Destroys every enabled or disabled version of the secret but its newest `keep` enabled ones; the numbers destroyed, newest first. A secret with no enabled version is left alone, so a retired secret's disabled versions wait for its `delete`. Destroying cannot… |
+| `delete(project, name, session=)` | Deletes the secret and every version of it: True when this call deleted it, False when it was not there. Cannot be undone: a caller deletes only what its owner confirmed. Raises on another refusal. |
+| `writers(root, skip=)` | [(path, line number)] of each tracked file line in the git repository at `root` that writes Secret Manager itself, outside this module: a project's suite refuses any, so this module stays the one writer (Gene, 11/7/26: "secrets write and management should be… |
 | `ensure(project, name, session=)` | The secret `name` exists in `project` (automatic replication, no versions yet): True when this call created it, False when it was there. `add_version()` answers 404 to a secret that was never created, so a provisioning script calls this first. |
 | `write_file(env, var, path, mode=)` | The secret in env[var] written as the file at `path`, readable by this user alone, so a script that reads a file (a credentials JSON, an OAuth token) finds it. False, and the file untouched, when the variable is empty or a file is already there. |
 | `renew_if_changed(project, name, before, path, session=)` | After a step that may refresh a token file: when the file's content differs from `before` (the value the step started with), store it as a new version of the secret. 'missing' (no file), 'unchanged', or the new version's name. |
+| `main(argv=, stdin=, session=)` | `python -m chuang_platform_kit.secrets add\|prune\|delete PROJECT NAME`, the one way a script or a person writes a secret (a PowerShell store, a rotation): `add` reads the value from stdin (never echoed, never printed), creates the secret when it is missing a… |
 
 ## `sentry_api`: Sentry's REST API, one client for every project (SMAD PickleBot #569, out of its picklebot_core/sen…
 

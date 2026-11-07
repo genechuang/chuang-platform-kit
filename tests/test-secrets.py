@@ -45,23 +45,46 @@ class Resp:
 
 
 class Session:
-    """A fake AuthorizedSession: `store` is secret name -> bytes; every call recorded."""
+    """A fake AuthorizedSession: `store` is secret name -> bytes, `vers` name -> {number: state}; every call recorded.
+    A secret named `nodestroy` refuses a destroy (a writer whose role can add but not destroy)."""
 
-    def __init__(self, store):
-        self.store, self.calls = store, []
+    def __init__(self, store, vers=None):
+        self.store, self.calls, self.vers = store, [], vers or {}
 
     def get(self, url, timeout=None):
         self.calls.append(('GET', url))
-        name = url.split('/secrets/')[1].split('/')[0]
-        if name not in self.store:
+        name = url.split('/secrets/')[1].split('/')[0].split('?')[0]
+        if '/versions?' in url:
+            return Resp(200, {'versions': [{'name': f'projects/p/secrets/{name}/versions/{n}', 'state': st}
+                                           for n, st in self.vers.get(name, {}).items()]})
+        if name not in self.store and name not in self.vers:
             return Resp(404, {'error': 'not found'})
-        return Resp(200, {'payload': {'data': base64.b64encode(self.store[name]).decode('ascii')}})
+        return Resp(200, {'payload': {'data': base64.b64encode(self.store.get(name, b'')).decode('ascii')}})
+
+    def delete(self, url, timeout=None):
+        self.calls.append(('DELETE', url))
+        name = url.split('/secrets/')[1]
+        if name not in self.store:
+            return Resp(404, {})
+        del self.store[name]
+        return Resp(200, {})
 
     def post(self, url, json=None, timeout=None):
         self.calls.append(('POST', url, json))
+        if url.endswith(':destroy'):
+            name, n = url.split('/secrets/')[1].split('/versions/')
+            if name == 'nodestroy':
+                return Resp(403, {})
+            self.vers[name][int(n.split(':')[0])] = 'DESTROYED'
+            return Resp(200, {})
         name = url.split('/secrets/')[1].split(':')[0]
         if name == 'refused':
             return Resp(403, {})
+        if name in self.vers:
+            v = max(self.vers[name], default=0) + 1
+            self.vers[name][v] = 'ENABLED'
+            self.store[name] = base64.b64decode(json['payload']['data'])
+            return Resp(200, {'name': f'projects/p/secrets/{name}/versions/{v}'})
         self.store[name] = base64.b64decode(json['payload']['data'])
         return Resp(200, {'name': f'projects/p/secrets/{name}/versions/7'})
 
@@ -97,7 +120,7 @@ check("not an object", shape, 'secret LIST is not a JSON object')
 
 print("add_version() posts the base64 payload and answers the version name; a refusal raises")
 name = S.add_version('p', 'TOKEN', '{"t": 1}', session=sess)
-check("version", (name, sess.store['TOKEN'], sess.calls[-1][1]),
+check("version", (name, sess.store['TOKEN'], [c[1] for c in sess.calls if c[0] == 'POST'][-1]),
       ('projects/p/secrets/TOKEN/versions/7', b'{"t": 1}', 'https://secretmanager.googleapis.com/v1/projects/p/secrets/TOKEN:addVersion'))
 try:
     S.add_version('p', 'refused', b'x', session=sess)
@@ -105,6 +128,100 @@ try:
 except RuntimeError as e:
     denied = str(e)
 check("403", denied, 'HTTP 403')
+
+print("add_version() destroys the versions it replaced, keeping the newest; a refused destroy never fails the write")
+vs = Session({}, {'GMAIL': {1: 'ENABLED', 2: 'DISABLED', 3: 'ENABLED', 4: 'DESTROYED'}, 'nodestroy': {1: 'ENABLED'}})
+made = S.add_version('p', 'GMAIL', 'new', session=vs)
+check("the positive case: v5 added, v1-v3 destroyed, v4 left destroyed",
+      (made, vs.vers['GMAIL']), ('projects/p/secrets/GMAIL/versions/5',
+                                 {1: 'DESTROYED', 2: 'DESTROYED', 3: 'DESTROYED', 4: 'DESTROYED', 5: 'ENABLED'}))
+import logging  # noqa: E402
+warned = []
+handler = logging.Handler()
+handler.emit = lambda r: warned.append(r.getMessage())
+logging.getLogger('chuang_platform_kit.secrets').addHandler(handler)
+made = S.add_version('p', 'nodestroy', 'x', session=vs)
+check("a refused destroy: the write stands and says so at WARNING", (made, vs.vers['nodestroy'], len(warned)),
+      ('projects/p/secrets/nodestroy/versions/2', {1: 'ENABLED', 2: 'ENABLED'}, 1))
+before = len(vs.calls)
+S.add_version('p', 'GMAIL', 'kept', session=vs, keep=0)
+check("keep=0 adds without listing or destroying", ([c[0] for c in vs.calls[before:]], vs.vers['GMAIL'][5]), (['POST'], 'ENABLED'))
+
+print("prune() keeps the newest enabled versions; a secret with none enabled is left alone; versions() is newest first")
+vs = Session({}, {'A': {1: 'ENABLED', 2: 'ENABLED', 3: 'ENABLED'}, 'RETIRED': {1: 'DISABLED', 2: 'DISABLED'}})
+check("versions", S.versions('p', 'A', session=vs), [(3, 'ENABLED'), (2, 'ENABLED'), (1, 'ENABLED')])
+check("keep 2", (S.prune('p', 'A', keep=2, session=vs), vs.vers['A']), ([1], {1: 'DESTROYED', 2: 'ENABLED', 3: 'ENABLED'}))
+check("all disabled: nothing destroyed", (S.prune('p', 'RETIRED', session=vs), vs.vers['RETIRED']),
+      ([], {1: 'DISABLED', 2: 'DISABLED'}))
+
+print("delete(): True when deleted, False when not there; TokenSession has delete")
+ds = Session({'OLD': b'x'})
+check("delete", (S.delete('p', 'OLD', session=ds), S.delete('p', 'OLD', session=ds), ds.calls[0]),
+      (True, False, ('DELETE', 'https://secretmanager.googleapis.com/v1/projects/p/secrets/OLD')))
+check("TokenSession.delete", callable(getattr(S.TokenSession, 'delete', None)), True)
+
+print("main(): add reads stdin, creates a missing secret, adds and prunes; prune; delete; usage; nothing on stdin")
+import io  # noqa: E402
+import contextlib  # noqa: E402
+
+
+class Created(Session):
+    def post(self, url, json=None, timeout=None):
+        if '?secretId=' in url:
+            name = url.split('secretId=')[1]
+            self.vers[name] = {}
+            self.calls.append(('CREATE', name))
+            return Resp(200, {})
+        return Session.post(self, url, json, timeout)
+
+
+cs = Created({}, {'KEPT': {1: 'ENABLED'}})
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    rc_new = S.main(['add', 'p', 'NEW'], stdin=io.BytesIO(b'v1-secret\r\n'), session=cs)
+    rc_kept = S.main(['add', 'p', 'KEPT'], stdin=io.BytesIO(b'v2'), session=cs)
+check("add: created, stored without the line end, the older version destroyed, the value never printed",
+      (rc_new, rc_kept, cs.store['NEW'], cs.vers['KEPT'], 'v1-secret' in out.getvalue(), 'CREATE' in [c[0] for c in cs.calls]),
+      (0, 0, b'v1-secret', {1: 'DESTROYED', 2: 'ENABLED'}, False, True))
+err = io.StringIO()
+with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+    usage = S.main(['put', 'p', 'X'], session=cs)
+    empty = S.main(['add', 'p', 'KEPT'], stdin=io.BytesIO(b'  \n'), session=cs)
+    refused = S.main(['add', 'p', 'refused'], stdin=io.BytesIO(b'x'), session=Created({}, {}))
+check("usage 2, an empty stdin 2 and nothing written, a refusal 1", (usage, empty, refused, cs.vers['KEPT']),
+      (2, 2, 1, {1: 'DESTROYED', 2: 'ENABLED'}))
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, 'value.txt')
+    with open(path, 'wb') as fh:
+        fh.write(b'from-file\r\n')
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        rc_file = S.main(['add', 'p', 'KEPT', '--data-file', path], session=cs)
+        rc_bad = S.main(['prune', 'p', 'KEPT', '--data-file', path], session=cs)
+        rc_none = S.main(['add', 'p', 'KEPT', '--data-file'], session=cs)
+check("--data-file: read from the file; only with add; a path is required", (rc_file, cs.store['KEPT'], cs.vers['KEPT'], rc_bad, rc_none),
+      (0, b'from-file', {1: 'DESTROYED', 2: 'DESTROYED', 3: 'ENABLED'}, 2, 2))
+
+print("writers(): a gcloud version add, a list-form destroy, an addVersion URL and a secret delete are found; docs, tests and the kit's module are not")
+import subprocess  # noqa: E402
+with tempfile.TemporaryDirectory() as repo:
+    files = {
+        'scripts/store.ps1': 'gcloud secrets versions add TOKEN --data-file=$tmp\n',
+        'tools/env.py': "x = 1\ngcloud('secrets', 'versions', 'destroy', '3')\n",
+        'svc/rest.py': "url = f'{API}/secrets/{n}:addVersion'\n",
+        'ops/clean.sh': 'gcloud secrets delete OLD --quiet\n',
+        'ops/read.sh': 'gcloud secrets versions access latest --secret=TOKEN\npython -m chuang_platform_kit.secrets add p TOKEN\n',
+        'README.md': 'gcloud secrets versions add TOKEN\n',
+        'tests/test-x.py': 'gcloud secrets versions add TOKEN\n',
+        'src/chuang_platform_kit/secrets.py': "url = ':addVersion'\n",
+    }
+    for path, text in files.items():
+        os.makedirs(os.path.join(repo, os.path.dirname(path)), exist_ok=True)
+        with open(os.path.join(repo, path), 'w', encoding='utf-8') as fh:
+            fh.write(text)
+    subprocess.run(['git', 'init', '-q'], cwd=repo)
+    subprocess.run(['git', 'add', '.'], cwd=repo)
+    check("found", sorted(S.writers(repo)),
+          [('ops/clean.sh', 1), ('scripts/store.ps1', 1), ('svc/rest.py', 1), ('tools/env.py', 2)])
 
 print("write_file() writes the secret as a 0600 file once; empty or existing: False, untouched")
 with tempfile.TemporaryDirectory() as d:
@@ -158,8 +275,10 @@ try:
 except RuntimeError as e:
     miss = str(e)
 check("404", (miss, len(asked)), ('HTTP 404', 2))
-check("post", (S.add_version('p', 'TOKEN', 'x', session=ts), sent[-1][0], json.loads(sent[-1][3])['payload']['data']),
-      ('projects/p/secrets/TOKEN/versions/8', 'POST', base64.b64encode(b'x').decode('ascii')))
+made = S.add_version('p', 'TOKEN', 'x', session=ts)
+posts = [s for s in sent if s[0] == 'POST']
+check("post, then the version list the prune reads", (made, json.loads(posts[-1][3])['payload']['data'], sent[-1][0], '/versions?' in sent[-1][1]),
+      ('projects/p/secrets/TOKEN/versions/8', base64.b64encode(b'x').decode('ascii'), 'GET', True))
 saved = {k: sys.modules.get(k) for k in ('google', 'google.auth', 'google.auth.exceptions', 'google.auth.transport.requests')}
 sys.modules['google'] = None
 try:

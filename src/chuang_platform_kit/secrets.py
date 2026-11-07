@@ -15,12 +15,22 @@ with `.get(url, timeout=)` and `.post(url, json=, timeout=)` answering an object
     secrets.write_file(os.environ, 'GOOGLE_CREDENTIALS_JSON', 'credentials.json')   # for a script that reads a file
     secrets.renew_if_changed('my-project', 'GMAIL_OAUTH_TOKEN_JSON', before, 'token.json')
 
+The one place a secret is written (0.29.0; Gene, 11/7/26: "secrets write and management should be done in ONE place
+in chuang-kit"): every write goes through `add_version`, which destroys the versions it replaced, since Secret Manager
+bills each version until it is destroyed and every reader takes `latest`; `prune` and `delete` beside it; a script or
+a person writes with `python -m chuang_platform_kit.secrets add PROJECT NAME` (the value on stdin); and a project's
+suite refuses any other write in its tree with `writers(root)`.
+
 Nothing here logs, prints or returns a secret's value except to its caller; a refusal raises with
 the HTTP status and never the payload. Names are the caller's: the kit knows no project.
 """
 import base64
 import json
+import logging
 import os
+import re
+import subprocess
+import sys
 import urllib.error
 import urllib.request
 
@@ -74,6 +84,9 @@ class TokenSession:
         req = urllib.request.Request(url, data=_dumps(json or {}).encode('utf-8'), method='POST',
                                      headers={'Content-Type': 'application/json'})
         return self._send(req, timeout)
+
+    def delete(self, url: str, timeout: float = 20):
+        return self._send(urllib.request.Request(url, method='DELETE'), timeout)
 
 
 def default_session():
@@ -149,15 +162,102 @@ def load_json(project: str, name: str, into_env: bool = False, overwrite: bool =
     return data
 
 
-def add_version(project: str, name: str, data, session=None) -> str:
+def add_version(project: str, name: str, data, session=None, keep: int = 1) -> str:
     """A new version of the secret holding `data` (bytes or str); the version's
-    resource name. Raises on a refusal: the caller reports its kind, never the data."""
+    resource name. Raises on a refusal: the caller reports its kind, never the data.
+    Then the versions it replaced are destroyed (`prune`, the newest `keep` kept; 0.29.0): Secret Manager bills every
+    version not destroyed, and every reader takes `latest` (Gene, 11/7/26: "we don't use older versions period").
+    A failed prune is a WARNING and never the write's failure: the new version is in, and the next write prunes again.
+    `keep=0` adds without pruning."""
     session = session or default_session()
     payload = data.encode('utf-8') if isinstance(data, str) else bytes(data)
     url = f'{API}/projects/{project}/secrets/{name}:addVersion'
     resp = session.post(url, json={'payload': {'data': base64.b64encode(payload).decode('ascii')}}, timeout=20)
     resp.raise_for_status()
-    return resp.json().get('name', '')
+    made = resp.json().get('name', '')
+    if keep:
+        try:
+            prune(project, name, keep, session)
+        except Exception as e:   # the write succeeded; a refused prune (a role without destroy) waits for the next
+            logging.getLogger(__name__).warning('secret %s: the versions this write replaced were not destroyed: %s',
+                                                name, str(e)[:160])
+    return made
+
+
+def versions(project: str, name: str, session=None) -> list:
+    """[(number, state)] of every version of the secret, newest first; the state ENABLED, DISABLED or DESTROYED.
+    Metadata only: no value is read. Raises on a refusal."""
+    session = session or default_session()
+    out, token = [], ''
+    while True:
+        url = f'{API}/projects/{project}/secrets/{name}/versions?pageSize=500' + (f'&pageToken={token}' if token else '')
+        resp = session.get(url, timeout=20)
+        resp.raise_for_status()
+        body = resp.json() or {}
+        for v in body.get('versions') or []:
+            n = str(v.get('name', '')).rsplit('/', 1)[-1]
+            if n.isdigit():
+                out.append((int(n), v.get('state', '')))
+        token = body.get('nextPageToken') or ''
+        if not token:
+            return sorted(out, reverse=True)
+
+
+def prune(project: str, name: str, keep: int = 1, session=None) -> list:
+    """Destroys every enabled or disabled version of the secret but its newest `keep` enabled ones; the numbers
+    destroyed, newest first. A secret with no enabled version is left alone, so a retired secret's disabled versions
+    wait for its `delete`. Destroying cannot be undone; nothing reads past `latest`. Raises on a refusal."""
+    session = session or default_session()
+    live = versions(project, name, session)
+    kept = [n for n, state in live if state == 'ENABLED'][:max(int(keep), 1)]
+    if not kept:
+        return []
+    gone = []
+    for n, state in live:
+        if state in ('ENABLED', 'DISABLED') and n not in kept:
+            resp = session.post(f'{API}/projects/{project}/secrets/{name}/versions/{n}:destroy', json={}, timeout=20)
+            resp.raise_for_status()
+            gone.append(n)
+    return gone
+
+
+def delete(project: str, name: str, session=None) -> bool:
+    """Deletes the secret and every version of it: True when this call deleted it, False when it was not there.
+    Cannot be undone: a caller deletes only what its owner confirmed. Raises on another refusal."""
+    session = session or default_session()
+    resp = session.delete(f'{API}/projects/{project}/secrets/{name}', timeout=20)
+    if resp.status_code == 404:
+        return False
+    resp.raise_for_status()
+    return True
+
+
+# A write to Secret Manager made anywhere but here: a version added, destroyed or disabled, a secret created or
+# deleted, by gcloud (as words or as an argument list) or by the REST API.
+_WRITE = re.compile(r"secrets\s+(?:versions\s+(?:add|destroy|disable)|create|delete)\b"
+                    r"|['\"]secrets['\"],\s*['\"](?:create|delete)['\"]"
+                    r"|['\"]versions['\"],\s*['\"](?:add|destroy|disable)['\"]"
+                    r"|:addVersion\b|/versions/[^'\"\s]*:(?:destroy|disable)\b")
+
+
+def writers(root: str, skip=('tests/', 'docs/')) -> list:
+    """[(path, line number)] of each tracked file line in the git repository at `root` that writes Secret Manager
+    itself, outside this module: a project's suite refuses any, so this module stays the one writer (Gene, 11/7/26:
+    "secrets write and management should be done in ONE place in chuang-kit"). Markdown and the `skip` folders are
+    left out; a line telling a person to run `gcloud secrets versions add` counts too, since that write skips the
+    prune: it names `python -m chuang_platform_kit.secrets add` instead."""
+    files = subprocess.run(['git', 'ls-files'], cwd=root, capture_output=True, text=True).stdout.split('\n')
+    found = []
+    for f in filter(None, files):
+        if f.endswith('.md') or f.startswith(tuple(skip)) or f.endswith('chuang_platform_kit/secrets.py'):
+            continue
+        try:
+            with open(os.path.join(root, f), encoding='utf-8') as fh:
+                lines = fh.read().splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        found += [(f, i) for i, line in enumerate(lines, 1) if _WRITE.search(line)]
+    return found
 
 
 def ensure(project: str, name: str, session=None) -> bool:
@@ -201,3 +301,56 @@ def renew_if_changed(project: str, name: str, before: str, path: str, session=No
     if after.strip() == (before or '').strip():
         return 'unchanged'
     return add_version(project, name, after, session=session)
+
+
+USAGE = ('usage: python -m chuang_platform_kit.secrets add PROJECT NAME [--data-file PATH]   (else the value on stdin)\n'
+         '       python -m chuang_platform_kit.secrets prune PROJECT NAME\n'
+         '       python -m chuang_platform_kit.secrets delete PROJECT NAME')
+
+
+def main(argv=None, stdin=None, session=None) -> int:
+    """`python -m chuang_platform_kit.secrets add|prune|delete PROJECT NAME`, the one way a script or a person writes a
+    secret (a PowerShell store, a rotation): `add` reads the value from stdin (never echoed, never printed), creates the
+    secret when it is missing and adds the version, which destroys the ones it replaced (`--data-file PATH` reads the
+    value from a file instead, for a shell such as PowerShell 5.1 that cannot redirect a file into stdin); `prune`
+    destroys all but the newest; `delete` deletes the secret. Prints names and version numbers only; 2 on a usage
+    error, 1 on a refusal."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    data_file = None
+    if '--data-file' in args:
+        i = args.index('--data-file')
+        data_file = args[i + 1] if i + 1 < len(args) else ''
+        del args[i:i + 2]
+    if len(args) != 3 or args[0] not in ('add', 'prune', 'delete') or data_file == '' or (data_file and args[0] != 'add'):
+        print(USAGE, file=sys.stderr)
+        return 2
+    cmd, project, name = args
+    session = session or default_session()
+    try:
+        if cmd == 'add':
+            if data_file:
+                with open(data_file, 'rb') as fh:
+                    data = fh.read()
+            else:
+                data = (stdin or sys.stdin.buffer).read()
+            if isinstance(data, str):
+                data = data.encode('utf-8')
+            if not data.strip():
+                print(f'{name}: nothing on stdin, nothing written', file=sys.stderr)
+                return 2
+            ensure(project, name, session)
+            made = add_version(project, name, data.rstrip(b'\r\n'), session=session)
+            print(f'{name}: version {made.rsplit("/", 1)[-1]} added; older versions destroyed')
+        elif cmd == 'prune':
+            gone = prune(project, name, session=session)
+            print(f'{name}: destroyed ' + (', '.join(f'v{n}' for n in gone) if gone else 'nothing'))
+        else:
+            print(f'{name}: ' + ('deleted' if delete(project, name, session) else 'not there'))
+    except Exception as e:   # the status, never a value
+        print(f'{name}: {cmd} refused: {str(e)[:160]}', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':   # pragma: no cover - the CLI
+    sys.exit(main())
