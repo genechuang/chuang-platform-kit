@@ -79,6 +79,10 @@ def main():
           ('Weekly / all models' in text, 'account handover starts now' in text, 'already begun for this account today' in text,
            'Black Widow' in text, 'Snow White' in text),
           (True, True, True, False, False))
+    check('  since 1.18.0 a session on another machine is messaged to switch itself, session mail when it cannot be reached, and counted only once it answers',
+          ('another machine (a Remote Control row)' in text, 'ListAgents' in text, 'session mail instead' in text,
+           'only for those that answered' in text),
+          (True, True, True, True))
     check('  the text carries nothing JSON would need escaped, and nothing outside ASCII (Windows consoles decode the rest)',
           ('"' in text, '\\' in text, '%' in text.replace('0%', ''), text.isascii()), (False, False, False, True))
 
