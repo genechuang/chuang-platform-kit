@@ -349,7 +349,8 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `api_host(instance_id, env=)` | The instance's API host: the GREENAPI_API_URL variable when set (the console's apiUrl, for an instance whose host does not follow the pattern), else https://<first four digits>.api.greenapi.com. Never the shared api.green-api.com, which went dark on 10/10/26… |
 | `get_api_url(instance_id, api_token, method)` | Build a GREEN-API endpoint URL on the instance's own host (api_host()). |
 | `get_state_instance(instance_id, api_token, timeout=)` | Ask GREEN-API whether the WhatsApp instance is still authorized. |
-| `call_api(instance_id, api_token, method, payload=, timeout=, connect_retries=, status_retries=)` | Call a GREEN-API endpoint. |
+| `post(instance_id, api_token, method, payload=, timeout=, connect_retries=, status_retries=)` | One POST to a GREEN-API method, the Response as it came (0.28.0, SMADPickleBot #1064): `timeout` requests' own (a number, or a (connect, read) pair); a CONNECT timeout retried `connect_retries` times, CONNECT_BACKOFF_SECONDS then twice that apart (the request… |
+| `call_api(instance_id, api_token, method, payload=, timeout=, connect_retries=, status_retries=)` | Call a GREEN-API endpoint: `post` with the JSON read and the ERROR on a refusal. |
 | `get_group_data(instance_id, api_token, group_id, connect_retries=)` | Fetch group data including participants and admin status. |
 | `get_group_description(instance_id, api_token, group_id)` | Fetch a group's description — the text WhatsApp shows under Group Info. |
 | `get_group_admin_ids(instance_id, api_token, group_id)` | Get the set of phone IDs that are admins of a WhatsApp group. |

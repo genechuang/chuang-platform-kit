@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.28.0 - 2026-11-07 PT
+
+Additive; no host call site changes. `greenapi.post` (SMADPickleBot #1064): one POST to a GREEN-API method with the
+Response as it came, the connect-timeout and status retries lifted out of `call_api`, which is now that call with the
+JSON read and the ERROR on a refusal. For a caller that keeps its own status handling and pages once per lost message
+(SMADPickleBot's WhatsApp sender, whose own copy of the connect-timeout loop goes).
+
 ## 0.27.0 - 2026-11-06 PT
 
 Additive; no host call site changes. The graduations of SMADPickleBot's #971 audit, each replacing the project's own

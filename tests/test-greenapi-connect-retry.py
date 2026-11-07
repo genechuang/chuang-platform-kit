@@ -125,6 +125,35 @@ try:
     calls.clear(); sleeps.clear()
     requests.post = script(answer(503), _Resp())
     check("  off by default: one 503 is one call", (ga.call_api('i', 't', 'sendMessage'), len(calls)), (None, 1))
+
+    # 0.28.0, post (SMADPickleBot #1064): the Response as it came under the same loops, the last connect timeout raised, a
+    # read timeout raised as it came, no ERROR of its own (the caller pages once per lost message).
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(CT('x'), CT('x'), answer(201))
+    got = ga.post('i', 't', 'sendMessage', {'chatId': 'x'}, timeout=(10, 30), connect_retries=2)
+    check("post: two connect timeouts, then the Response as it came (a 201, never None), 5s then 10s, each a WARNING",
+          (got.status_code, len(calls), sleeps, h.levels), (201, 3, [5, 10], ['WARNING', 'WARNING']))
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(CT('x'), CT('x'), CT('x'))
+    try:
+        ga.post('i', 't', 'sendMessage', connect_retries=2)
+        raised = None
+    except CT:
+        raised = 'ConnectTimeout'
+    check("  post: the last connect timeout is raised, and no ERROR is logged here",
+          (raised, len(calls), 'ERROR' in h.levels), ('ConnectTimeout', 3, False))
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(requests.exceptions.ReadTimeout('read'), _Resp())
+    try:
+        ga.post('i', 't', 'sendMessage', connect_retries=2)
+        raised = None
+    except requests.exceptions.ReadTimeout:
+        raised = 'ReadTimeout'
+    check("  post: a read timeout is raised as it came, never retried", (raised, len(calls), sleeps), ('ReadTimeout', 1, []))
+    calls.clear(); sleeps.clear(); h.levels.clear()
+    requests.post = script(answer(503))
+    check("  post: a 503 with no status retries is the Response itself, no ERROR (call_api's is the one that logs)",
+          (ga.post('i', 't', 'sendMessage').status_code, len(calls), h.levels), (503, 1, []))
 finally:
     requests.post, ga.time.sleep = _post, _sleep
     ga._SESSION[:] = _kept_session

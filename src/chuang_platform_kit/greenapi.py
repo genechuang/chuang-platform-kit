@@ -113,10 +113,40 @@ def get_state_instance(instance_id: str, api_token: str,
 CONNECT_BACKOFF_SECONDS = 5
 
 
+def post(instance_id: str, api_token: str, method: str, payload: dict = None, timeout=REQUEST_TIMEOUT,
+         connect_retries: int = 0, status_retries: int = 0) -> requests.Response:
+    """One POST to a GREEN-API method, the Response as it came (0.28.0, SMADPickleBot #1064): `timeout` requests' own
+    (a number, or a (connect, read) pair); a CONNECT timeout retried `connect_retries` times, CONNECT_BACKOFF_SECONDS then
+    twice that apart (the request never reached GREEN-API, so repeating it cannot do anything twice), the last one raised;
+    a read timeout never retried and raised as it came (the request may have landed); a 429 or 5xx answer asked again
+    `status_retries` times the same way, the last answer returned. Each retry is a WARNING naming the method, never the URL
+    (the token is a path segment in it). `call_api` is this with the JSON read and the ERROR on a refusal; a caller that
+    keeps its own status handling and pages once per lost message (SMADPickleBot's WhatsApp sender) takes this."""
+    url = get_api_url(instance_id, api_token, method)
+    for status_attempt in range(status_retries + 1):
+        for attempt in range(connect_retries + 1):
+            try:
+                resp = _session().post(url, json=payload or {}, timeout=timeout)
+                break
+            except requests.exceptions.ConnectTimeout:
+                if attempt == connect_retries:
+                    raise
+                # Never log the URL -- the API token is a path segment in it.
+                logger.warning(f"{method}: connect timeout (attempt {attempt + 1} of {connect_retries + 1}); "
+                               f"retrying in {CONNECT_BACKOFF_SECONDS * (attempt + 1)}s")
+                time.sleep(CONNECT_BACKOFF_SECONDS * (attempt + 1))
+        if not (resp.status_code == 429 or resp.status_code >= 500) or status_attempt == status_retries:
+            break
+        logger.warning(f"{method}: HTTP {resp.status_code} (retry {status_attempt + 1} of {status_retries}); "
+                       f"retrying in {CONNECT_BACKOFF_SECONDS * (status_attempt + 1)}s")
+        time.sleep(CONNECT_BACKOFF_SECONDS * (status_attempt + 1))
+    return resp
+
+
 def call_api(instance_id: str, api_token: str, method: str,
              payload: dict = None, timeout: int = REQUEST_TIMEOUT,
              connect_retries: int = 0, status_retries: int = 0) -> dict | None:
-    """Call a GREEN-API endpoint.
+    """Call a GREEN-API endpoint: `post` with the JSON read and the ERROR on a refusal.
 
     Args:
         instance_id: GREEN-API instance ID
@@ -139,25 +169,8 @@ def call_api(instance_id: str, api_token: str, method: str,
     Returns:
         Response JSON dict on success, None on error
     """
-    url = get_api_url(instance_id, api_token, method)
     try:
-        for status_attempt in range(status_retries + 1):
-            for attempt in range(connect_retries + 1):
-                try:
-                    resp = _session().post(url, json=payload or {}, timeout=timeout)
-                    break
-                except requests.exceptions.ConnectTimeout:
-                    if attempt == connect_retries:
-                        raise
-                    # Never log the URL -- the API token is a path segment in it.
-                    logger.warning(f"{method}: connect timeout (attempt {attempt + 1} of {connect_retries + 1}); "
-                                   f"retrying in {CONNECT_BACKOFF_SECONDS * (attempt + 1)}s")
-                    time.sleep(CONNECT_BACKOFF_SECONDS * (attempt + 1))
-            if not (resp.status_code == 429 or resp.status_code >= 500) or status_attempt == status_retries:
-                break
-            logger.warning(f"{method}: HTTP {resp.status_code} (retry {status_attempt + 1} of {status_retries}); "
-                           f"retrying in {CONNECT_BACKOFF_SECONDS * (status_attempt + 1)}s")
-            time.sleep(CONNECT_BACKOFF_SECONDS * (status_attempt + 1))
+        resp = post(instance_id, api_token, method, payload, timeout, connect_retries, status_retries)
         if resp.status_code == 200:
             return resp.json()
         else:
