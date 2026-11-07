@@ -32,8 +32,12 @@ jobs:
       - name: Install the kit with every extra
         run: pip install -q -e ".[gcp,gmail,dev,monitoring,asc,clerk]"
 
+      # chuang-sdlc, the second distribution (sdlc/), installed from its own pyproject so its packaging is proven too.
+      - name: Install chuang-sdlc
+        run: pip install -q -e ./sdlc
+
       - name: Lint
-        run: python -m pyflakes src tests
+        run: python -m pyflakes src sdlc/src tests
 
       - name: Run the suites
         run: python -m pytest -n auto

@@ -8,6 +8,9 @@ docstring.
 check, a once-only claim, a sender), read this file. If the kit has it, import it; if it is close, change the
 kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.
 
+The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned
+only where they run (its own tags, `sdlc-v<version>`).
+
 ## `anthropic_api`: Anthropic's Messages API, one client for every project (SMAD PickleBot #573; Gene, 10/31/26 8:56 AM…
 
 | Name | Purpose |
@@ -597,4 +600,133 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 | `send_poll(group_id, question, options, multiple_answers=, source=, dry_run=)` | Create a poll in a group chat. |
 | `send_image(recipient_id, image_url, caption=, source=, dry_run=, include_signature=, correlation_id=)` | Send an image with optional caption. |
 | `publish_raw(message)` | Publish a pre-constructed WhatsAppMessage. |
+
+## `chuang_sdlc.board`: A ticket board's names in one place: its columns by role, the flow they make, a card's place along…
+
+| Name | Purpose |
+|---|---|
+| `load(path)` | The board's config from a JSON file. |
+| `stage(role, cfg)` | A column's name on the board by its role (`stages`). |
+| `named(status, cfg)` | A Status as the board names it now: a role as its column, an old name (`renamed`, `merged`) as its new one, anything else as it is. |
+| `flow(cfg)` | The pipeline's columns in order (`flow`, by role). |
+| `rank(col, light=, raw=, cfg=)` | A card's place along the flow as a role's index: its column and, where two roles share one, its Light (the role's light, or that light's fallback); a card in a merged column (`raw` its old name) is the role its column merged into, or `dev` for one merged into… |
+| `light_for(col, cfg)` | The Light a card moved into this column should show: its one role's light, '' for a column with none; None when two roles share the column (which of them is the pipeline's to say) or the column is not the board's. |
+| `is_placeholder(text, cfg)` | Whether a card's title is a column's placeholder: one of `placeholders`, or any `— … —` (an older wording still counts, so a rename never leaves a stray). |
+| `placeholder_role(text, cfg)` | The role whose column a placeholder card belongs in: by its title in `placeholders`, else by the column its title names (`— Dock: …`, an old name read as its new one); '' for a title that is no placeholder or names no placeholder column. |
+| `ticket_trailers(message)` | (numbers, none_reason) from a commit message's `Ticket:` trailers: ([12, 14], '') or ([], 'session notes'), the numbers sorted and each once; ([], None) when it names none. |
+| `ticket_numbers(message)` | The tickets a commit message's `Ticket:` trailers name, sorted ([] for `Ticket: none (why)` or no trailer). |
+
+## `chuang_sdlc.loe`: A ticket's level of effort, estimated and actual: the working-time rule, the calibration of a raw e…
+
+| Name | Purpose |
+|---|---|
+| `log_path()` | The activity log: TICKET_ACTIVITY_LOG, else ~/.claude/ticket-activity.log. |
+| `parse(text)` | The log's lines as (epoch, session, what): what is 'stop', 'none' or a tuple of ticket numbers; a malformed line is skipped. |
+| `read_log(path=)` | parse() of the log file; [] when there is none. |
+| `active_minutes(lines, numbers, cap=)` | {n: minutes} of working time on each ticket in `numbers`, None for one the log never names: per session, each gap between two consecutive lines is charged to the earlier line's tickets, split evenly between them, at most `cap` seconds; a gap after a `stop` or… |
+| `band(raw_min)` | The span a raw estimate in minutes falls in (BANDS). |
+| `factor(records, raw_min=)` | (the median actual / raw estimate, how many tickets it is from, the span it is of) over the records with both: with `raw_min`, the median of that estimate's own span (BANDS), the whole set's when the span has fewer than MIN_RECORDS. The raw is the record's `e… |
+| `calibrate(raw_min, by)` | A raw estimate in minutes times the factor `by`, rounded to CALIBRATE_STEP minutes and at least that. |
+| `hours(minutes)` | Minutes as a board field's hours: 30 -> '0.5', 120 -> '2', 100 -> '1.67'. |
+| `words(minutes)` | Minutes as the words a comment says: `45m`, `1h 10m`, `2h`, `1d 2h` (a day is 8 hours of work). |
+| `stamp(epoch, tz=)` | An epoch as the clock reading a person writes, with its year and zone: `11/2/26 12:50 PM PT` (the kit's zone unless `tz` is given). |
+| `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`; an estimate, the working time or the start that is missing says so (`start_hint`, th… |
+| `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`), the elapsed time from the ticket's first start (`starts`/<n> first_epoch) to the… |
+
+## `chuang_sdlc.tickets`: A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow,…
+
+| Name | Purpose |
+|---|---|
+| `class NotConfigured` | The host has not wired what this call needs (configure). |
+| `configure(**wiring)` | Wire the module to the host (module docstring): `board`, `runner`, `store`, `raw_store`, `loe_records`, `factor_of`, `mail`, `before_ship_move`, `decide_letter` (callables), `people`, `labels`, `collections`, `card_fields` (dicts merged over the defaults), `d… |
+| `is_host_runner(run)` | Whether `run` is the host's own runner (configure(runner=)), not a suite's fake passed in. |
+| `host_store()` | The host's record store, or None (none wired, or the host has none at hand). |
+| `person(role)` | The name the host gave a role (`triager`, `default_owner`, `captain`); '' when it gave none. |
+| `label(role, required=)` | The label the host gave a role (`triage`, `member_title`, `admin_ask`, `change_order`); NotConfigured when it gave none and the caller needs one, '' when `required` is False (a label a board may simply not use). |
+| `collection(role)` | The record collection of a role (`loe`, `starts`); NotConfigured when the host named none. |
+| `body_loe(body)` | The text of a body's `LOE estimate:` line, the whole rest of the line (`2 hours`, `1h 30m`), or None when it has none; loe_minutes reads it. |
+| `class Client` | GitHub for the ticket tools, through chuang_platform_kit.github's throttled client: the one seam every function here takes as `run=`, and the thing a suite's fake stands in for. `tok` is the token or a callable answering it, read at the first call (None: no t… |
+| `Client.cfg()` | The board's config: the one given, else the host's (configure(board=)). |
+| `Client.repo()` | The board's repository, owner/name. |
+| `Client.token()` | The token, a callable's answer read once; '' when there is none. |
+| `Client.auth_ok()` | Whether a token is at hand (without one, a commit check reads the form alone). |
+| `Client.graphql(query, variables=)` | The `data` of one GraphQL call; None on a refusal. |
+| `Client.issue(number)` | One issue in gh's shape (its labels, body, state and ids); None when GitHub does not answer or has none. |
+| `Client.node_id(number)` | An issue's GraphQL node id, read once a process; '' when GitHub does not answer. |
+| `Client.issues(state=, labels=, search=, limit=, comments=)` | The repository's issues in gh's shape (github.issues: a list, or GitHub's search when `search` is given, with the last `comments` of each when asked); None when GitHub does not answer. |
+| `Client.create_issue(title, body, labels=)` | A new issue; its number, or None. |
+| `Client.comment(number, body)` | A comment on the issue. |
+| `Client.edit_comment(comment_id, body)` | An issue comment's body replaced. |
+| `Client.add_labels(number, labels)` | Labels added; False when GitHub refused (a label the repository lacks is a 422: create_label, then again). |
+| `Client.remove_label(number, label)` | A label taken off; True whether or not the issue carried it, False only on a refusal. |
+| `Client.create_label(name, color, description=)` | A repository label made, or one of that name given this color and description. |
+| `Client.assign(number, login, on=)` | `login` assigned to the issue, or unassigned. |
+| `Client.close_issue(number, reason=, comment=)` | The issue closed with its reason, the comment posted first when given. |
+| `Client.add_sub_issue(parent, child_id)` | #child (by its numeric id) a sub-issue of #parent. |
+| `Client.item_add(node)` | The Project item of an issue (by its node id), added when it is not on the board (GitHub's add is idempotent); None when GitHub does not answer. |
+| `Client.item_field(item, field_id, option_id=, text=, clear=)` | A Project item's field: a single-select by its option's id, a text by `text`, or emptied with `clear`. |
+| `Client.item_fields(item, fields)` | Several fields of one Project item in ONE request (the kit's project_set_fields): {field_id: an option's id, {'text': …}, {'number': …}, or None to clear}. |
+| `Client.draft_add(title, body)` | A draft card on the Project; its item id, or None. |
+| `Client.item_top(item)` | A Project item put at the top of its column. |
+| `issue(number, run=, repo=)` | {state ('open' or 'closed'), title, url, pr} of #number, or None when GitHub does not answer (or there is no such issue). `repo` is kept for older callers: the runner's repository is the board's. |
+| `repo_owner(cfg=)` | The repository's owner, lowercased: the one account whose Triage lines count. Never the board's `owner`, which names the Project's organization or user. |
+| `estimate_hours(minutes)` | Minutes as a board field's hours: 30 -> '0.5', 120 -> '2', 100 -> '1.67' (loe.hours). |
+| `loe_minutes(text)` | The minutes an LOE estimate means: `30m`, `2h`, `1.5h`, `1d` (8 hours), a bare number of minutes, or the compound and spelled-out forms a triager writes and loe.words prints: `1h 30m`, `1h30m`, `2 hours`, `30 min`, `1d 2h`, a sentence's closing period dropped… |
+| `loe_words(minutes)` | Minutes as the words a comment says: `45m`, `1h 10m`, `2h`, `1d 2h` (loe.words). |
+| `loe_text(rec)` | One LOE record as words (loe.text, the host's start command named when the actual is unmeasured). |
+| `ticket_estimate(number, run=, cfg=)` | A ticket's estimate in minutes: the board's Estimate field first, then its body's `LOE estimate:` line; None when it has neither or GitHub does not answer. |
+| `loe_factor(raw_min=, read=)` | (the median actual / raw estimate, how many tickets, the span) from every LOE record (`read()`, else the host's loe_records), of `raw_min`'s own span (loe.factor); (None, 0, '') when there is no reader or it fails, so the raw estimate is filed, and said. |
+| `calibrated(raw_text, factor_of=)` | (the estimate to file, its raw minutes, the note said beside it) for a raw estimate: the raw times its span's factor, `10m`, `(raw 4h x 0.04, 1h to 4h: the median actual/estimate of 23 tickets)`; the raw as it is, with a note, when there is no factor. In minu… |
+| `keep_record(number, raw_min, write=)` | The raw estimate on the ticket's LOE record (`estimate_raw_min`), so the factor is always actual over raw: `write(n, doc)`, else a merge into the host's raw store (configure(raw_store=), the record store when unset); nothing when neither is at hand. Best effo… |
+| `estimate_stage(number, raw, run=, cfg=, factor_of=, record=, write=, item=, raw_unfactored=)` | The one estimate stage every new ticket passes, however it was filed (by hand, by a triage line's `LOE:`, by a backfill): the raw (`30m`, `2h`, `1d`, or minutes) calibrated (calibrated), the board's Estimate and LOE original written in one request, and the ra… |
+| `loe_event(numbers, now=, lines=)` | One commit's loe.EVENT: {tickets, at, key, active}, the working minutes the local activity log shows for each ticket (loe.active_minutes; None for one it never names), for the host to publish and record. |
+| `record_loe(numbers, store=, run=, now=, cfg=, data=)` | The LOE of each ticket so far, written here: loe.record over this commit's event (`data`, else loe_event of `numbers`) into the store (the host's when none is given), the estimate from ticket_estimate and the Actual through set_field. Lines; best effort, a re… |
+| `report_loe(numbers, store=, run=, now=)` | The one LOE comment of each ticket, at its ship: `LOE: ` and loe_text of its record, once (the record's reported_epoch). A ticket with no record, or one reported already, is skipped. Lines; best effort. |
+| `item_id(number, run=, cfg=)` | The Project item of #number, adding the issue to the Project when it is not on it (GitHub's add is idempotent: addProjectV2ItemById answers the item already there); the issue's node id read once a process. None when GitHub does not answer. |
+| `set_field(item, field, value, run=, cfg=)` | Set a Project field on an item: a single-select by its option's name, a text field by its text, a number field by its value (through set_fields' one request). |
+| `set_fields(item, values, run=, cfg=)` | Several Project fields of one item in ONE request ({field: value}, each as set_field takes it): the kit's project_set_fields through the runner's item_fields. A runner with no item_fields (an older fake) writes them one by one. False when any value is an opti… |
+| `set_stage(item, role, run=, cfg=)` | A card to a role's column and its Light (each column a phase, the Light its state within it), one request; a column named by its name is its first role. A board with no Light field sets the column alone. |
+| `stage(role, cfg=)` | A column's name on the board by its role (board.stage). |
+| `column(name, cfg=)` | A Status as the board names it now, an old name read as its new one and a role as its column (board.named). |
+| `flow(cfg=)` | The pipeline's columns in order (board.flow). |
+| `rank(col, light=, raw=, cfg=)` | A card's place along the flow as a role's index (board.rank); None off the flow. |
+| `light_for(col, cfg=)` | The Light a card moved into this column should show (board.light_for). |
+| `is_placeholder(title, cfg=)` | Whether a card's title is a column's placeholder (board.is_placeholder). |
+| `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. [(number, ok)]. |
+| `sync_columns(run=, cfg=, tmp=, merge=)` | The board made what its config says: its column labels (_sync_options), then its placeholder cards (placeholders), on one line, a WARNING from either first; a board whose columns could not be read is written nothing. `tmp` is kept for older callers. |
+| `filter_columns(names)` | A board filter's Status term for these columns, each name quoted for the ones with spaces. |
+| `board_items(query, run=, cfg=)` | The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content {type, number, url}) with its i… |
+| `is_draft(card)` | Whether a board_items card is a draft (a column's placeholder, a host's own draft cards): no issue behind it, so nobody's to ask about, light or move. |
+| `placeholders(run=, cfg=)` | One placeholder draft card in each flow column that can empty, the config's `placeholders` by role: the board's drafts read once with GitHub's own `is:draft` filter; a role with no draft titled for it or its column is made (the draft, then its Status; no Ligh… |
+| `ticket_place(number, run=, cfg=)` | (item id, column, Light, the column's raw name) of one ticket on the Project ('' for a card with no Status or no Light); None when GitHub does not answer. Its item by item_id and the item's own Status, a few GraphQL points a ticket: a move reads only the tick… |
+| `ticket_column(number, run=, cfg=)` | (item id, column) of one ticket (ticket_place's first two); None when GitHub does not answer. |
+| `move(numbers, status, run=, cfg=, back=)` | Every ticket to `status` (a role or a column's name); [(number, ok)]. Along the flow a ticket already at `status` or past it stays where it is (said as moved: it is where the move means), so a re-run never steps a ticket back. `back` is the one deliberate ste… |
+| `to_top(item, run=, cfg=)` | A card put at the top of its column (the kit's project_item_to_top); best effort. |
+| `new(kind, title, body=, owner=, status=, b=, run=, cfg=, area=, priority=, loe=)` | File a ticket and put it on the Project with its Kind, Area, Owner, Priority, Status (and its Light), B# and Estimate in ONE field write; its number, or None (also when `area` is none of the board's Areas). A ticket with no body, or the title again, is refuse… |
+| `similar(title, run=, cfg=, share=)` | The open issues a new one may duplicate (reuse an issue before filing one): those GitHub finds for the title's words whose own title shares at least `share` of them. [(number, title)], closest first; [] when GitHub cannot be asked. |
+| `area_label(area)` | The label for a Project Area: 'Internal tools' is 'area:internal-tools'. |
+| `add_area_label(number, area, run=, cfg=)` | #number labelled `area:<area>` beside its Project Area (a token without the Project's scope can read the label); any other area: label comes off. False when GitHub refused (a WARNING). |
+| `area_labels(run=, cfg=)` | Every ticket on the Project labelled with its Area (a backfill, and a repair after an Area is changed on the board): the area labels made first; the board's issues read with GitHub's `is:issue` filter. Lines, one per ticket labelled. |
+| `area_of(number, run=, cfg=)` | #number's Area, from its `area:` label ('' when it has none or GitHub does not answer). |
+| `bug(feature, title, body=, owner=, run=, cfg=, area=, priority=, loe=)` | A bug ticket from a feature: Kind Bug, in the Backlog, the feature's Area (the host's default_area when it has none), a sub-issue of #feature, its body linking it, and its Priority set at filing (P2 unless the filer says P1). |
+| `triage_line(text)` | The last `Triage:` line in `text` as {priority, owner, area, feature}, with `loe` when its `LOE:` reads as an estimate above 0 (loe_minutes) and `loe_unread`, its text, when it does not; {'none': why} for `Triage: none (why)`, {'backlog': True}, or None when… |
+| `triage(number, priority, owner=, area=, feature=, run=, cfg=)` | An alert issue made a bug ticket in place (never a second issue): on the Project with Kind Bug, in the shipyard for a P1 (worked at once) and the backlog otherwise, its Priority, Owner (the host's default_owner when none is named or the name is no Owner optio… |
+| `queue(run=, cfg=)` | The open tickets labelled with the triage label, newest first: [(number, title, kind label, filed ISO)]. |
+| `decide_letter(number, choice, title, url, priority, owner, held, ranked, target)` | (subject, text) of the letter a triage decision sends its owner, in neutral words (a host passes its own `decide_letter` to configure): where the card stayed when it was held, now and at what priority, or the backlog. |
+| `decide(number, choice, owner=, priority=, run=, cfg=, mail=)` | The triager's decision on a waiting ticket: `now` puts it in the shipyard (worked at once) at `priority` (P1 unless one is given) on `owner` (the host's triager unless an Owner option is named); `backlog` puts it in the backlog, keeping the `priority` and `ow… |
+| `sweep(run=, cfg=, mail=)` | Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody else's line counts), names a priority: triaged. `Triage: none (why)` and an issue already on the Project (its `area:` label) are left, except a ticket… |
+| `live_comment(release, commits=)` | A shipped ticket's closing comment: the release, then each commit that did its work by short sha and subject (GitHub links a sha in an issue comment), so a closed ticket shows the code that shipped it. |
+| `release_text(release, co=)` | The board's Release for a ship: `CO #12 · 1a2b3c4d`, its change order and its head, or the head alone for a ship with no change order. |
+| `link_branch(number, sha, run=, cfg=)` | The issue's Development shows its work: a branch `ticket/<n>` at `sha`, the ticket's last commit, linked to the issue (GitHub's createLinkedBranch; no pull request is opened). Idempotent: the branch already at `sha` is done; one behind is moved forward to it… |
+| `shipped_cards(run=, cfg=)` | Every shipped ticket on the board (the ship column's issues; change orders left out), each {item, number, title, body, release, estimate, original (hours or None), branches (linked branches)}: a backfill's read, with GitHub's own filter. None when GitHub does… |
+| `raw_on_record(rec)` | The raw estimate in minutes an LOE record holds: its `estimate_raw_min`, else its `estimate_min` when the ticket's earliest record (`started_epoch`, else `first_commit_epoch`) is before the host's `calibrated_since`, when that was still the raw; None otherwis… |
+| `backfill_plan(card, last_sha, head_of, cos, record, retro)` | What a shipped tickets' backfill writes for one card, as the stages would have written it: {'release': text or None, 'raw': (minutes, source) or None, 'original': (minutes, source) or None, 'branch': sha or None}. Release: kept when it names its change order;… |
+| `live_numbers(numbers, release=, run=, cfg=, work=, co=)` | These tickets to the shipped column, the Release recorded (release_text: the change order `co` and the head), the open ones closed with a comment naming their commits when `work` ({number: [(sha, subject)]}) has them, and each one's branch linked at its last… |
+| `change_order_title(head, at, tz=)` | `Ship 11/2/26 1:41 PM PT: 1a2b3c4d`, the push's minute in the kit's zone and the head. |
+| `change_order_body(base, head, numbers, run=, how=, cfg=)` | The change order's body: every ticket the release carries with its title, then the range, how it was ordered, and what its Light will say. The tickets read once each; one GitHub does not answer is listed by number. |
+| `change_order_for(head, run=)` | The change order of the ship whose head is `head` (its title ends with the head's 8 characters), open or closed, or None. |
+| `change_order_settle(release, role, note, run=, cfg=)` | The change order of the release at `release` to its end: `shipped`, its Light the shipped one and closed with `note`; `failed`, its Light the failed one with `note` as a comment. '' when the release has no change order; a refused write is a word. |
+| `open_bug_for(component, run=, cfg=)` | The open bug a component's failed smoke already has (its title starts SMOKE_BUG), or None: a failure that repeats is a comment on it, never a second issue. |
+| `refused_as_duplicate(title, argv, run=, out=)` | The command line's sweep before `new` or `bug` files anything: open issues like this title (similar()) are listed and nothing is filed, unless `--new` says it is none of them. True when refused. |
+| `body_is_path(argv)` | --body's text when it is only a file's path, else '': one line naming a file that exists, or one line ending in .md or .txt (the plan belongs in the ticket, never a link to a temp file). --body-file reads the file. |
 

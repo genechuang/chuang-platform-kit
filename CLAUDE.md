@@ -56,6 +56,13 @@ and the session that bumps it installs it on the desktop at once (`claude plugin
 - **Breaking a function's signature is a minor-version bump and a line in
   CHANGELOG.md** naming the host call sites to change. The hosts' suites import
   the kit, so a change here is proven there before the host bumps its pin.
+- **chuang-sdlc is a second distribution in `sdlc/`** (Gene, 11/7/26 2:28 PM PT: "Own distribution"; SMADPickleBot
+  #1111): the ticket tools, package `chuang_sdlc`, with its own `sdlc/pyproject.toml` and `__init__.py` version, its
+  own `sdlc/CHANGELOG.md` and its own tags, `sdlc-v<version>`, never `v<version>`. A host pins
+  `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
+  ticket tools run, so a release of it redeploys those alone; every service the main package's pin is in stays as it
+  is. It depends on chuang-platform-kit by range, never a pin. A change to `sdlc/` alone bumps chuang-sdlc's version,
+  never the main package's; its suites are `tests/test-sdlc-*.py`, run with the rest.
 
 ## Tests
 

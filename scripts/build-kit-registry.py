@@ -23,6 +23,9 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 PKG = os.path.join(ROOT, 'src', 'chuang_platform_kit')
+# The second distribution, chuang-sdlc (sdlc/, its own pyproject and tags): its modules listed as `chuang_sdlc.<module>`.
+SDLC_PKG = os.path.join(ROOT, 'sdlc', 'src', 'chuang_sdlc')
+PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'))
 OUT = os.path.join(ROOT, 'KIT-REGISTRY.md')
 SUMMARY_CHARS = 260
 NO_DOC = '(no docstring)'
@@ -84,14 +87,17 @@ def render():
            "docstring.", "",
            "**Kit first:** before writing anything a second project could use (a retry, a REST client, a webhook's",
            "check, a once-only claim, a sender), read this file. If the kit has it, import it; if it is close, change the",
-           "kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.", ""]
-    for path in sorted(glob.glob(os.path.join(PKG, '*.py'))):
+           "kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.", "",
+           "The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned",
+           "only where they run (its own tags, `sdlc-v<version>`).", ""]
+    paths = [(p, prefix) for pkg, prefix in PACKAGES for p in sorted(glob.glob(os.path.join(pkg, '*.py')))]
+    for path, prefix in paths:
         base = os.path.basename(path)
         if base == '__init__.py':
             continue
         doc, rows = module_rows(path)
         label = first_sentence(doc)
-        out.append(f"## `{base[:-3]}`" + (f": {label}" if label else ''))
+        out.append(f"## `{prefix}{base[:-3]}`" + (f": {label}" if label else ''))
         out.append('')
         if rows:
             out += ['| Name | Purpose |', '|---|---|'] + [f"| `{sig}` | {summary} |" for sig, summary in rows]
