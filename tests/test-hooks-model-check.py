@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """plugins/gene-hooks/hooks/model-check.lib.sh (1.16.0; SMADPickleBot #423, Gene 11/7/26 11:37 AM PT: the model check
-rides the prompt hook). The library sourced on its own, and pacific-clock.sh's prompt branch carrying it, run through
+rides the prompt hook; 1.17.0, 11:58 AM PT: the all-models window at 99% starts the account handover). The library sourced on its own, and pacific-clock.sh's prompt branch carrying it, run through
 bash as the host runs the hook. Standard library only; the positive case first.
 
     python tests/test-hooks-model-check.py
@@ -70,10 +70,15 @@ def main():
           (rc, code, 'Model check, due now' in text, 'get_usage' in text, 'labeled Weekly / Fable' in text,
            os.path.isfile(state) and read(state).isdigit() and abs(int(read(state)) - time.time()) < 120),
           ('0', 0, True, True, True, True))
-    check('  the check names the rule: 99 switches to the newest Opus, under it the newest Fable, the ids from the picker, the peer for your own',
+    check('  the check names the rule: 99 switches to the newest Opus, under it the newest Fable, the ids from the picker, a peer for your own',
           ('99 or more' in text, 'newest Opus' in text, 'newest Fable' in text, 'list-ids' in text,
-           'Black Widow asks Snow White' in text, 'only when something was switched or refused' in text),
+           'peer session' in text, 'only when something was switched, refused or started' in text),
           (True, True, True, True, True, True))
+    check('  since 1.17.0 the all-models window at 99 starts the account handover once (the record of one begun today stops a repeat), '
+          'and the public hook names no session: the peer comes from the project manifest',
+          ('Weekly / all models' in text, 'account handover starts now' in text, 'already begun for this account today' in text,
+           'Black Widow' in text, 'Snow White' in text),
+          (True, True, True, False, False))
     check('  the text carries nothing JSON would need escaped, and nothing outside ASCII (Windows consoles decode the rest)',
           ('"' in text, '\\' in text, '%' in text.replace('0%', ''), text.isascii()), (False, False, False, True))
 
