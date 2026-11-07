@@ -2,6 +2,11 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.29.1 - 2026-11-07 PT
+
+A fix; no host call site changes. `secrets.writers` no longer reports the module's own command
+(`python -m chuang_platform_kit.secrets delete ...`) as a Secret Manager write outside the kit (SMADPickleBot #1109).
+
 ## 0.29.0 - 2026-11-07 PT
 
 Additive; no host call site changes. `secrets` is the one place a secret is written (SMADPickleBot #1109; Gene, 11/7/26:

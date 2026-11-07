@@ -233,8 +233,9 @@ def delete(project: str, name: str, session=None) -> bool:
 
 
 # A write to Secret Manager made anywhere but here: a version added, destroyed or disabled, a secret created or
-# deleted, by gcloud (as words or as an argument list) or by the REST API.
-_WRITE = re.compile(r"secrets\s+(?:versions\s+(?:add|destroy|disable)|create|delete)\b"
+# deleted, by gcloud (as words or as an argument list) or by the REST API; this module's own command
+# (`python -m chuang_platform_kit.secrets delete ...`) is the way, never a finding (0.29.1).
+_WRITE = re.compile(r"(?<!platform_kit\.)secrets\s+(?:versions\s+(?:add|destroy|disable)|create|delete)\b"
                     r"|['\"]secrets['\"],\s*['\"](?:create|delete)['\"]"
                     r"|['\"]versions['\"],\s*['\"](?:add|destroy|disable)['\"]"
                     r"|:addVersion\b|/versions/[^'\"\s]*:(?:destroy|disable)\b")

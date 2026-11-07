@@ -209,7 +209,9 @@ with tempfile.TemporaryDirectory() as repo:
         'tools/env.py': "x = 1\ngcloud('secrets', 'versions', 'destroy', '3')\n",
         'svc/rest.py': "url = f'{API}/secrets/{n}:addVersion'\n",
         'ops/clean.sh': 'gcloud secrets delete OLD --quiet\n',
-        'ops/read.sh': 'gcloud secrets versions access latest --secret=TOKEN\npython -m chuang_platform_kit.secrets add p TOKEN\n',
+        'ops/read.sh': ('gcloud secrets versions access latest --secret=TOKEN\npython -m chuang_platform_kit.secrets add p TOKEN\n'
+                        'python -m chuang_platform_kit.secrets delete p OLD\npython -m chuang_platform_kit.secrets prune p TOKEN\n'
+                        "secrets.delete('p', 'OLD')\n"),
         'README.md': 'gcloud secrets versions add TOKEN\n',
         'tests/test-x.py': 'gcloud secrets versions add TOKEN\n',
         'src/chuang_platform_kit/secrets.py': "url = ':addVersion'\n",
