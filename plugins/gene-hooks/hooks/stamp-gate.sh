@@ -15,12 +15,48 @@
 # Cost is the design: it runs before EVERY tool call. Starting Python costs ~130 ms on the Windows desktop and every
 # extra program ~30-40 ms there (msys process start; measured 10/14/26: a 6-program first cut took 240 ms), so this
 # is `tail` (the transcript's last 256 KB) and one `awk`, plus one `grep` of the state file only on a miss; the input,
-# the paths and the clock are bash builtins. Exempt: a turn with no text yet, a helper (an event naming agent_id), a
-# missing transcript. Exit 2 refuses the call with the reason on stderr; anything unexpected exits 0, so a broken hook
-# never traps a session.
+# the paths and the clock are bash builtins. Exempt: a turn with no text yet, a helper (an event naming agent_id; since
+# 1.21.0 it still leaves its activity line, helper() below), a missing transcript. Exit 2 refuses the call with the
+# reason on stderr; anything unexpected exits 0, so a broken hook never traps a session.
 event=""
 [ -t 0 ] || IFS= read -r -d '' -t 1 event 2>/dev/null
-case "$event" in *'"agent_id"'*) exit 0 ;; esac
+field() {  # the string value of "$1" in the event into the variable named "$2", by parameter expansion: no program,
+  local _f="${event#*\"$1\"}"  # and since 1.21.0 no subshell either (a `$(field x)` was a fork, ~30-40 ms on msys)
+  [ "$_f" != "$event" ] || return 1
+  _f="${_f#*\"}"
+  printf -v "$2" '%s' "${_f%%\"*}"
+}
+log="${TICKET_ACTIVITY_LOG:-$HOME/.claude/ticket-activity.log}"
+# A helper's call (an event naming agent_id) is never judged, but since 1.21.0 it leaves its own activity line,
+# "<epoch> <session id> agent <agent id> <tool_use_id|->": a delegate's tool calls run this hook too, and until then
+# they wrote nothing, so a ticket built by three agents (451 s of their own time, 11/8/26) read 0m, the main session's
+# one Agent call being one line charged at most the gap cap. The tool_use_id is the parent's Agent call, read as the
+# "toolUseId" of agent-<id>.meta.json, which Claude Code keeps at "<transcript minus .jsonl>/subagents/" when the
+# event's transcript_path is the parent's and beside the transcript when it is the agent's own. An agent the Agent
+# tool spawned has it; an agent a Workflow spawned has none (its meta, under subagents/workflows/wf_<id>/, carries
+# agentType, description, workflowPhase and spawnDepth alone, read 11/8/26 across every one on the desktop), so it
+# logs "-", and the reader of this log resolves "-" by the session's newest ticket line. Builtins alone: one read of
+# a small file, no program and no subshell.
+helper() {
+  local a s now tu="-" t0 meta j tid
+  field agent_id a || a=""; a="${a//[^A-Za-z0-9_-]/}"; [ -n "$a" ] || a=-
+  field session_id s || s=default
+  printf -v now '%(%s)T' -1 2>/dev/null || return 0
+  if field transcript_path t0 && [ -n "$t0" ]; then
+    t0="${t0//\\\\//}"
+    for meta in "${t0%.jsonl}/subagents/agent-$a.meta.json" "${t0%/*}/agent-$a.meta.json"; do
+      [ -f "$meta" ] || continue
+      j=""; IFS= read -r -d '' j < "$meta" 2>/dev/null
+      tid="${j#*\"toolUseId\"}"
+      [ "$tid" != "$j" ] || continue
+      tid="${tid#*\"}"; tid="${tid%%\"*}"; tid="${tid//[^A-Za-z0-9_-]/}"
+      [ -n "$tid" ] && { tu="$tid"; break; }
+    done
+  fi
+  printf '%s %s agent %s %s\n' "$now" "${s//[^A-Za-z0-9-]/}" "$a" "$tu" >> "$log" 2>/dev/null
+  return 0
+}
+case "$event" in *'"agent_id"'*) helper; exit 0 ;; esac
 # The foreground guard rides this hook (1.7.0, Gene 10/21/26 12:05 AM PT: long runners in the background, "add it to a
 # hook"): a hook added to hooks.json reaches a session only at its next start, while this script runs from the newest
 # installed version on every call of every open session (boot.sh). Shell calls only, about 130 ms each.
@@ -29,13 +65,7 @@ case "$event" in
     guard_err=$(printf '%s' "$event" | bash "$(dirname "${BASH_SOURCE[0]}")/foreground-guard.sh" 2>&1 >/dev/null)
     if [ $? -eq 2 ]; then printf '%s\n' "$guard_err" >&2; exit 2; fi ;;
 esac
-field() {  # the string value of "$1" in the event, by parameter expansion (no grep/sed)
-  local v="${event#*\"$1\"}"
-  [ "$v" != "$event" ] || return 1
-  v="${v#*\"}"
-  printf '%s' "${v%%\"*}"
-}
-t="$(field transcript_path)" || exit 0
+field transcript_path t || exit 0
 t="${t//\\\\//}"
 [ -n "$t" ] && [ -f "$t" ] || exit 0
 
@@ -84,12 +114,22 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
 # worked on it, measured "async via event bus so all this loe calculation doesn't actually impact prompt answer or
 # commit time"): one appended line per tool call, "<epoch> <session id> <tickets>", by bash builtins alone, no program
 # and no network; the Stop hook appends "<epoch> <session id> stop". The project's own tools sum it, off the prompt.
+# Since 1.21.0 a call of Agent or Workflow (the exact name, or one ending "__Agent" / "__Workflow") writes
+# "<epoch> <session id> <tickets> delegated <tool_use_id|->" instead, the event's tool_use_id being the id the
+# helper's own lines name (helper() above; a Workflow's agents name "-"), so the delegates' time lands on the stamp's
+# tickets. Every other call's three-field line is unchanged, and a reader of three fields skips the longer lines.
 activity() {
   local tk="${1#ok}"; tk="${tk# }"
   [ -n "$tk" ] || return 0
-  local s now; s="$(field session_id)" || s=default
+  local s now tn tu more=""; field session_id s || s=default
   printf -v now '%(%s)T' -1 2>/dev/null || return 0
-  printf '%s %s %s\n' "$now" "${s//[^A-Za-z0-9-]/}" "$tk" >> "${TICKET_ACTIVITY_LOG:-$HOME/.claude/ticket-activity.log}" 2>/dev/null
+  field tool_name tn || tn=""
+  case "$tn" in
+    Agent|Workflow|*__Agent|*__Workflow)
+      field tool_use_id tu || tu=""; tu="${tu//[^A-Za-z0-9_-]/}"
+      more=" delegated ${tu:--}" ;;
+  esac
+  printf '%s %s %s%s\n' "$now" "${s//[^A-Za-z0-9-]/}" "$tk" "$more" >> "$log" 2>/dev/null
   return 0
 }
 # The task-list gate rides this hook too (1.11.0, Gene 10/30/26 12:34 AM PT: "update your steps progress in real time"):
@@ -126,7 +166,7 @@ for w in ${STAMP_GATE_WAIT-0.25 0.25 0.5}; do
   again=$(judge)
   case "$again" in
     no*|ahead*) verdict="$again" ;;
-    *) sid="$(field session_id)" || sid=default
+    *) field session_id sid || sid=default
        printf 'rescued %s\n' "${verdict#* }" >> "${TMPDIR:-${TEMP:-/tmp}}/stamp-gate-${sid//[^A-Za-z0-9-]/}" 2>/dev/null
        activity "$again"
        exit 0 ;;
@@ -139,7 +179,7 @@ id="${verdict#* }"; stamped="${id#* }"; id="${id%% *}"
 # Once (1.0.0 to 1.2.0) let a session that retried the call without writing a stamped line through, and the
 # unstamped line stayed on Gene's phone (10/19/26 11:01 AM PT, Black Widow's "11:00 AM PT": "Sometimes a session
 # prompt would forget date stamp"). Three refusals force the stamped line; the cap keeps a stuck session moving.
-sid="$(field session_id)" || sid=default
+field session_id sid || sid=default
 state="${TMPDIR:-${TEMP:-/tmp}}/stamp-gate-${sid//[^A-Za-z0-9-]/}"
 if [ -n "$id" ] && [ -f "$state" ] && [ "$(grep -cxF "$id" "$state" 2>/dev/null)" -ge 3 ]; then
   exit 0

@@ -176,6 +176,48 @@ def main():
     code, _ = Session().gate(behind, wait='0.2 0.2')
     check('  a miss nothing rescues is still refused, after the wait', (code, time.perf_counter() - t0 >= 0.4), (2, True))
     check('  a stamped line passes at once, with no wait', Session().gate([prompt(), text('10/20/26 1:56 PM PT · ticket: none ok'), tool_use()], wait='5')[0], 0)
+    # 1.21.0 (SMADPickleBot #1164): a delegate's calls run this hook too and wrote nothing, so a ticket built by three
+    # agents read 0m. The main session's Agent or Workflow call leaves "<tickets> delegated <tool_use_id>", and a
+    # helper's call "agent <agent_id> <tool_use_id>", the parent call's id read from agent-<id>.meta.json.
+    s = Session()
+    stamped = text('11/08/26 12:40 PM PT · ticket: #1164 handing part 1 to a delegate')
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'Agent', 'tool_use_id': 'toolu_01A'})
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'Workflow', 'tool_use_id': 'toolu_01W'})
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'mcp__x__Agent', 'tool_use_id': 'toolu_01M'})
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'Agent'})
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'Read', 'tool_use_id': 'toolu_01R'})
+    s.gate([prompt(), stamped, tool_use()], {'tool_name': 'AgentX', 'tool_use_id': 'toolu_01X'})
+    check('#1164: an Agent or Workflow call writes "delegated <tool_use_id>" after the stamp\'s tickets, "-" with no id; a Read\'s line is unchanged',
+          s.activity(), [(s.sid, '1164', 'delegated', 'toolu_01A'), (s.sid, '1164', 'delegated', 'toolu_01W'),
+                         (s.sid, '1164', 'delegated', 'toolu_01M'), (s.sid, '1164', 'delegated', '-'),
+                         (s.sid, '1164'), (s.sid, '1164')])
+    code, _ = s.gate([prompt(), text('unstamped'), tool_use()], {'tool_name': 'Agent', 'tool_use_id': 'toolu_01N'})
+    check('  a refused Agent call writes nothing', (code, len(s.activity())), (2, 6))
+    s = Session()
+    sub = os.path.join(s.dir, 't', 'subagents')
+    os.makedirs(sub)
+    with open(os.path.join(sub, 'agent-a1.meta.json'), 'w', encoding='utf-8') as f:
+        f.write('{"agentType":"general-purpose","description":"part 1","toolUseId":"toolu_01A","spawnDepth":1}')
+    with open(os.path.join(s.dir, 'agent-a2.meta.json'), 'w', encoding='utf-8') as f:
+        f.write('{"toolUseId":"toolu_01B","finished":false}')
+    with open(os.path.join(s.dir, 'agent-a3.meta.json'), 'w', encoding='utf-8') as f:
+        f.write('{"agentType":"general-purpose"}')
+    codes = [s.gate([prompt(), text('unstamped'), tool_use()], {'agent_id': a, 'tool_use_id': 'toolu_own'})[0] for a in ('a1', 'a2', 'a3', 'a4')]
+    check('  a helper\'s call writes "agent <id> <toolUseId>" from its meta file under <transcript>/subagents/ or beside the transcript, "-" with none, and is still exempt',
+          (codes, s.activity()),
+          ([0, 0, 0, 0], [(s.sid, 'agent', 'a1', 'toolu_01A'), (s.sid, 'agent', 'a2', 'toolu_01B'), (s.sid, 'agent', 'a3', '-'), (s.sid, 'agent', 'a4', '-')]))
+    # A Workflow's agent: its transcript and meta sit under <session>/subagents/workflows/wf_<id>/, and the meta holds
+    # the keys read on the desktop 11/8/26 and no toolUseId, so the line says "-" (the log's reader resolves it).
+    s = Session()
+    wf = os.path.join(s.dir, 'subagents', 'workflows', 'wf_x')
+    os.makedirs(wf)
+    with open(os.path.join(wf, 'agent-w1.meta.json'), 'w', encoding='utf-8') as f:
+        f.write('{"agentType":"workflow-subagent","description":"build:gate","workflowPhase":"Build","spawnDepth":1,'
+                '"requestShape":"foreground","requestNonInteractive":true}')
+    code, _ = s.gate([prompt(), text('unstamped'), tool_use()],
+                     {'agent_id': 'w1', 'tool_use_id': 'toolu_own', 'transcript_path': os.path.join(wf, 'agent-w1.jsonl')})
+    check('  a Workflow\'s agent, its meta beside its transcript under workflows/wf_x/ with no toolUseId, writes "agent <id> -" and is exempt',
+          (code, s.activity()), (0, [(s.sid, 'agent', 'w1', '-')]))
     check('a turn with no text yet passes', gate([prompt(), tool_use()])[0], 0)
     check('a helper (agent_id in the event) is exempt', gate([prompt(), text('unstamped'), tool_use()], {'agent_id': 'a1'})[0], 0)
     s = Session()
