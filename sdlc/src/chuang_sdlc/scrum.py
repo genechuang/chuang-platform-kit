@@ -273,7 +273,7 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
     lights = cfg['lights']
     who_leads = lead()
     back = _tickets.stage('next', cfg)
-    n, light, prio, owner = card['number'], card.get('light') or '', card.get('priority') or '', card.get('owner') or ''
+    n, light, prio = card['number'], card.get('light') or '', card.get('priority') or ''
     line, blockers = facts.get('line') or {}, facts.get('blockers') or []
     labels = card.get('labels') or []
     out = {'state': '', 'question': '', 'actions': [], 'change': ''}
