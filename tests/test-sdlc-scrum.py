@@ -57,7 +57,7 @@ CFG = {
     'ship_card': {'home': 'dock', 'word': 'SHIP IT', 'title': 'SHIP IT: drag me to Done'},
     'labels': {'Bug': 'bug'},
 }
-NOW = datetime(2026, 10, 29, 19, 40, tzinfo=timezone.utc)   # 12:40 PM PT
+NOW = datetime(2026, 10, 29, 19, 40, tzinfo=timezone.utc)   # 12:40 PM PT; utc-ok: a fixed instant for the sweep's clock
 LOGIN = 'acme'
 marks, letters = [], []
 T.configure(board=lambda: CFG, people={'captain': 'Cap'},
@@ -117,7 +117,7 @@ check('a bare time already past is tomorrow', S.pt(S.parse_eta('9 AM', NOW)), '1
 check('a weekday names the next such day', S.pt(S.parse_eta('Sat 1 PM', NOW)), '10/31/26 1:00 PM PT')
 check('a full stamp with PT', S.pt(S.parse_eta('11/2/26 6:00 AM PT', NOW)), '11/2/26 6:00 AM PT')
 check('ISO, and nothing readable', (S.parse_eta('2026-10-29T23:00:00Z', NOW), S.parse_eta('when it is done', NOW)),
-      (datetime(2026, 10, 29, 23, tzinfo=timezone.utc), None))
+      (datetime(2026, 10, 29, 23, tzinfo=timezone.utc), None))   # utc-ok: the parse's expected instant, in UTC
 check('an hour the clock repeats (1:30 AM on 11/1/26) is read in standard time', S.localize(datetime(2026, 11, 1, 1, 30), S._zone()).utcoffset(),
       timedelta(hours=-8))
 

@@ -92,7 +92,7 @@ check("an alert closer's close, by its mark or an alert title", (A.closed_by_clo
       (True, True, True, False))
 check('the client takes the repository from configure', A.GitHub('tok').repo, 'acme/app')
 store = Records()
-now = datetime(2026, 10, 23, 9, tzinfo=timezone.utc)
+now = datetime(2026, 10, 23, 9, tzinfo=timezone.utc)   # utc-ok: a fixed instant for the fakes, as an event's `at` is UTC
 cid = A.claim_key(KEY, INC)
 check("the opening's claim in the claims collection, once", (A.claim_opening(store, KEY, cid, now), A.claim_opening(store, KEY, cid, now),
                                                           A.opening_claimed(store, KEY, INC), store.get('claims', cid)['expires_at'].day),
