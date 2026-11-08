@@ -3,6 +3,25 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.7.0 - 2026-11-08 PT
+
+The work a session hands to delegates counts in a ticket's actual. On 11/8/26 a ticket built by three agents, 451 s of
+their own tool calls, read 0m: the stamp hook exempted a helper's calls from the activity log, and the session's one
+call that started them was one line charged at most the cap. Every 0.6.0 call reads as before.
+- `loe.parse`: two more line shapes, "<epoch> <session> <tickets> delegated <tool_use_id>" (the session's call that
+  starts a delegate) as `('delegated', tool_use_id, tickets)` and "<epoch> <session> agent <agent_id> <tool_use_id>" (a
+  delegate's own tool call) as `('agent', agent_id, tool_use_id)`; three-field lines as before, any other shape skipped.
+- `loe.minutes` (new): `{n: {'active', 'delegated'} or None}`. A delegated line is a ticket line of the session's own;
+  each agent's lines open the intervals between them, capped as a session's gaps are, on the tickets of the delegated
+  line with its tool_use_id, else of its session's newest line before its first, each ticket's share of an interval
+  1 / the tickets it names, as a session's gap is split; a ticket's delegated time is, at each instant, the largest share
+  an agent gives it less the share the session's own interval gives it, so parallel agents and an agent beside the
+  session count once, and an agent on a two-ticket delegation is counted once, not once per ticket. `active_minutes`
+  is the 'active' of it, unchanged to the minute for a log with no agents.
+- `loe.record` keeps the event's `delegated` minutes as the record's `delegated_min` (None when the event has none);
+  `loe.text` says `, 45m of it by delegates` after the work when the record holds them beside a working time.
+- `tickets.loe_event` carries `delegated` beside `active`.
+
 ## 0.6.0 - 2026-11-08 PT
 
 The board's event listeners, what one of GitHub's webhook deliveries means, and a triage pass on a box, moved from the

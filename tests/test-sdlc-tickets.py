@@ -443,6 +443,10 @@ except ValueError:
 check('no factor: the raw, said', T.calibrated('2h'), ('2h', 120, '(raw, uncalibrated: 0 ticket(s) with an actual)'))
 gh = fresh({91: {}}, {'IT_91': {'number': 91, 'status': 'Building', 'light': 'busy', 'estimate': 1.0}})
 ST.docs[('loe_starts', '91')] = {'first_epoch': 1000}
+ev = T.loe_event([91, 92], now=4600, lines=T.L.parse('1000 x 91 delegated tu1\n1000 x agent a tu1\n1300 x agent a tu1\n'
+                                                      '1600 x agent a tu1\n1600 x stop'))
+check("loe_event carries the working minutes and the delegates' part", ev,
+      {'tickets': [91, 92], 'at': 4600, 'key': '4600-91-92', 'active': {'91': 10, '92': None}, 'delegated': {'91': 5, '92': None}})
 got = T.record_loe([91], run=gh, data={'tickets': [91], 'at': 4600, 'key': 'c1', 'active': {'91': 30}})
 check('record_loe through the host store, the Actual on the board',
       (got[0].startswith('tickets: #91 LOE so far: estimated 1h, actual 30m of work (-50%), 1h elapsed'), gh.writes[-1][1]),

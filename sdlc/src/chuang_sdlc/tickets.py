@@ -508,13 +508,15 @@ def estimate_stage(number: int, raw, run=None, cfg: dict = None, factor_of=None,
 
 
 def loe_event(numbers, now=None, lines=None) -> dict:
-    """One commit's loe.EVENT: {tickets, at, key, active}, the working minutes the local activity log shows for each
-    ticket (loe.active_minutes; None for one it never names), for the host to publish and record."""
+    """One commit's loe.EVENT: {tickets, at, key, active, delegated}, the working minutes the local activity log shows
+    for each ticket (loe.minutes; `active` the whole, None for one it never names, `delegated` the part a session's
+    delegates worked), for the host to publish and record."""
     import time as _time
     at = int(now if now is not None else _time.time())
-    active = L.active_minutes(L.read_log() if lines is None else lines, numbers)
+    mins = L.minutes(L.read_log() if lines is None else lines, numbers)
     return {'tickets': [int(n) for n in numbers], 'at': at, 'key': f'{at}-{"-".join(str(n) for n in numbers)}',
-            'active': {str(n): m for n, m in active.items()}}
+            'active': {str(n): (m['active'] if m else None) for n, m in mins.items()},
+            'delegated': {str(n): (m['delegated'] if m else None) for n, m in mins.items()}}
 
 
 def record_loe(numbers, store=None, run=None, now=None, cfg: dict = None, data: dict = None) -> list:

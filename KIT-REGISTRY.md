@@ -697,17 +697,18 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `log_path()` | The activity log: TICKET_ACTIVITY_LOG, else ~/.claude/ticket-activity.log. |
-| `parse(text)` | The log's lines as (epoch, session, what): what is 'stop', 'none' or a tuple of ticket numbers; a malformed line is skipped. |
+| `parse(text)` | The log's lines as (epoch, session, what). A three-field line's what is 'stop', 'none' or a tuple of ticket numbers, as always. "<epoch> <session> <tickets> delegated <tool_use_id>", the session's call that starts a delegate, is ('delegated', tool_use_id, tic… |
 | `read_log(path=)` | parse() of the log file; [] when there is none. |
-| `active_minutes(lines, numbers, cap=)` | {n: minutes} of working time on each ticket in `numbers`, None for one the log never names: per session, each gap between two consecutive lines is charged to the earlier line's tickets, split evenly between them, at most `cap` seconds; a gap after a `stop` or… |
+| `minutes(lines, numbers, cap=)` | {n: {'active': minutes, 'delegated': minutes}} of working time on each ticket in `numbers`, None for one the log never names, a delegated line or an agent's included. The session's own time: per session, each gap between two consecutive lines of its own (a de… |
+| `active_minutes(lines, numbers, cap=)` | {n: minutes} of working time on each ticket in `numbers`, the session's own and its delegates' together (`minutes`), None for one the log never names. |
 | `band(raw_min)` | The span a raw estimate in minutes falls in (BANDS). |
 | `factor(records, raw_min=)` | (the median actual / raw estimate, how many tickets it is from, the span it is of) over the records with both: with `raw_min`, the median of that estimate's own span (BANDS), the whole set's when the span has fewer than MIN_RECORDS. The raw is the record's `e… |
 | `calibrate(raw_min, by)` | A raw estimate in minutes times the factor `by`, rounded to CALIBRATE_STEP minutes and at least that. |
 | `hours(minutes)` | Minutes as a board field's hours: 30 -> '0.5', 120 -> '2', 100 -> '1.67'. |
 | `words(minutes)` | Minutes as the words a comment says: `45m`, `1h 10m`, `2h`, `1d 2h` (a day is 8 hours of work). |
 | `stamp(epoch, tz=)` | An epoch as the clock reading a person writes, with its year and zone: `11/2/26 12:50 PM PT` (the kit's zone unless `tz` is given). |
-| `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`; an estimate, the working time or the start that is missing says so (`start_hint`, th… |
-| `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`), the elapsed time from the ticket's first start (`starts`/<n> first_epoch) to the… |
+| `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`, with `, 45m of it by delegates` after the work when the record holds delegated minut… |
+| `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`, and of it the delegates' `delegated`, kept as delegated_min, None when the event… |
 
 ## `chuang_sdlc.notes`: A ship's release notes: every ticket the shipped commits name, by its full title, grouped New (the…
 
@@ -922,7 +923,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `calibrated(raw_text, factor_of=)` | (the estimate to file, its raw minutes, the note said beside it) for a raw estimate: the raw times its span's factor, `10m`, `(raw 4h x 0.04, 1h to 4h: the median actual/estimate of 23 tickets)`; the raw as it is, with a note, when there is no factor. In minu… |
 | `keep_record(number, raw_min, write=)` | The raw estimate on the ticket's LOE record (`estimate_raw_min`), so the factor is always actual over raw: `write(n, doc)`, else a merge into the host's raw store (configure(raw_store=), the record store when unset); nothing when neither is at hand. Best effo… |
 | `estimate_stage(number, raw, run=, cfg=, factor_of=, record=, write=, item=, raw_unfactored=)` | The one estimate stage every new ticket passes, however it was filed (by hand, by a triage line's `LOE:`, by a backfill): the raw (`30m`, `2h`, `1d`, or minutes) calibrated (calibrated), the board's Estimate and LOE original written in one request, and the ra… |
-| `loe_event(numbers, now=, lines=)` | One commit's loe.EVENT: {tickets, at, key, active}, the working minutes the local activity log shows for each ticket (loe.active_minutes; None for one it never names), for the host to publish and record. |
+| `loe_event(numbers, now=, lines=)` | One commit's loe.EVENT: {tickets, at, key, active, delegated}, the working minutes the local activity log shows for each ticket (loe.minutes; `active` the whole, None for one it never names, `delegated` the part a session's delegates worked), for the host to… |
 | `record_loe(numbers, store=, run=, now=, cfg=, data=)` | The LOE of each ticket so far, written here: loe.record over this commit's event (`data`, else loe_event of `numbers`) into the store (the host's when none is given), the estimate from ticket_estimate and the Actual through set_field. Lines; best effort, a re… |
 | `report_loe(numbers, store=, run=, now=)` | The one LOE comment of each ticket, at its ship: `LOE: ` and loe_text of its record, once (the record's reported_epoch). A ticket with no record, or one reported already, is skipped. Lines; best effort. |
 | `item_id(number, run=, cfg=)` | The Project item of #number, adding the issue to the Project when it is not on it (GitHub's add is idempotent: addProjectV2ItemById answers the item already there); the issue's node id read once a process. None when GitHub does not answer. |
