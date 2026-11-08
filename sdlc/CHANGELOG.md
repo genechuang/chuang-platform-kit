@@ -3,6 +3,29 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.6.0 - 2026-11-08 PT
+
+The board's event listeners, what one of GitHub's webhook deliveries means, and a triage pass on a box, moved from the
+first host's code with no project in them. Every 0.5.0 call reads as before.
+- `listeners` (new): `configure(head=, claims=, claim_ttl_days=, moves=, retry=, scrum_state=, acted_seconds=,
+  loe_record=, actual_field=, closer=)`; `ticket_committed` (the host's LOE record, the card's Actual), `board_wake` (a
+  card newly in the shipyard: its owner's one letter, the drag on the scrum record, a session's own start telling
+  nobody), `board_light`, `dock_landed`, `ticket_closed` (an alert closer's close to the ship column, a close as not
+  planned to the failed one, any other asked; each move marked first; the host's own word through `also`),
+  `scrum_nudge` and `triage_sweep` (the sweep here first, `start(args)` the host's job after). Each claim is a
+  create-only record in the host's claims collection; a redelivery is the host's retry exception (`Retry` here unless
+  configured). The board helpers are the host's (`moves`, read at call time; the module docstring lists them).
+- `webhooks` (new): `TRIAGE_LINE`, `comment_route` (a `Scrum:` answer or the owner's plain reply on an issue assigned to
+  them, a `Triage:` line, or ignored with its line), `issue_route` (a close, a feedback ticket by its label or body
+  mark, an alert, or ignored), `dock_landed` (the push's `Ticket:` trailers), `project_item` and `item_route` (a
+  Project item's move before and after its read), `delivery_age`.
+- `triage` (new): `request` (one event on the host's topic, never raising), `prompt_text`, `prepare_worktree` (a
+  read-only worktree of origin/main, a failed fetch keeping the sha it has or origin/main as the box saw it),
+  `stamp`, `running`, `start_pass` (the host's `-m <module> pass`), `run_pass` (the headless run on the host's accounts
+  through chuang_platform_kit.headless_claude: a limited account rests, a refused token rests the host's time, said in
+  its `refused_note`), `result_record`, `locked_pass`.
+- `testing`: `Moves`, the board helpers in memory, for the listeners and `webhooks.item_route`.
+
 ## 0.5.0 - 2026-11-07 PT
 
 The scrum master, the ship card's keeper, the backlog read and the alert issues, moved from the first host's code with no

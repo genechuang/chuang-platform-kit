@@ -676,6 +676,22 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `ticket_trailers(message)` | (numbers, none_reason) from a commit message's `Ticket:` trailers: ([12, 14], '') or ([], 'session notes'), the numbers sorted and each once; ([], None) when it names none. |
 | `ticket_numbers(message)` | The tickets a commit message's `Ticket:` trailers name, sorted ([] for `Ticket: none (why)` or no trailer). |
 
+## `chuang_sdlc.listeners`: The board's event listeners: what a host's webhook receiver does with one board or ticket event, on…
+
+| Name | Purpose |
+|---|---|
+| `class Retry` | The delivery should come again (the bus's retry): the message says why. |
+| `configure(**settings)` | The host's settings (the module's _SET says what each is). Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `claims()` | The claims collection; NotConfigured when the host named none. |
+| `ticket_committed(data, store, token, opener=, record=)` | A commit's working time on each ticket it names: the host's LOE record (`record`, else configure's `loe_record`), the estimate read from the card (moves.estimate_minutes of its item) and the working time written to the card's Actual field. Lines; the retry ex… |
+| `board_wake(data, store, now=, mail=)` | The owner of a card newly in the shipyard column (a Status move into it from another column, moves.newly_in) told by one letter (moves.wake_letter, `mail(to, text, sender, subject=)`). A move within moves.STARTED_MINUTES of the ticket's own start (the host's… |
+| `board_light(data, token, setter=)` | A dragged card's Light made its column's: moves.light_fix says what, `setter` (else moves.set_light) writes it. Its own Light edit comes back as a move whose light already fits, so the loop settles there. A refusal is a WARNING line, never a retry: the light… |
+| `dock_landed(data, token, mover=)` | A push landed on the dock branch: its tickets to the dock column at once (`mover`, else moves.to_dock: forward only, one line a ticket). A ticket GitHub refused is a WARNING line, never a retry: the warm's own result moves it on, and a redelivery would only r… |
+| `ticket_closed(data, store, token, now=, read=, ship=, mail=, also=)` | A closed ticket ends in the ship or the failed column: the event {number, state_reason, by}, and this reads that one card (`read`, else moves.closed_card). Off the board, or in a finished column already: nothing. Closed as not planned or a duplicate (moves.is… |
+| `scrum_nudge(number, store, now=, start=, why=, sweep=)` | The scrum master run on one card the moment an event names it: `sweep()` here (its lines), and `start(args)` (the host's job, `scrum-sweep --ticket N`) only when that failed. Never its own trigger: an event within `acted_seconds` of the scrum master's last ac… |
+| `triage_sweep(data, start=, sweep=)` | A `Triage:` line the receiver could not sweep at once: the ticket sweep run here (`sweep()`, its lines), and `start(args)` (the host's job, `tickets-sweep`) only when that failed; the retry exception while the start is refused, so the bus keeps trying and, af… |
+
 ## `chuang_sdlc.loe`: A ticket's level of effort, estimated and actual: the working-time rule, the calibration of a raw e…
 
 | Name | Purpose |
@@ -834,6 +850,30 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Board.add_labels(number, labels)` | Labels added, recorded. |
 | `Board.remove_label(number, label)` | A label taken off, recorded. |
 | `Board.graphql(query, variables=)` | board_items' query by its filter, CARD_QUERY, ticket_place's item read, the blocked-by link and the draft edit; anything else answers {}. |
+| `class Moves` | A host's board helpers for chuang_sdlc.listeners and webhooks.item_route, in memory: a card's node is {id, content: {number, title}, status: {name, updatedAt}, light: {name}, owner: {name}}; the columns by role are `stages`; `cards` {number: closed_card's ans… |
+| `Moves.number(node)` | The card's issue number (None for a draft). |
+| `Moves.title(node)` | The card's title. |
+| `Moves.column(node)` | The card's column. |
+| `Moves.stage(role)` | A column by its role. |
+| `Moves.newly_in(data, role)` | A Status move into the role's column from another. |
+| `Moves.light_fix(data)` | The light this move should leave (`fix`), None to leave it. |
+| `Moves.set_light(item, value, token)` | The card's Light written. |
+| `Moves.wake_letter(node, by)` | (to, text, subject): the card's Owner, else 'Captain'. |
+| `Moves.to_dock(numbers, token)` | Each ticket to the dock column, a line each ('not moved' for a number whose `dock-<n>` is in `refuse`). |
+| `Moves.closed_card(number, token)` | The closed card (`cards`), {} off the board; RuntimeError when 'read' is refused. |
+| `Moves.is_finished(col)` | The ship or the failed column. |
+| `Moves.is_unplanned(reason)` | Closed as not planned or a duplicate. |
+| `Moves.closed_key(number, closed_at)` | One close's claim id. |
+| `Moves.to_unplanned(item, token)` | The card to the failed column, no Light. |
+| `Moves.to_shipped(item, token)` | The card to the ship column. |
+| `Moves.unplanned_line(card, reason)` | (to, text, subject) of the one line about a close as not planned. |
+| `Moves.closed_letter(card)` | (to, text, subject) of the letter about any other close. |
+| `Moves.item_for(number, token, opener=)` | The ticket's item id, `IT_<n>`. |
+| `Moves.read_item(item, token, opener=)` | The item's node. |
+| `Moves.estimate_minutes(node)` | The card's estimate (`estimate`). |
+| `Moves.set_field(item, field, value, token, opener=)` | One field written. |
+| `Moves.is_placeholder(title)` | A placeholder card's title: `— … —`. |
+| `Moves.is_ship_card(node)` | The ship card: a draft titled with SHIP. |
 
 ## `chuang_sdlc.tickets`: A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow,…
 
@@ -963,4 +1003,29 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `matcher(*shapes)` | The plumbing lines as one pattern: each of `shapes` a name in SHAPES or a regex of its own (shape() makes one); STANDARD when none is given. Case is ignored. |
 | `is_plumbing(line, pattern=)` | Whether one body line is a plumbing trailer, by `pattern` (matcher()'s), the standard shapes when none. |
 | `values(message, key)` | Every value of the trailer `key` in a commit message, in order, each stripped: values(m, 'Post-Ship'). One line each: an empty trailer has no value and never borrows the next line. |
+
+## `chuang_sdlc.triage`: A triage pass on a box: one headless Claude run that investigates and triages a project's untriaged…
+
+| Name | Purpose |
+|---|---|
+| `request(why, topic, kind=, number=, title=, kinds=, source=, publish=, project=, event=)` | Publish one `event` on `topic` in `project` for `why` (an issue number, a digest's kinds, a sweep): the line the caller logs. `kind` is issue, warnings or sweep. Never raises: a refused publish is the line. `publish` is the test seam for chuang_platform_kit.p… |
+| `prompt_text(path, note=)` | The pass's prompt: the file at `path` verbatim, then a blank line and the host's `note` (what asked for this pass, where it runs) when it gave one. |
+| `prepare_worktree(root, worktree, run=, keep_on_failed_fetch=, detail=, timeout=)` | origin/main's head checked out detached in `worktree` (added on first use from the clone at `root`, `--force` taking over a registration whose folder was deleted; a folder in the way still refuses), reset whatever it holds (`checkout --force`, its edits to tr… |
+| `stamp(now=)` | An instant as a log file's name part, `20261030T220000Z`. |
+| `running(lock, now=, stale=)` | The pass under way by its lock file ({why, kind, pid, started}), or {} when none or when the lock is older than `stale` seconds (a pass killed without its cleanup: the next one takes over). |
+| `start_pass(why, kind, module, root, lock, logs, popen=, now=, stale=)` | Start one pass detached (`python -m <module> pass <why> <kind>` from `root`, the hidden console every box process shares); the line for the listener's log. A pass already running (`running`) covers this request: its prompt lists every waiting issue itself, so… |
+| `run_pass(why, kind, root, worktree, cmd, prompt, logs, run=, now=, limit=, prepare=, attempts=, attempts_of=, resting=, resting_of=, zone_of=, auth_refused=, refused_rest_s=, refused_note=)` | One pass: the worktree refreshed (`prepare(root, worktree, run)`, else prepare_worktree), the CLI `cmd` run there with the prompt (`prompt()`, read once the worktree is ready) on stdin, capped at `limit` seconds, its output in `logs/<stamp>-<why>.log`; the on… |
+| `result_record(stdout)` | The run's `result` record from its streamed output (the last line whose type is `result`), or the one JSON document when the output was not streamed; {} when neither parses. |
+| `locked_pass(why, kind, lock, run_pass_, now=)` | The detached process's body: the lock written ({why, kind, pid, started}), `run_pass_(why, kind)` run, the lock removed however it ends; the pass's line, also appended to passes.log beside the lock for the record. |
+
+## `chuang_sdlc.webhooks`: What one of GitHub's webhook deliveries means for the ticket tools, decided from the delivery alone…
+
+| Name | Purpose |
+|---|---|
+| `comment_route(payload, owner, scrum_re, marker=, triage_re=)` | {route, number, comment, line}: `scrum` for an owner's answer to the scrum master (a `Scrum:` line, `scrum_re` a regex or a callable answering one, read only when needed; or the repository owner's plain reply on an issue assigned to them, which is no sweep's… |
+| `issue_route(payload, skip_titles=, feedback_mark=, feedback_label=, machine_label=, area_prefix=)` | {route, number, title, url, body, labels, reason, by, line}: `closed` for any close (`reason` its state reason, 'completed' when none; `feedback` True for a feedback ticket's), `feedback` for a feedback ticket opened or reopened (its label, or a body `feedbac… |
+| `dock_landed(payload, numbers_of=)` | The `dock.landed` data of a push to the dock branch, {sha, before, tickets, forced, by}, the tickets the commits' `Ticket:` trailers name (`numbers_of(message)`, else chuang_sdlc.board.ticket_numbers), sorted and each once; None for a push that deleted the br… |
+| `project_item(payload, event_fields)` | (data, line) for a Projects (v2) item delivery: the `ticket.moved` data before the item's read, {item, field, field_name, by, from}, and '' when it is a move to read; (None, the line) when it is ignored: any action but an edit, a field that is no single selec… |
+| `item_route(node, field_name, moves, light_field=)` | What a read item's move is, by the host's board helpers (`moves`: is_placeholder, title, number, column, stage, is_ship_card): `placeholder` for a column's placeholder card (put back, nothing sent), `app_status` for a draft card in the app status column that… |
+| `delivery_age(updated_at, now=)` | How long after the item's change the webhook reached the receiver, as a clause for the move's line (`; GitHub delivered it 0.8 s after the change`): `updated_at` the payload's ISO stamp; '' when it is missing or unreadable. |
 

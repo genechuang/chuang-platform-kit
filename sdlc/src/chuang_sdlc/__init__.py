@@ -31,11 +31,22 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   backlog    the one backlog read from the board (open tickets, GitHub's own filter) and rendered by state, P1 first
   alerts     an alert's incident as a GitHub issue, filed once per opening and closed once it is fixed, and a triage
              pass's create-only claim; the words, the repository and the collections the host's
+  listeners  the board's event listeners, each told once per event: a commit's working time, the owner of a card newly
+             in the shipyard woken, a dragged card's light, a dock landing's cards, a closed ticket settled in the ship
+             or the failed column, the scrum master's nudge and the triage sweep's catch (here first, the host's job
+             after); the letter, the job, the sweeps and the board helpers the host's
+  webhooks   what one of GitHub's deliveries means, decided from the delivery alone: a comment's route (a `Scrum:`
+             answer, a `Triage:` line), an issue's (a close, a feedback ticket, an alert), a dock push's tickets, a
+             Project item's move before and after its read, the delivery's age
+  triage     a triage pass on a box: the request over the host's bus, the prompt, the read-only worktree, one pass at a
+             time by its lock, the headless run on the subscriptions' accounts (chuang_platform_kit.headless_claude),
+             capped and logged; the worktree, prompt file, logs and model the host's
   testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake), and
-             of the sweep, the board's reads and the claims (Board, Records, items_page)
+             of the sweep, the board's reads and the claims (Board, Records, items_page), and the board helpers the
+             listeners take (Moves)
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.5.0'
+__version__ = '0.6.0'

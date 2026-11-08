@@ -19,7 +19,14 @@ ship card (a draft the lead drags into the ship column to ship), kept at its hom
 what the board cannot say, in one letter a sweep, keeps one comment a card, and catches the closed cards outside the
 finished columns. And the one backlog read from the board and rendered by state, P1 first (`backlog`). And an alert's
 incident as a GitHub issue, filed once per opening and closed once it is fixed, with a triage pass's create-only claim
-(`alerts`); the project's watcher, its words, its repository and collections are configured.
+(`alerts`); the project's watcher, its words, its repository and collections are configured. And the board's event
+listeners (`listeners`): each board or ticket event told once, a commit's working time, the owner of a card newly in the
+shipyard woken, a dragged card's light, a dock landing's cards, a closed ticket settled in the ship or the failed
+column, the scrum master's nudge and the triage sweep's catch, with the project's letter, job, sweeps and board helpers
+passed in; and what one of GitHub's deliveries means, decided from the delivery alone (`webhooks`). And a triage pass
+on a box (`triage`): one headless Claude run over the project's untriaged issues, asked for over its bus, in a
+read-only worktree, one at a time, capped and logged, on the subscriptions' accounts
+(chuang_platform_kit.headless_claude).
 
 It is a distribution of its own in the chuang-platform-kit repository, so a release of it redeploys only what runs
 it: a host pins it where its ticket tools run, never in every service the main package is in.

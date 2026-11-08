@@ -19,6 +19,11 @@ And for the scrum master's sweep, the board's reads and the claims (scrum, backl
                issues={7: {'id': 'G7', 'state': 'OPEN', 'blockedBy': {'nodes': []}, 'comments': {'nodes': []}}})
     scrum.sweep(cfg, scrum.GitHub(cfg, run=gh), store, mail)
     items_page(cards)                       # the board_items answer for these cards
+
+And for the board's event listeners and a webhook's item route (listeners, webhooks):
+
+    moves = Moves(cards={7: {'number': 7, 'column': 'Building', 'item': 'IT_7'}})
+    listeners.configure(moves=moves, claims='claims')
 """
 from . import ship_pr as P
 from . import tickets as T
@@ -334,3 +339,120 @@ class Board:
             self.writes.append(('retitle', v.get('d'), v.get('t'), v.get('b')))
             return {'updateProjectV2DraftIssue': {'draftIssue': {'id': v.get('d')}}}
         return {}
+
+
+class Moves:
+    """A host's board helpers for chuang_sdlc.listeners and webhooks.item_route, in memory: a card's node is
+    {id, content: {number, title}, status: {name, updatedAt}, light: {name}, owner: {name}}; the columns by role are
+    `stages`; `cards` {number: closed_card's answer}; `fix` the light light_fix answers (None leaves it); every write is
+    recorded in `writes` as (verb, ...), and `refuse` names verbs that raise RuntimeError('HTTP 502')."""
+
+    STARTS, STARTED_MINUTES, SENDER = 'starts', 20, 'Board'
+    BOARD_MOVES, SCRUM_SENDER = 'board_moves', 'Scrum master'
+
+    def __init__(self, stages=None, cards=None, fix=None, refuse=(), estimate=None):
+        self.stages = dict(stages or {'backlog': 'Backlog', 'shipyard': 'Building', 'dock': 'Ready', 'shipped': 'Shipped',
+                                      'failed': 'Wrecked', 'app_status': 'Apps'})
+        self.cards, self.fix, self.refuse, self.estimate, self.writes = dict(cards or {}), fix, set(refuse), estimate, []
+
+    def _write(self, verb, *args):
+        if verb in self.refuse:
+            raise RuntimeError('HTTP 502')
+        self.writes.append((verb,) + args)
+
+    def number(self, node):
+        """The card's issue number (None for a draft)."""
+        return ((node or {}).get('content') or {}).get('number')
+
+    def title(self, node):
+        """The card's title."""
+        return ((node or {}).get('content') or {}).get('title') or ''
+
+    def column(self, node):
+        """The card's column."""
+        return ((node or {}).get('status') or {}).get('name') or ''
+
+    def stage(self, role):
+        """A column by its role."""
+        return self.stages[role]
+
+    def newly_in(self, data, role):
+        """A Status move into the role's column from another."""
+        col = self.stage(role)
+        return ((data or {}).get('field_name') or 'Status') == 'Status' and self.column((data or {}).get('node')) == col \
+            and ((data or {}).get('from') or '') != col
+
+    def light_fix(self, data):
+        """The light this move should leave (`fix`), None to leave it."""
+        return self.fix
+
+    def set_light(self, item, value, token):
+        """The card's Light written."""
+        self._write('light', item, value)
+
+    def wake_letter(self, node, by):
+        """(to, text, subject): the card's Owner, else 'Captain'."""
+        n = self.number(node)
+        return (((node or {}).get('owner') or {}).get('name') or 'Captain', f'{by or "Someone"} moved #{n}', f'#{n} to Building')
+
+    def to_dock(self, numbers, token):
+        """Each ticket to the dock column, a line each ('not moved' for a number whose `dock-<n>` is in `refuse`)."""
+        return [f'#{n}: not moved (HTTP 502)' if f'dock-{n}' in self.refuse else f'#{n}: Dock, warming' for n in numbers]
+
+    def closed_card(self, number, token):
+        """The closed card (`cards`), {} off the board; RuntimeError when 'read' is refused."""
+        if 'read' in self.refuse:
+            raise RuntimeError('HTTP 502')
+        return self.cards.get(int(number), {})
+
+    def is_finished(self, col):
+        """The ship or the failed column."""
+        return col in (self.stage('shipped'), self.stage('failed'))
+
+    def is_unplanned(self, reason):
+        """Closed as not planned or a duplicate."""
+        return str(reason or '').lower() in ('not_planned', 'duplicate')
+
+    def closed_key(self, number, closed_at):
+        """One close's claim id."""
+        return f'ticket-closed-{number}-{closed_at or "now"}'
+
+    def to_unplanned(self, item, token):
+        """The card to the failed column, no Light."""
+        self._write('unplanned', item)
+
+    def to_shipped(self, item, token):
+        """The card to the ship column."""
+        self._write('shipped', item)
+
+    def unplanned_line(self, card, reason):
+        """(to, text, subject) of the one line about a close as not planned."""
+        return card.get('owner') or 'Captain', f"#{card.get('number')} closed as {reason}", 'Closed'
+
+    def closed_letter(self, card):
+        """(to, text, subject) of the letter about any other close."""
+        return card.get('owner') or 'Captain', f"#{card.get('number')} was closed: done?", 'Closed'
+
+    def item_for(self, number, token, opener=None):
+        """The ticket's item id, `IT_<n>`."""
+        return f'IT_{number}'
+
+    def read_item(self, item, token, opener=None):
+        """The item's node."""
+        return {'id': item}
+
+    def estimate_minutes(self, node):
+        """The card's estimate (`estimate`)."""
+        return self.estimate
+
+    def set_field(self, item, field, value, token, opener=None):
+        """One field written."""
+        self._write('field', item, field, value)
+
+    def is_placeholder(self, title):
+        """A placeholder card's title: `— … —`."""
+        return title.startswith('— ') and title.endswith(' —')
+
+    def is_ship_card(self, node):
+        """The ship card: a draft titled with SHIP."""
+        return not self.number(node) and 'SHIP' in self.title(node)
