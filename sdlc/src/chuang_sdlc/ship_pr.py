@@ -9,7 +9,8 @@ The shape:
   - the push of the base is the merge: GitHub marks a pull request merged when its head is in the base. GitHub's merge
     API is never called, since every merge mode writes a commit of its own to the base, a second deploy;
   - a ship whose push is refused closes its pull request unmerged (`close_unshipped`, or `close_head` by its head when
-    the open's answer was never read) and deletes the branch;
+    the open's answer was never read) and deletes the branch; one killed before it could is swept by the next ship's
+    open, which closes every other open ship pull request whose head is not in the base (`close_stale`);
   - once the release's production smoke passes, the tickets close first (tickets.live_numbers), then `link_after_live`
     adds the pull request as each ticket's closing reference (addCloseIssueReferences, aliased, BATCH to a document: a
     closed issue lists the merged pull request in its Development, and a reopened one stays open), so a ticket still
@@ -89,6 +90,12 @@ CLOSE_PR = 'mutation($id: ID!) { closePullRequest(input: {pullRequestId: $id}) {
 DELETE_REF = 'mutation($id: ID!) { deleteRef(input: {refId: $id}) { clientMutationId } }'
 UPDATE_PR = ('mutation($id: ID!, $body: String!) { updatePullRequest(input: {pullRequestId: $id, body: $body}) { '
              'pullRequest { number } } }')
+OPEN_QUERY = ('query($owner: String!, $name: String!, $base: String!) { repository(owner: $owner, name: $name) { '
+              'pullRequests(states: [OPEN], baseRefName: $base, first: 50, orderBy: {field: CREATED_AT, direction: DESC}) '
+              '{ nodes { number headRefName headRefOid } } } }')
+COMPARE_QUERY = ('query($owner: String!, $name: String!, $base: String!, $head: String!) { '
+                 'repository(owner: $owner, name: $name) { ref(qualifiedName: $base) { compare(headRef: $head) { status } } } }')
+IN_BASE = ('BEHIND', 'IDENTICAL')   # Ref.compare's status of a head every commit of which the base holds
 
 
 def _repo(cfg) -> tuple:
@@ -147,6 +154,18 @@ def _delete_branch(pull: dict, run) -> bool:
     return isinstance(got, dict) and 'deleteRef' in got
 
 
+def _drop_branch(ref_id: str, head: str, run, cfg) -> str:
+    """The branch open_for made deleted again when its pull request was refused (no pull-request write on the token,
+    the head already in the base), so a refused open leaves no `<prefix><head8>` behind; `ref_id` from createRef, ''
+    when the caller's push made it (then read back). The line's tail."""
+    branch = branch_of(head)
+    ref_id = ref_id or ((_repository(head, run, cfg).get('ref') or {}).get('id') or '')
+    got = _gql(run, DELETE_REF, {'id': ref_id}) if ref_id else None
+    if isinstance(got, dict) and 'deleteRef' in got:
+        return f'; {branch} deleted again'
+    return f'; WARNING: {branch} was left on GitHub ({_why(run) if ref_id else "its ref was not read back"})'
+
+
 def _usable(p: dict) -> bool:
     """A ship pull request the release may name: merged, or still open (GitHub not yet marking the push's merge). One
     closed unmerged is a refused ship's (close_unshipped), never the release's, even when the same head reached the base
@@ -171,7 +190,9 @@ def open_for(base: str, head: str, title: str, body: str, run=None, cfg: dict = 
     head GitHub does not hold, or a refused createRef, goes through `push(branch, head)`, the caller's git push, when
     given) and the pull request opened into the base, not a draft, labelled (the label made when the repository lacks
     it). The title and body go through no_closing_keyword here. `base` is the ship's base commit, kept for the
-    caller's line. Never raises: a refusal is a WARNING line and (None, line), and the ship goes on without one."""
+    caller's line. A branch this call made is deleted again when the pull request is refused (_drop_branch), so a
+    refused open leaves nothing behind; a branch that was there already is left. Never raises: a refusal is a WARNING
+    line and (None, line), and the ship goes on without one."""
     run, cfg = T._run(run), T._cfg(cfg)
     branch, into = branch_of(head), _SET['base']
     repo = _repository(head, run, cfg)
@@ -182,12 +203,17 @@ def open_for(base: str, head: str, title: str, body: str, run=None, cfg: dict = 
             return p['number'], f'ship pr #{p["number"]}: reused, open from {branch} into {into}'
     oid = (repo.get('object') or {}).get('oid')
     ref = repo.get('ref') or {}
+    made_ref = None   # this call made the branch: its ref id, '' when a push made it (read back if it must go)
     if ref.get('id'):
         if oid and (ref.get('target') or {}).get('oid') != oid:
             return None, f'WARNING: ship pr not opened ({branch} exists at another commit)'
     else:
-        made = oid and isinstance(_gql(run, CREATE_REF, {'repo': repo['id'], 'name': f'refs/heads/{branch}', 'oid': oid}), dict)
-        if not made and not (push and push(branch, head)):
+        got_ref = oid and _gql(run, CREATE_REF, {'repo': repo['id'], 'name': f'refs/heads/{branch}', 'oid': oid})
+        if isinstance(got_ref, dict):
+            made_ref = ((got_ref.get('createRef') or {}).get('ref') or {}).get('id') or ''
+        elif push and push(branch, head):
+            made_ref = ''
+        else:
             why = f'createRef refused, {_why(run)}' if oid else f'{head[:8]} is not on GitHub and no push made it'
             return None, f'WARNING: ship pr not opened ({branch} was not made: {why})'
     got = _gql(run, CREATE_PR, {'repo': repo['id'], 'base': into, 'head': branch,
@@ -195,7 +221,9 @@ def open_for(base: str, head: str, title: str, body: str, run=None, cfg: dict = 
     made_pr = ((got or {}).get('createPullRequest') or {}).get('pullRequest') if isinstance(got, dict) else None
     number = (made_pr or {}).get('number')
     if not number:
-        return None, f'WARNING: ship pr not opened (createPullRequest refused: {_why(run)})'
+        why = _why(run)
+        left = '' if made_ref is None else _drop_branch(made_ref, head, run, cfg)
+        return None, f'WARNING: ship pr not opened (createPullRequest refused: {why}){left}'
     label = _SET['label']
     labelled = _call(run, 'add_labels', number, [label])
     if not labelled:
@@ -235,6 +263,40 @@ def close_head(head: str, why: str, run=None, cfg: dict = None) -> str:
     if not opened:
         return f'ship pr: none open from {branch}, nothing to close'
     return '; '.join(close_unshipped(n, why, run, cfg) for n in opened)
+
+
+def close_stale(current_head: str = '', run=None, cfg: dict = None) -> str:
+    """Every open ship pull request a ship left behind closed unmerged, its branch deleted (close_unshipped): one from
+    `<prefix>*` into the base whose head is neither `current_head` (the ship now opening its own) nor in the base
+    already (Ref.compare's status BEHIND or IDENTICAL, which the push is marking merged). A ship killed hard skips its
+    own close, so its pull request would stay open, and a later push of a descendant would mark it merged with stale
+    notes, no `Live:` comment and its branch never deleted. The next ship's open runs it first; a sweep may too. A head
+    whose comparison GitHub does not answer is left, named. The line."""
+    run, cfg = T._run(run), T._cfg(cfg)
+    owner, name = _repo(cfg)
+    prefix, into = _SET['prefix'], _SET['base']
+    data = _gql(run, OPEN_QUERY, {'owner': owner, 'name': name, 'base': into})
+    if not isinstance(data, dict):
+        return f'WARNING: stale ship prs not swept (the open pull requests were not read: {_why(run)})'
+    nodes = ((data.get('repository') or {}).get('pullRequests') or {}).get('nodes') or []
+    mine = branch_of(current_head) if current_head else None
+    closed, unread = [], []
+    for p in nodes:
+        head_name = p.get('headRefName') or ''
+        if not head_name.startswith(prefix) or not p.get('number') or head_name == mine:
+            continue
+        if current_head and p.get('headRefOid') == current_head:
+            continue
+        cmp = _gql(run, COMPARE_QUERY, {'owner': owner, 'name': name, 'base': f'refs/heads/{into}', 'head': head_name})
+        status = ((((cmp or {}).get('repository') or {}).get('ref') or {}).get('compare') or {}).get('status') \
+            if isinstance(cmp, dict) else None
+        if not status:
+            unread.append(f'#{p["number"]}')
+        elif status not in IN_BASE:
+            closed.append(close_unshipped(p['number'], f'its ship ended without pushing {head_name} into {into}', run, cfg))
+    if not closed and not unread:
+        return 'ship pr: no stale pull request open'
+    return '; '.join(closed + ([f'WARNING: stale check not answered for {", ".join(unread)}, left open'] if unread else []))
 
 
 def link_document(count: int) -> str:

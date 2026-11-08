@@ -177,7 +177,8 @@ said = P.open_for('b' * 40, head, 't', 'b', run=ShipFake().ship_setup(refuse={'p
 check('a head GitHub lacks goes through the push; refusals are a WARNING and None',
       (got[0], pushed, [c for c in off.ship_calls if c[0] == 'create_ref'], nopush, said),
       (900, [('ship/c1113ee7', head)], [], (None, 'WARNING: ship pr not opened (ship/c1113ee7 was not made: c1113ee7 is not on GitHub and no push made it)'),
-       (None, 'WARNING: ship pr not opened (createPullRequest refused: GitHub /graphql: HTTP 200 (pr refused))')))
+       (None, 'WARNING: ship pr not opened (createPullRequest refused: GitHub /graphql: HTTP 200 (pr refused)); '
+              'ship/c1113ee7 deleted again')))
 closed = P.close_unshipped(900, 'the push gate refused it', run=gh, cfg=CFG)
 gh.prs[901] = {'number': 901, 'head': 'ship/x', 'state': 'MERGED', 'merged': True, 'body': '', 'title': 't'}
 check('close_unshipped comments why, closes it unmerged and deletes the branch; a merged one is left',
@@ -191,6 +192,62 @@ check('the change order named at the top of the body once',
       (P.note_change_order(902, 55, run=gh, cfg=CFG), P.note_change_order(902, 55, run=gh, cfg=CFG), gh.prs[902]['body'],
        len([c for c in gh.ship_calls if c[0] == 'update_pr'])),
       (True, True, '**Change order #55**\n\nnotes', 1))
+
+print('a refused pull request leaves no branch')
+made = ShipFake().ship_setup(refuse={'pr'})
+n, line = P.open_for('b' * 40, head, 't', 'b', run=made, cfg=CFG)
+check('the positive case: createRef made the branch, createPullRequest was refused, and the branch is deleted again',
+      (n, line, made.ship_refs, [c[0] for c in made.ship_calls]),
+      (None, 'WARNING: ship pr not opened (createPullRequest refused: GitHub /graphql: HTTP 200 (pr refused)); '
+             'ship/c1113ee7 deleted again', {}, ['read', 'create_ref', 'create_pr', 'delete_ref']))
+off = ShipFake().ship_setup(on_github=set(), refuse={'pr'})
+via_push = P.open_for('b' * 40, head, 't', 'b', run=off, cfg=CFG,
+                      push=lambda br, sha: off.ship_refs.__setitem__(br, sha) or True)
+kept = ShipFake().ship_setup(refuse={'pr'})
+kept.ship_refs['ship/c1113ee7'] = head   # there before this open: not this call's to delete
+was_there = P.open_for('b' * 40, head, 't', 'b', run=kept, cfg=CFG)
+lost = P.open_for('b' * 40, head, 't', 'b', run=ShipFake().ship_setup(on_github=set(), refuse={'pr'}), cfg=CFG,
+                  push=lambda br, sha: True)   # a push GitHub's read never shows
+check('  a pushed branch is read back and deleted; a branch there before is left; one never read back is a WARNING',
+      (via_push[1].endswith('; ship/c1113ee7 deleted again'), off.ship_refs,
+       was_there[1], kept.ship_refs, [c for c in kept.ship_calls if c[0] == 'delete_ref'],
+       lost[1].endswith('; WARNING: ship/c1113ee7 was left on GitHub (its ref was not read back)')),
+      (True, {}, 'WARNING: ship pr not opened (createPullRequest refused: GitHub /graphql: HTTP 200 (pr refused))',
+       {'ship/c1113ee7': head}, [], True))
+
+print('stale ship pull requests')
+
+
+def stale_fake(**kw):
+    st = ShipFake().ship_setup(in_base={'ship/bbbbbbbb'}, **kw)
+    for num, br, state in ((910, 'ship/aaaaaaaa', 'OPEN'), (911, 'ship/bbbbbbbb', 'OPEN'), (912, 'ship/c1113ee7', 'OPEN'),
+                           (913, 'feature/x', 'OPEN'), (914, 'ship/dddddddd', 'MERGED')):
+        st.prs[num] = {'number': num, 'head': br, 'state': state, 'merged': state == 'MERGED', 'body': '', 'title': 't'}
+        st.ship_refs[br] = head if num == 912 else br[-1] * 40
+    return st
+
+
+st = stale_fake()
+swept = P.close_stale(head, run=st, cfg=CFG)
+check('the positive case: the ship pull request a killed ship left open, its head not in the base, is closed '
+      'unmerged with why and its branch deleted; the one in the base, the current head, a non-ship one and a merged one '
+      'are left',
+      (swept, {n: st.prs[n]['state'] for n in (910, 911, 912, 913, 914)}, 'ship/aaaaaaaa' in st.ship_refs,
+       [c[2] for c in st.calls if c[0] == 'comment'], [c[2] for c in st.ship_calls if c[0] == 'compare']),
+      ('ship pr #910: closed unmerged', {910: 'CLOSED', 911: 'OPEN', 912: 'OPEN', 913: 'OPEN', 914: 'MERGED'}, False,
+       ['Not shipped: its ship ended without pushing ship/aaaaaaaa into main. Closed unmerged; the next ship opens its '
+        'own pull request.'], ['ship/bbbbbbbb', 'ship/aaaaaaaa']))   # newest first, as the list is read
+no_current = stale_fake()
+check('  a second sweep finds none; with no current head every stale one goes, the current head\'s too',
+      (P.close_stale(head, run=st, cfg=CFG), P.close_stale('', run=no_current, cfg=CFG),
+       {n: no_current.prs[n]['state'] for n in (910, 911, 912)}),
+      ('ship pr: no stale pull request open', 'ship pr #912: closed unmerged; ship pr #910: closed unmerged',
+       {910: 'CLOSED', 911: 'OPEN', 912: 'CLOSED'}))
+unlisted, uncompared = stale_fake(refuse={'open'}), stale_fake(refuse={'compare'})
+check('  an unread list is a WARNING and closes nothing; an unanswered comparison leaves that one open, named',
+      (P.close_stale(head, run=unlisted, cfg=CFG), P.close_stale(head, run=uncompared, cfg=CFG), uncompared.prs[910]['state']),
+      ('WARNING: stale ship prs not swept (the open pull requests were not read: GitHub /graphql: HTTP 200 (open refused))',
+       'WARNING: stale check not answered for #911, #910, left open', 'OPEN'))
 
 print('no closing keyword')
 B = P.BREAK

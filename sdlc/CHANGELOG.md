@@ -3,6 +3,20 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.3.1 - 2026-11-07 PT
+
+Two branch leaks in `ship_pr`, from the first host's review; every 0.3.0 call reads as before.
+- `open_for` deletes the branch it made (createRef, or the caller's `push`, read back for its id) when
+  createPullRequest is then refused (no pull-request write on the token, the head already in the base), so a refused
+  open leaves no `<prefix><head8>` on GitHub; a branch that was there before the call is left. The line ends
+  `; <branch> deleted again`, or a WARNING naming the branch left.
+- `close_stale(current_head='', run=, cfg=)`: every open pull request from `<prefix>*` into the base whose head is
+  neither `current_head` nor in the base already (Ref.compare's BEHIND or IDENTICAL, `IN_BASE`) is closed unmerged
+  with why and its branch deleted, through `close_unshipped`. A ship killed hard skips its own close; a host's next
+  ship open runs this first, and a sweep may. `OPEN_QUERY`, `COMPARE_QUERY`.
+- `testing`: `ship_setup(in_base=)` and refusals `open` and `compare` for the two new documents; createRef's answered
+  id is the one the reads give the branch, so a made branch can be deleted in the fake.
+
 ## 0.3.0 - 2026-11-07 PT
 
 One pull request a ship, moved from the first host's build with no project in it. Every 0.2.0 call reads as before,

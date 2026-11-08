@@ -24,13 +24,14 @@ class ShipPRs:
     recorded in `ship_calls` and, as ('ship', ...), in the fake's own `calls`, so the two orders read as one.
     `ship_setup()` first: ship_refs {name: oid}; prs {number: {number, head, state, merged, body, title}}; `on_github`
     the commits GitHub holds (None: every one); `refuse` the documents answered None (by name: 'ref', 'pr', 'link',
-    'close'); `refuse_nodes` issue node ids whose link is refused, a document carrying one refused whole, as a client
-    that raises on any error answers."""
+    'close', 'open' for the open pull requests' list, 'compare'); `refuse_nodes` issue node ids whose link is refused, a
+    document carrying one refused whole, as a client that raises on any error answers; `in_base` the branches whose head
+    the base holds (Ref.compare answers BEHIND for them, AHEAD for any other)."""
 
-    def ship_setup(self, on_github=None, refuse=(), refuse_nodes=()):
+    def ship_setup(self, on_github=None, refuse=(), refuse_nodes=(), in_base=()):
         """The fake's ship state, empty: pull requests numbered from 900. Returns the fake."""
         self.ship_refs, self.prs, self.on_github, self.refuse = {}, {}, on_github, set(refuse)
-        self.refuse_nodes = set(refuse_nodes)
+        self.refuse_nodes, self.in_base = set(refuse_nodes), set(in_base)
         self.next_pr, self.ship_calls = 900, []
         return self
 
@@ -69,8 +70,22 @@ class ShipPRs:
             self._log(('create_ref', v['name'], v['oid']))
             if self._refused('ref'):
                 return None
-            self.ship_refs[v['name'].removeprefix('refs/heads/')] = v['oid']
-            return {'createRef': {'ref': {'id': 'REF-' + v['name']}}}
+            branch = v['name'].removeprefix('refs/heads/')
+            self.ship_refs[branch] = v['oid']
+            return {'createRef': {'ref': {'id': 'REF-' + branch}}}   # the id REPO_QUERY and PR_QUERY answer for it
+        if query == P.OPEN_QUERY:
+            self._log(('open_prs', v['base']))
+            if self._refused('open'):
+                return None
+            nodes = [{'number': p['number'], 'headRefName': p['head'], 'headRefOid': self.ship_refs.get(p['head'])}
+                     for p in sorted(self.prs.values(), key=lambda p: -p['number']) if p['state'] == 'OPEN']
+            return {'repository': {'pullRequests': {'nodes': nodes}}}
+        if query == P.COMPARE_QUERY:
+            self._log(('compare', v['base'], v['head']))
+            if self._refused('compare'):
+                return None
+            status = 'BEHIND' if v['head'] in self.in_base else 'AHEAD'
+            return {'repository': {'ref': {'compare': {'status': status}}}}
         if query == P.CREATE_PR:
             self._log(('create_pr', v['base'], v['head'], v['title'], v['body']))
             if self._refused('pr'):

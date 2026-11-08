@@ -678,6 +678,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `open_for(base, head, title, body, run=, cfg=, push=)` | The ship's pull request before its push: (its number or None, the line `ship pr #P: ...`). An open one from `<prefix><head8>` is reused (a ship run again on the same head); else the branch is made at `head` (createRef; a head GitHub does not hold, or a refuse… |
 | `close_unshipped(pr, why, run=, cfg=)` | A ship whose push the base refused: its pull request commented with why, closed unmerged and its branch deleted, so the next ship opens its own. A merged one is left (the base took the head after all). The line. |
 | `close_head(head, why, run=, cfg=)` | A refused ship's pull request closed by its head, not its number: every open one from `<prefix><head8>` through close_unshipped. For a ship whose open never answered (killed at its cap after GitHub made the pull request), so no pull request is left open behin… |
+| `close_stale(current_head=, run=, cfg=)` | Every open ship pull request a ship left behind closed unmerged, its branch deleted (close_unshipped): one from `<prefix>*` into the base whose head is neither `current_head` (the ship now opening its own) nor in the base already (Ref.compare's status BEHIND… |
 | `link_document(count)` | The aliased mutation for `count` closing references to one pull request: `l0: addCloseIssueReferences(...)`. |
 | `link_after_live(pr, numbers, run=, cfg=)` | Each ticket's Development shows the ship's pull request, added after the ticket closed: the pull request as the issue's closing reference (addCloseIssueReferences), BATCH an aliased document. The numbers linked. A GraphQL client that raises on any error drops… |
 | `finish(pr, numbers, release=, run=, cfg=)` | The ship's pull request once its release is live: merged read (a WARNING when GitHub has not marked it, whose head is then not in the base), one comment naming the tickets closed, the branch deleted; nothing again when it was finished already (_told: a `Live:… |
@@ -689,7 +690,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `class ShipPRs` | A mixin before a client fake (`class HostGH(ShipPRs, HostFake)`), whose `calls` list and `graphql` answer the rest: the ship branches and pull requests in memory, every GraphQL document ship_pr sends answered, every call recorded in `ship_calls` and, as ('shi… |
-| `ShipPRs.ship_setup(on_github=, refuse=, refuse_nodes=)` | The fake's ship state, empty: pull requests numbered from 900. Returns the fake. |
+| `ShipPRs.ship_setup(on_github=, refuse=, refuse_nodes=, in_base=)` | The fake's ship state, empty: pull requests numbered from 900. Returns the fake. |
 | `ShipPRs.graphql(query, variables=)` | ship_pr's documents answered from memory; any other goes to the fake behind this one. |
 | `ShipPRs.links()` | Every link document sent: the issue node ids it carried. |
 | `class Minimal` | The ticket client's other methods, recorded in `calls` (verb first): every issue open unless `closed` names it, node ids NODE-<n>, items ITEM-<n>, every write taken; link_branch's documents answered (every commit resolves, no branch yet), any other GraphQL do… |
