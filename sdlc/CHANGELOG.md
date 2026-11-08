@@ -3,6 +3,27 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.8.0 - 2026-11-08 PT
+
+The generic half of a release pipeline, `chuang_sdlc.cicd`, standard library only (SMADPickleBot #235; Gene, 10/22/26
+6:01 AM PT: "move all pipeline code into its own repository so it can be decoupled from picklebot and reused for other
+projects"; 11/8/26 3:27 PM PT, the reuse option). A host's `pipeline/shared` files become shims that load it (SMAD's
+`kit_loader.ensure_sdlc()`, the pin's tarball on the path with no pip) and pass the host's own names in, so every
+caller on every pipeline runs the command line it ran before. Every 0.7.0 call reads as before.
+- `cicd.proc` (from SMAD's `pipeline_lib.py`, its generic half): `run` (UTF-8 text, the Windows shell only for a .cmd
+  shim, no console window; `cwd` the caller's own unless given, where the host's wrapper defaulted it to its repo
+  root), `run_capped` and `kill_tree`, `gh` through the kit's throttled cli where the kit is importable, `out`,
+  `json_out`, `gh_json`, `parse_json`, `http_get`, `needs_shell`, `cmd_line`, `is_link`, `primary_root(start)` (no
+  default folder). The host's reports bucket, profile histories and private-bucket reads stay in its module.
+- `cicd.build_once` (from `build-once.py`, whole): the base-images lock is the file `BASE_IMAGES_LOCK` names, else a
+  `base-images.json` beside the module; the desktop's build mark is read from the bucket `BUILD_MARK_BUCKET` names
+  (`mark_bucket`, `from_mark(..., bucket=)`), nothing without one; the unpinned-base refusal names the lock's path.
+- `cicd.smoke_rest` (from `smoke_rest.py`): `kit()` imports chuang-platform-kit directly and is Refused when it is not
+  importable (the host's shim puts the pinned kit on the path first).
+- `cicd.migration_kind` (from `migration-kind.py`): unchanged.
+- Suites: `tests/test-sdlc-cicd-proc.py`, `-build-once.py`, `-smoke-rest.py`, `-migration-kind.py`, the modules' own
+  cases; the host's integration cases (its workflows, deploy scripts and real migrations) stay in its suites.
+
 ## 0.7.0 - 2026-11-08 PT
 
 The work a session hands to delegates counts in a ticket's actual. On 11/8/26 a ticket built by three agents, 451 s of

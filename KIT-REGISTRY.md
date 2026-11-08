@@ -1030,3 +1030,78 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `item_route(node, field_name, moves, light_field=)` | What a read item's move is, by the host's board helpers (`moves`: is_placeholder, title, number, column, stage, is_ship_card): `placeholder` for a column's placeholder card (put back, nothing sent), `app_status` for a draft card in the app status column that… |
 | `delivery_age(updated_at, now=)` | How long after the item's change the webhook reached the receiver, as a clause for the move's line (`; GitHub delivered it 0.8 s after the change`): `updated_at` the payload's ISO stamp; '' when it is missing or unreadable. |
 
+## `chuang_sdlc.cicd.build_once`: Build once, deploy the same bytes from either path (twelve-factor V; Gene, 10/10/26 8:07 AM PT: "fo…
+
+| Name | Purpose |
+|---|---|
+| `class Ignore` | gitignore semantics, as gcloudignore has them: the last matching line wins, '!' re-includes, a trailing '/' matches directories only, a pattern with no inner '/' matches at any depth, and nothing under an ignored directory can be re-included. |
+| `Ignore.load(path)` | (no docstring) |
+| `Ignore.ignored(rel, is_dir=)` | (no docstring) |
+| `copy_sources(dockerfile_text)` | The context paths a Dockerfile's COPY and ADD lines read (not --from= stages), in order. |
+| `context_files(context, sources, ignore)` | Every file the sources name under context, relative to it, sorted; ignored ones left out. |
+| `content_key(root, files, extra=)` | The key: VERSION, the extra bytes (a Dockerfile and its build arguments), then each file's relative path and its sha256, in order. |
+| `load_lock(path=)` | (no docstring) |
+| `base_images(dockerfile_text, args=)` | The external base images a Dockerfile builds FROM, its global ARGs and the build arguments applied (`python:${PYTHON_VERSION}-slim` -> `python:3.14-slim`); its own stages, `scratch` and refs already by digest left out. |
+| `pin_dockerfile(text, args, lock)` | The Dockerfile with every external FROM naming `tag@digest` from the lock; ERROR when a base image is not in it. |
+| `image_plan(dockerfile, context, ignore_path, args, lock=)` | (files, key, pinned Dockerfile text) for an image: the files its COPY lines take, the content key over them, the pinned Dockerfile and the build arguments. |
+| `image_marked(image, key, mark)` | True when IMAGE:<mark>-<key> exists: the tag a desktop build adds (build --mark desktop), which tells a deploy that the desktop made this image and will smoke-test it (Gene, 10/11/26: the smoke test runs on the desktop when the box is up, on the runner when i… |
+| `zip_marked(url, mark)` | True when the marker object beside a function's zip exists (zip --mark): gs://.../<key>.<mark>. |
+| `find_image(image, key)` | (no docstring) |
+| `cmd_key(a)` | (no docstring) |
+| `cmd_stage(a)` | (no docstring) |
+| `cmd_find(a)` | (no docstring) |
+| `mark_bucket(env=)` | The bucket the desktop's build marks are read from: BUILD_MARK_BUCKET, '' when the host set none. |
+| `from_mark(image, key, sha, fetch=, bucket=)` | IMAGE@sha256:... from the desktop's build mark for `sha` when it lists this image under this very key, else '' (10/20/26: one public fetch instead of the registry's find, mark check, tag and size calls, about 7 s a deploy job; the host's build script writes t… |
+| `cmd_from_mark(a)` | (no docstring) |
+| `size_line(image, ref)` | 'size: daily 399 MB compressed (last 396 MB)': this image's compressed size in the registry and the version before it, for the deploy log (Gene, 10/11/26: the size of every build, this one and the last, in every release report; Mr Sandman: a cloud session rea… |
+| `cmd_resolve(a)` | (no docstring) |
+| `image_size(image, ref)` | The registry's compressed size of `ref` (IMAGE@sha256:...) in bytes, or None when it cannot be read. |
+| `cmd_build(a)` | Build and push an image from this machine (Gene, 10/11/26: the desktop builds, CI deploys what it pushed): stage exactly as CI does, find the content key in the registry and stop when it is there, else `docker build` from the pinned Dockerfile, tag IMAGE:bo-<… |
+| `cmd_zip(a)` | (no docstring) |
+| `main(argv=)` | (no docstring) |
+
+## `chuang_sdlc.cicd.migration_kind`: Whether a push's API migrations only add (Gene, 10/24/26 10:57 PM PT: "Yes add migrations climb").
+
+| Name | Purpose |
+|---|---|
+| `update_targets(sql)` | (table, {columns}) an `UPDATE table [alias] SET a = ..., b = ... [FROM ...] [WHERE ...]` sets, or None. |
+| `statement_kind(stmt, env=, added=, consts=)` | '' when one statement of upgrade() only adds, else why it does not. `added` collects the (table, column) pairs added so far, which a later UPDATE may fill; `env` binds an unrolled loop's names; `consts` the module's literals. |
+| `migration_kind(source)` | '' when a migration file's upgrade() only adds (an UPDATE filling a column it added counts), else why not. |
+| `push_kind(before, after, git=)` | ('expand', '') or ('contract', why) for the migrations a push changes. |
+| `main(argv=)` | (no docstring) |
+
+## `chuang_sdlc.cicd.proc`: One command runner for every pipeline script, the plumbing the scripts used to copy (SMADPickleBot,…
+
+| Name | Purpose |
+|---|---|
+| `primary_root(start, run=)` | The primary checkout every worktree of `start` belongs to: the parent of the common git dir, `git rev-parse --git-common-dir`, read from the `gitdir:` pointer in `start`'s `.git` file when git cannot say, and `start` itself when neither tells. The pointer mat… |
+| `http_get(url, token=, opener=, timeout=)` | (status, parsed JSON body or None) for a GET; a token is sent as a bearer. GitHub's media type is asked for, which the bucket ignores. A refusal is its code and None; a network failure is 0 and None; never raises. A GitHub URL goes through chuang_platform_kit… |
+| `run(args, cwd=, **kw)` | Run `args` (a list) and capture it: UTF-8 text, the shell only for a Windows .cmd shim, no window. `cwd` is the caller's own folder unless given (a host's wrapper may default it to its repo root); any subprocess.run keyword passes through (timeout, env, input… |
+| `run_capped(args, limit, popen=, kill=, **kw)` | subprocess.run's capture with a time cap that cannot hang: on the cap the whole process tree is killed (taskkill /T on Windows, the process group elsewhere) before the pipes are read again, then TimeoutExpired. subprocess.run kills only the child it started,… |
+| `is_link(path)` | A junction or a symbolic link: never followed, never deleted through (android_build's rule, 10/19/26). A Windows Python without os.path.isjunction (before 3.12) reads the reparse-point attribute of the path itself. |
+| `kill_tree(p)` | The process and every child of it, killed; a failure is ignored (the cap's own TimeoutExpired is the report). |
+| `needs_shell(cmd)` | Whether `cmd` must go through cmd.exe: one of SHIMS that is not an .exe on this box (gcloud.cmd; gh is gh.exe on the desktop, and runs directly). One not found on PATH counts as a shim, as before. Looked up once per process. |
+| `cmd_line(args)` | `args` as one cmd.exe command line: each quoted as Windows quotes it (subprocess.list2cmdline), and one holding a cmd metacharacter (& \| < > ^) double-quoted too, so cmd passes it whole. Python's own join leaves `&` bare, and cmd split `gh api .../runs?head_… |
+| `gh(args, run=, check=, **kw)` | `gh <args>` (the arguments after `gh`) through chuang_platform_kit.github.cli (#364, #679), the one way a pipeline script runs gh: the per-process cap and the spent-quota refusal the kit's HTTP calls share. `run` is this module's run unless a caller (or a sui… |
+| `out(args, **kw)` | The command's stripped stdout when it exits 0, else ''; a command that cannot start (a missing CLI, a timeout) is '' too, never an exception. A `gh` command runs through gh() above, the kit's throttled cli, a refusal reading as ''. |
+| `parse_json(done)` | A finished command's stdout parsed as JSON, or None when it failed, printed nothing or printed something else. For a caller that runs the command itself (a test may stand in for its runner). |
+| `json_out(args, **kw)` | The command's stdout parsed as JSON, or None when it failed, printed nothing or printed something else. |
+| `gh_json(*args, **kw)` | `gh <args>` parsed as JSON (gh api ..., gh run view --json ...), None on any failure. |
+
+## `chuang_sdlc.cicd.smoke_rest`: The backend smoke's reads in one process over REST, not a gcloud start per call (#1128, the CO #112…
+
+| Name | Purpose |
+|---|---|
+| `class Refused` | A REST read this process could not make: the kit missing, no token, or Google's refusal (its call and message). Never carries a token. |
+| `kit()` | (google_auth, google_rest) of chuang-platform-kit. Refused when it is not importable: the host's shim puts the pinned kit on the path first where the step has none (SMADPickleBot's pipeline/shared/kit_loader.py `ensure()` before this module's main). |
+| `access_token(env=)` | An access token for the reads: the kit's reader (CI_ACCESS_TOKEN first, then a key, the metadata server, gcloud); '' when none answers. Refused when the kit cannot be had. |
+| `run_v1(project, region, kind, name)` | The Cloud Run Admin API's v1 (Knative) address of a service or revision (`kind` 'services' or 'revisions'): the surface gcloud's `run services describe` reads, so `status.url`, `status.latestCreatedRevisionName`, `status.latestReadyRevisionName`, `status.cond… |
+| `ready(status)` | The Ready condition's status ('True', 'False', 'Unknown') of a v1 service or revision's `status`; the first condition's when none is named Ready (gcloud's `status.conditions[0]`), '' with none. |
+| `service(project, region, name, token, opener=)` | One Cloud Run service as the v1 API gives it (its `status` with `traffic`, which the desktop's dev-rung read takes its dev tag from). Refused on Google's refusal or no answer. |
+| `key_account(env=)` | The service account whose key is under GOOGLE_APPLICATION_CREDENTIALS (a file's path or the key's JSON itself), the account a runner mints its own identity token as; '' for anything else (no variable, a user's or an external account's credential). |
+| `metadata_account(opener=)` | The metadata server's own service account (a Cloud Build step's github-deploy), the account it mints its own identity token as when the metadata identity endpoint answers nothing; '' off Google Cloud, on any failure, or for an answer that is not a service acc… |
+| `mint_id_token(url, token, impersonate=, env=, opener=)` | (identity token for `url`, '' or why there is none). As SMOKE_IMPERSONATE's account or the key's (a runner's) through IAM Credentials' generateIdToken; with neither, as the metadata server's own account the same way (Cloud Build, the REST twin of smoke-test.s… |
+| `reads(fn, project, region, kind=, revision=, bus=, id_token=, token=, impersonate=, env=, opener=)` | {file name: (text, rc)} of the smoke's reads (module docstring), made side by side on one token. Refused when no token answers or any read is refused, but a function's 404, which is a service that was never a Cloud Function. |
+| `write(folder, files)` | Each file and its `.rc` into `folder`, LF-ended (a Windows interpreter's CRLF would leave a '\r' in the script's `$(...)`). |
+| `main(argv=, out=)` | `reads DIR FUNCTION PROJECT REGION KIND [--revision R] [--bus] [--id-token]`: the files written and 0, or 3 with the refusal's reason on the last line and nothing written. |
+

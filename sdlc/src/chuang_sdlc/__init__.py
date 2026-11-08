@@ -44,9 +44,12 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake), and
              of the sweep, the board's reads and the claims (Board, Records, items_page), and the board helpers the
              listeners take (Moves)
+  cicd       the generic half of a release pipeline, standard library only (SMADPickleBot #235): proc, one command
+             runner for every pipeline script; build_once, an image or function source built once by content key;
+             smoke_rest, a backend smoke's reads over REST; migration_kind, whether a push's migrations only add
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.7.0'   # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26)
+__version__ = '0.8.0'   # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26)

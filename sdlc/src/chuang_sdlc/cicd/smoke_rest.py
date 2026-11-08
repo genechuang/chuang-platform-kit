@@ -61,14 +61,13 @@ class Refused(RuntimeError):
 
 
 def kit():
-    """(google_auth, google_rest) of the pinned kit, put on the path by kit_loader where the step has none. Refused when
-    it cannot be had."""
-    import kit_loader
+    """(google_auth, google_rest) of chuang-platform-kit. Refused when it is not importable: the host's shim puts the
+    pinned kit on the path first where the step has none (SMADPickleBot's pipeline/shared/kit_loader.py `ensure()`
+    before this module's main)."""
     try:
-        kit_loader.ensure()
-    except RuntimeError as e:
-        raise Refused(str(e)) from None
-    from chuang_platform_kit import google_auth, google_rest
+        from chuang_platform_kit import google_auth, google_rest
+    except ImportError as e:
+        raise Refused(f'chuang-platform-kit is not importable: {e}') from None
     return google_auth, google_rest
 
 

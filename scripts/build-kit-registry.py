@@ -25,7 +25,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 PKG = os.path.join(ROOT, 'src', 'chuang_platform_kit')
 # The second distribution, chuang-sdlc (sdlc/, its own pyproject and tags): its modules listed as `chuang_sdlc.<module>`.
 SDLC_PKG = os.path.join(ROOT, 'sdlc', 'src', 'chuang_sdlc')
-PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'))
+# Its subpackage chuang_sdlc.cicd (SMADPickleBot #235): the generic half of a release pipeline, listed as `chuang_sdlc.cicd.<module>`.
+PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'), (os.path.join(SDLC_PKG, 'cicd'), 'chuang_sdlc.cicd.'))
 OUT = os.path.join(ROOT, 'KIT-REGISTRY.md')
 SUMMARY_CHARS = 260
 NO_DOC = '(no docstring)'
