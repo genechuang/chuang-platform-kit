@@ -150,10 +150,11 @@ def main():
     m = text.split("bash '", 1)[1].split("'", 1)[0] if "bash '" in text else ''
     check('the library sourced by a relative path still names the hold script absolutely, and that path is the script',
           (m.startswith('/') or m[1:3] == ':/', m.endswith('/model-check-hold.sh'), '\\' in m), (True, True, False))
-    rc, text, code = lib(os.path.join(d, 'backslash.last'), source=LIB.replace('/', '\\\\'))
-    m2 = text.split("bash '", 1)[1].split("'", 1)[0] if "bash '" in text else ''
-    check('  sourced by a Windows path with backslashes, the named path has forward slashes alone and is the same script',
-          (m2, '\\' in text), (f'{LIB_DIR}/model-check-hold.sh', False))
+    if os.name == 'nt':   # a backslash is a path separator only on Windows; on Linux it is part of a file's name
+        rc, text, code = lib(os.path.join(d, 'backslash.last'), source=LIB.replace('/', '\\\\'))
+        m2 = text.split("bash '", 1)[1].split("'", 1)[0] if "bash '" in text else ''
+        check('  sourced by a Windows path with backslashes, the named path has forward slashes alone and is the same script',
+              (m2, '\\' in text), (f'{LIB_DIR}/model-check-hold.sh', False))
     found = subprocess.run([BASH, '-c', f'[ -f "{m}" ]'], capture_output=True, text=True, timeout=30).returncode
     check('  bash finds the named script there', found, 0)
 
