@@ -3,6 +3,28 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.3.0 - 2026-11-07 PT
+
+One pull request a ship, moved from the first host's build with no project in it. Every 0.2.0 call reads as before,
+apart from one GitHub read `live_numbers` now makes to find a ship pull request (none found, nothing changes).
+- `ship_pr`: `configure(prefix=, base=, label=, label_color=, label_description=)` (`ship/`, `main`, `ship` by default),
+  `setting`, `branch_of`; `open_for` (the branch made at the head, or the caller's `push`, one pull request into the
+  base, labelled, an open one reused), `close_unshipped` and `close_head` (a refused push's), `find` (merged or open,
+  never one closed unmerged), `link_after_live` (aliased addCloseIssueReferences, `BATCH` a document, a refused batch
+  sent again one ticket a document), `link_document`, `finish` and `wrecked` (each posts its one comment once: a
+  second run of the same release finds its `Live:` or `Wrecked:` comment and posts nothing; the branch is never read
+  for it, so a host that deletes head branches on merge still gets its comment), `LIVE_WORD`, `WRECK_WORD`,
+  `note_change_order`; `no_closing_keyword`
+  (`CLOSING`, `BREAK`), which open_for runs on the title and body itself; the GraphQL documents. Never raises.
+- `testing`: the fake GitHub every host's suites of the ship pull request share, so none keeps a copy: `ShipPRs` (the
+  mixin answering ship_pr's documents from memory, every call recorded, refusals by name), `Minimal` (the ticket
+  client's other methods), `ShipFake`, `ship_fake()` (pull request #900 from the configured prefix's branch, merged)
+  and `RELEASE`. No network.
+- `tickets`: `live_numbers(..., pr=None, settle=True)` closes every ticket first, then links the ship's pull request
+  to each closed one (found by its branch when `pr` is None, none looked for when False), its branch only for a
+  ticket the pull request did not link, and with `settle` finishes the pull request; `change_order_body(..., pr=None)`
+  names it. `link_branch` is the fallback.
+
 ## 0.2.0 - 2026-11-07 PT
 
 The commit trailers a project's pipelines read, moved from the first host's scripts with no project in them. Every

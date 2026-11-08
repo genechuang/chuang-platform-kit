@@ -666,6 +666,45 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `lines(done, markdown=, not_allowed=)` | One line a run step ({..., 'result', 'seconds', 'url'}) for the notes: '• <job> <args>: ✅ passed in 74 s, <what> (<sha8>)', its label linked to `url` (a markdown link, else Slack's <url\|text>); a step off the allow-list says `not_allowed` (by its `allowed` f… |
 | `failed(done)` | The steps that did not pass. |
 
+## `chuang_sdlc.ship_pr`: One pull request a ship, so each shipped ticket's Development shows the release that shipped it.
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings: `prefix` (the ship branch's, `ship/`), `base` (`main`), `label` (`ship`), `label_color`, `label_description`. Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `no_closing_keyword(text)` | `text` with every issue reference that follows a closing keyword broken: a zero-width space (BREAK) between the `#`, `GH-` or `/issues/` and the number, so the text reads the same and GitHub finds no reference after the keyword. A ship's pull request merges a… |
+| `branch_of(head)` | The ship's branch for its head: `<prefix><head8>`. |
+| `find(release, run=, cfg=)` | The number of the pull request a ship opened for its head `release` (from `<prefix><release8>`, merged or open, the newest; never one closed unmerged), or None: a push with no ship pull request, a ship whose pull request was closed when its push was refused,… |
+| `open_for(base, head, title, body, run=, cfg=, push=)` | The ship's pull request before its push: (its number or None, the line `ship pr #P: ...`). An open one from `<prefix><head8>` is reused (a ship run again on the same head); else the branch is made at `head` (createRef; a head GitHub does not hold, or a refuse… |
+| `close_unshipped(pr, why, run=, cfg=)` | A ship whose push the base refused: its pull request commented with why, closed unmerged and its branch deleted, so the next ship opens its own. A merged one is left (the base took the head after all). The line. |
+| `close_head(head, why, run=, cfg=)` | A refused ship's pull request closed by its head, not its number: every open one from `<prefix><head8>` through close_unshipped. For a ship whose open never answered (killed at its cap after GitHub made the pull request), so no pull request is left open behin… |
+| `link_document(count)` | The aliased mutation for `count` closing references to one pull request: `l0: addCloseIssueReferences(...)`. |
+| `link_after_live(pr, numbers, run=, cfg=)` | Each ticket's Development shows the ship's pull request, added after the ticket closed: the pull request as the issue's closing reference (addCloseIssueReferences), BATCH an aliased document. The numbers linked. A GraphQL client that raises on any error drops… |
+| `finish(pr, numbers, release=, run=, cfg=)` | The ship's pull request once its release is live: merged read (a WARNING when GitHub has not marked it, whose head is then not in the base), one comment naming the tickets closed, the branch deleted; nothing again when it was finished already (_told: a `Live:… |
+| `wrecked(pr, note, run=, cfg=)` | A release whose production smoke failed: its pull request commented `Wrecked: <note>` (the components and the bug), and its branch deleted, the head being in the base already; nothing again when it was told already (_told: a `Wrecked:` comment among its last… |
+| `note_change_order(pr, co, run=, cfg=)` | The ship's change order named at the top of its pull request's body (edited once, after the push files the change order); True when it is there. |
+
+## `chuang_sdlc.testing`: A fake GitHub for a host's suites of the ship's pull request (chuang_sdlc.ship_pr) and the shipped…
+
+| Name | Purpose |
+|---|---|
+| `class ShipPRs` | A mixin before a client fake (`class HostGH(ShipPRs, HostFake)`), whose `calls` list and `graphql` answer the rest: the ship branches and pull requests in memory, every GraphQL document ship_pr sends answered, every call recorded in `ship_calls` and, as ('shi… |
+| `ShipPRs.ship_setup(on_github=, refuse=, refuse_nodes=)` | The fake's ship state, empty: pull requests numbered from 900. Returns the fake. |
+| `ShipPRs.graphql(query, variables=)` | ship_pr's documents answered from memory; any other goes to the fake behind this one. |
+| `ShipPRs.links()` | Every link document sent: the issue node ids it carried. |
+| `class Minimal` | The ticket client's other methods, recorded in `calls` (verb first): every issue open unless `closed` names it, node ids NODE-<n>, items ITEM-<n>, every write taken; link_branch's documents answered (every commit resolves, no branch yet), any other GraphQL do… |
+| `Minimal.node_id(number)` | `NODE-<n>`. |
+| `Minimal.item_add(node)` | `ITEM-<n>` for `NODE-<n>`. |
+| `Minimal.item_field(item, field_id, option_id=, text=, clear=)` | One field write, taken. |
+| `Minimal.issue(number)` | #number, open unless `closed` names it. |
+| `Minimal.close_issue(number, reason=, comment=)` | The close, taken. |
+| `Minimal.comment(number, body)` | A comment, taken. |
+| `Minimal.add_labels(number, labels)` | Labels, taken. |
+| `Minimal.create_label(name, color, description=)` | A label made. |
+| `Minimal.graphql(query, variables=)` | link_branch's documents answered (the commit resolves, no branch yet); any other {}. |
+| `class ShipFake` | The ticket client with the ship's pull requests: Minimal behind ShipPRs. |
+| `ship_fake(closed=, refuse=, refuse_nodes=, release=)` | A client with the ship's pull request #900 opened from the branch of `release` (ship_pr.branch_of) and merged by the push; `closed` the issues closed already, `refuse` and `refuse_nodes` as ship_setup takes them. |
+
 ## `chuang_sdlc.tickets`: A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow,…
 
 | Name | Purpose |
@@ -750,13 +789,13 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `sweep(run=, cfg=, mail=)` | Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody else's line counts), names a priority: triaged. `Triage: none (why)` and an issue already on the Project (its `area:` label) are left, except a ticket… |
 | `live_comment(release, commits=)` | A shipped ticket's closing comment: the release, then each commit that did its work by short sha and subject (GitHub links a sha in an issue comment), so a closed ticket shows the code that shipped it. |
 | `release_text(release, co=)` | The board's Release for a ship: `CO #12 · 1a2b3c4d`, its change order and its head, or the head alone for a ship with no change order. |
-| `link_branch(number, sha, run=, cfg=)` | The issue's Development shows its work: a branch `ticket/<n>` at `sha`, the ticket's last commit, linked to the issue (GitHub's createLinkedBranch; no pull request is opened). Idempotent: the branch already at `sha` is done; one behind is moved forward to it… |
+| `link_branch(number, sha, run=, cfg=)` | The issue's Development shows its work: a branch `ticket/<n>` at `sha`, the ticket's last commit, linked to the issue (GitHub's createLinkedBranch), live_numbers' fallback for a ticket the ship's pull request did not link (a push with no ship pull request, a… |
 | `shipped_cards(run=, cfg=)` | Every shipped ticket on the board (the ship column's issues; change orders left out), each {item, number, title, body, release, estimate, original (hours or None), branches (linked branches)}: a backfill's read, with GitHub's own filter. None when GitHub does… |
 | `raw_on_record(rec)` | The raw estimate in minutes an LOE record holds: its `estimate_raw_min`, else its `estimate_min` when the ticket's earliest record (`started_epoch`, else `first_commit_epoch`) is before the host's `calibrated_since`, when that was still the raw; None otherwis… |
 | `backfill_plan(card, last_sha, head_of, cos, record, retro)` | What a shipped tickets' backfill writes for one card, as the stages would have written it: {'release': text or None, 'raw': (minutes, source) or None, 'original': (minutes, source) or None, 'branch': sha or None}. Release: kept when it names its change order;… |
-| `live_numbers(numbers, release=, run=, cfg=, work=, co=)` | These tickets to the shipped column, the Release recorded (release_text: the change order `co` and the head), the open ones closed with a comment naming their commits when `work` ({number: [(sha, subject)]}) has them, and each one's branch linked at its last… |
+| `live_numbers(numbers, release=, run=, cfg=, work=, co=, pr=, settle=)` | These tickets to the shipped column, the Release recorded (release_text: the change order `co` and the head), the open ones closed with a comment naming their commits when `work` ({number: [(sha, subject)]}) has them; then, every close done first so a ticket… |
 | `change_order_title(head, at, tz=)` | `Ship 11/2/26 1:41 PM PT: 1a2b3c4d`, the push's minute in the kit's zone and the head. |
-| `change_order_body(base, head, numbers, run=, how=, cfg=)` | The change order's body: every ticket the release carries with its title, then the range, how it was ordered, and what its Light will say. The tickets read once each; one GitHub does not answer is listed by number. |
+| `change_order_body(base, head, numbers, run=, how=, cfg=, pr=)` | The change order's body: every ticket the release carries with its title, then the range, how it was ordered, the ship's pull request when it has one (`pr`), and what its Light will say. The tickets read once each; one GitHub does not answer is listed by numb… |
 | `change_order_for(head, run=)` | The change order of the ship whose head is `head` (its title ends with the head's 8 characters), open or closed, or None. |
 | `change_order_settle(release, role, note, run=, cfg=)` | The change order of the release at `release` to its end: `shipped`, its Light the shipped one and closed with `note`; `failed`, its Light the failed one with `note` as a comment. '' when the release has no change order; a refused write is a word. |
 | `open_bug_for(component, run=, cfg=)` | The open bug a component's failed smoke already has (its title starts SMOKE_BUG), or None: a failure that repeats is a comment on it, never a second issue. |

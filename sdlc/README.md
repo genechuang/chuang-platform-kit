@@ -6,7 +6,9 @@ passes, the `Triage:` line and its sweep, the shipped stage (the Release, the li
 change order a ship files, the board's column labels and placeholder cards kept as its config says, and the level of
 effort estimated and actual. And the commit trailers a project's pipelines read: the plumbing lines a renderer drops
 (`trailers`), the `Pipeline-Parity:` check over the project's own pipelines (`parity`), and a release's `Post-Ship:`
-steps against its allow-list (`post_ship`).
+steps against its allow-list (`post_ship`). And one pull request a ship (`ship_pr`): opened from its own branch
+before the ship's push of the base, merged by that push, and linked to each shipped ticket as its closing reference
+only after the ticket closed, so a ticket's Development shows the release that shipped it.
 
 It is a distribution of its own in the chuang-platform-kit repository, so a release of it redeploys only what runs
 it: a host pins it where its ticket tools run, never in every service the main package is in.

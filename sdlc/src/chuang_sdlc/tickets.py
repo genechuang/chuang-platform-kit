@@ -1346,7 +1346,8 @@ MOVE_MUTATION = ('mutation($ref: ID!, $oid: GitObjectID!) { updateRef(input: {re
 
 def link_branch(number: int, sha: str, run=None, cfg: dict = None) -> bool:
     """The issue's Development shows its work: a branch `ticket/<n>` at `sha`, the ticket's last commit, linked to the
-    issue (GitHub's createLinkedBranch; no pull request is opened). Idempotent: the branch already at `sha` is done;
+    issue (GitHub's createLinkedBranch), live_numbers' fallback for a ticket the ship's pull request did not link (a
+    push with no ship pull request, a refused link). Idempotent: the branch already at `sha` is done;
     one behind is moved forward to it (updateRef, never forced), so a ticket shipped again shows its later work; one
     GitHub refuses to move as not a fast forward is already past `sha` and is left; it is created only when missing.
     False when GitHub refused or `sha` does not resolve."""
@@ -1469,13 +1470,24 @@ def backfill_plan(card: dict, last_sha: str, head_of, cos: dict, record: dict, r
     return out
 
 
-def live_numbers(numbers, release: str = '', run=None, cfg: dict = None, work: dict = None, co=None) -> str:
+def live_numbers(numbers, release: str = '', run=None, cfg: dict = None, work: dict = None, co=None, pr=None,
+                 settle: bool = True) -> str:
     """These tickets to the shipped column, the Release recorded (release_text: the change order `co` and the head),
-    the open ones closed with a comment naming their commits when `work` ({number: [(sha, subject)]}) has them, and
-    each one's branch linked at its last commit there (link_branch); then, for the host's own runner, each ticket's one
-    LOE comment (report_loe). The line."""
+    the open ones closed with a comment naming their commits when `work` ({number: [(sha, subject)]}) has them; then,
+    every close done first so a ticket still closes only after the production smoke, each one's Development linked: the
+    ship's pull request as its closing reference (ship_pr.link_after_live; `pr` the ship's number, found from its branch
+    when None, none looked for when False), and its branch at its last commit (link_branch) only for a ticket the pull
+    request did not link (no pull request: a push with no ship pull request). Only a ticket now closed gets the pull
+    request (closed already, or its close taken): one whose close GitHub refused, or whose state was not read, is never
+    handed a merged pull request as its closing reference while it is open, and gets its branch, the line naming it.
+    With `settle` the pull request is finished (ship_pr.finish: its comment naming the tickets closed, its branch
+    deleted); a failed release passes False and tells it the wreck (ship_pr.wrecked). Then, for the host's own runner,
+    each ticket's one LOE comment (report_loe). The line."""
+    from . import ship_pr
     run, cfg = _run(run), _cfg(cfg)
-    done, unlinked = [], []
+    if pr is None and release:
+        pr = ship_pr.find(release, run, cfg)
+    done, unlinked, closed = [], [], []
     for n in numbers:
         item = item_id(n, run, cfg)
         if item:
@@ -1486,15 +1498,28 @@ def live_numbers(numbers, release: str = '', run=None, cfg: dict = None, work: d
                 set_field(item, 'Release', release_text(release, co), run, cfg)
         state = issue(n, run)
         if state and state['state'] == 'open':
-            run.close_issue(n, 'completed', live_comment(release, (work or {}).get(n)))
-        commits = (work or {}).get(n)
-        if commits and not link_branch(n, commits[-1][0], run, cfg):
-            unlinked.append(n)
+            if run.close_issue(n, 'completed', live_comment(release, (work or {}).get(n))):
+                closed.append(n)
+        elif state and state['state'] == 'closed':
+            closed.append(n)
         done.append(n)
+    linked = ship_pr.link_after_live(pr, closed, run, cfg) if pr and closed else set()
+    for n in done:
+        commits = (work or {}).get(n)
+        if n not in linked and commits and not link_branch(n, commits[-1][0], run, cfg):
+            unlinked.append(n)
+    tail = ''
+    if pr:
+        tail = f'; ship pr #{pr} linked to {len(linked)} of {len(done)}'
+        still = [n for n in done if n not in closed]
+        if still:
+            tail += f' ({", ".join(f"#{n}" for n in still)} not closed, so not linked to it)'
+        if settle:
+            tail += ship_pr.finish(pr, closed, release, run, cfg)
     if done and is_host_runner(run):
         report_loe(done, run=run)
     return (f'tickets: live {", ".join(f"#{n}" for n in done) or "none"}' + (f' (release {release_text(release, co)})' if release else '')
-            + (f'; no branch linked for {", ".join(f"#{n}" for n in unlinked)}' if unlinked else ''))
+            + (f'; no branch linked for {", ".join(f"#{n}" for n in unlinked)}' if unlinked else '') + tail)
 
 
 # ------------------------------------------------------------------ the change order
@@ -1511,9 +1536,10 @@ def change_order_title(head: str, at: float, tz=None) -> str:
     return f"Ship {clock.human_time(t, weekday=False, tz_word=True, tz=tz)}: {head[:8]}"
 
 
-def change_order_body(base: str, head: str, numbers, run=None, how: str = '', cfg: dict = None) -> str:
+def change_order_body(base: str, head: str, numbers, run=None, how: str = '', cfg: dict = None, pr=None) -> str:
     """The change order's body: every ticket the release carries with its title, then the range, how it was ordered,
-    and what its Light will say. The tickets read once each; one GitHub does not answer is listed by number."""
+    the ship's pull request when it has one (`pr`), and what its Light will say. The tickets read once each; one GitHub
+    does not answer is listed by number."""
     run, cfg = _run(run), _cfg(cfg)
     rows = []
     for n in numbers:
@@ -1523,7 +1549,9 @@ def change_order_body(base: str, head: str, numbers, run=None, how: str = '', cf
     return ('The change order for one ship: the tickets it carries, as the release notes will list them.\n\n'
             + ('\n'.join(rows) if rows else '- none named by these commits') +
             f'\n\nHead {head[:12]}, from {base[:12] or "?"} (https://github.com/{cfg["repo"]}/compare/{base[:12]}...{head[:12]}).'
-            + (f' Ordered by {how}.' if how else '') +
+            + (f' Ordered by {how}.' if how else '')
+            + (f"\n\nPull request #{pr}: the ship's diff and checks, and each ticket's Development once it is shipped."
+               if pr else '') +
             f"\n\nIts Light: {lights.get('shipping', '')} at the push, {lights.get('shipped', '')} (and closed) once the "
             f"production smoke passes, {lights.get('failed', '')} with the failure's bug when a component fails."
             + (f' {CHANGE_ORDER_NOTE}' if CHANGE_ORDER_NOTE else ''))

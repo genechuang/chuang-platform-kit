@@ -15,9 +15,13 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
              pipelines passed in as path sets (standard library only)
   post_ship  a release's Post-Ship: steps read against the host's allow-list, and their lines in the release notes
              (standard library only)
+  ship_pr    one pull request a ship, from its own branch into the base, its merge the ship's push, linked to each
+             ticket as its closing reference only after the ticket closed (tickets.live_numbers), and the
+             closing-keyword scrub its title and body go through
+  testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake)
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.2.0'
+__version__ = '0.3.0'
