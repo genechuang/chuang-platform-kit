@@ -647,6 +647,26 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`; an estimate, the working time or the start that is missing says so (`start_hint`, th… |
 | `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`), the elapsed time from the ticket's first start (`starts`/<n> first_epoch) to the… |
 
+## `chuang_sdlc.notes`: A ship's release notes: every ticket the shipped commits name, by its full title, grouped New (the…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings: `sections` (((key, name), ...)), `emoji` ({key: emoji}), `tz`, `tag_prefix`, `not_allowed`, and the words `none`, `unread`, `retitle`, `close_note`. Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `groups(commits, mapped=, get=)` | {'new': [(number, title)], 'fixed': [...], 'behind': [...], 'unknown': [numbers], 'member_titles': [numbers]} for the tickets `commits` name, each once, in the order its first commit came: the readers' Area's bugs under fixed, its other tickets under new, eve… |
+| `compare_url(base, head)` | GitHub's compare page of the commits after `base` up to `head`. |
+| `ship_time(seconds)` | '85 s from ship to live', seconds alone as every stage time; '' when the release had no ship word to time it from (None, '', or not a number). |
+| `slack_text(sha, when, got, release_url=, ship_seconds=)` | The Slack message (mrkdwn): a head line with the short sha, the time it went live, the change order, the ship time and the GitHub Release's link, then each section's tickets, every title linked to its issue. |
+| `markdown_text(sha, got)` | The same notes as Markdown (a reply's, the ship pull request's): a head line, then each section's tickets, each `- [#N](its issue) title`, and the tickets still titled in a member's words named last, to retitle before they ship. |
+| `pr_body(base, head, commits, mapped=, get=)` | The ship pull request's body: markdown_text of the commits' groups, the compare link and `close_note`, through ship_pr.no_closing_keyword, so its merge closes no ticket. `mapped` and `get` are groups' seams. |
+| `slack_blocks(sha, when, got, release_url=, ship_seconds=)` | The same message in Slack's blocks: a header, one grey line with the go-live time, the ship time and the Release, a rule, then each section under its emoji, each row the linked ticket number right after its bullet and the title after it, so the links line up… |
+| `release_body(sha, base, got, ship_seconds=, at=)` | The GitHub Release's body (markdown): the change order, the go-live instant and the ship time, the same sections, `#N` linking itself, the Post-Ship: steps, and the compare link. |
+| `when(at=)` | The go-live instant in the host's zone with its year and seconds: '10/25/26 10:52:11 PM PT' for an ISO instant (now when empty; a zoneless one read as UTC). |
+| `tag_for(head, at=)` | The Release's tag: <tag_prefix>YYYYMMDD-HHMM (in the host's zone)-<sha8>. |
+| `change_order_number(head, token, opener=)` | The number of the ship's change-order ticket (tickets.change_order files it at the push, its label tickets.label('change_order'), its title ending with the head's 8 characters), or None (the host labels none, no such ticket, or GitHub not answering). |
+| `commits(base, head, token, opener=)` | [{'sha', 'message'}] after `base` up to `head`, oldest first, from GitHub's compare API (250 at most): the kit's github.compare. Its GitHubError (a RuntimeError) when GitHub does not answer. |
+| `release(head, base, at, got, token, opener=, ship_seconds=)` | The ship's GitHub Release, created at `head` with tag_for's tag, named `Ship <when> (<sha8>)`, its body release_body (an existing tag's Release reused, so a second run adds nothing): the kit's github.create_release. Its URL; GitHubError (a RuntimeError, GitHu… |
+
 ## `chuang_sdlc.parity`: Pipelines kept in step: a commit that changes one or two of a project's release pipelines says how…
 
 | Name | Purpose |
@@ -662,6 +682,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `steps(commits, allowed, script_of=)` | The steps the commits ({'sha', 'message'}) ask for, in commit order, each once: [{'job', 'args', 'sha', 'what', 'allowed'}]. `script_of(job)` is the arguments the host's runner adds before a job's own (its script), dropped when a trailer repeats them. |
+| `run(found, start, state, clock=, sleep=, wait=, poll=)` | Each step of `found` (steps()) started and waited for, in order: the step with `result` (passed, failed, refused, did not start (<why>), timed out), `seconds` and `url` (its execution's page). A step not allowed is refused and never started. `start(job, args)… |
+| `execution_result(project, region, job, execution, token, opener=, timeout=)` | 'running', 'passed' or 'failed' for one Cloud Run Job execution, a `state` for run(): the kit's google_rest.get_execution and execution_state (succeeded is passed, failed or cancelled is failed). |
 | `label(step)` | '<job> <arg> ...'. |
 | `lines(done, markdown=, not_allowed=)` | One line a run step ({..., 'result', 'seconds', 'url'}) for the notes: '• <job> <args>: ✅ passed in 74 s, <what> (<sha8>)', its label linked to `url` (a markdown link, else Slack's <url\|text>); a step off the allow-list says `not_allowed` (by its `allowed` f… |
 | `failed(done)` | The steps that did not pass. |
@@ -802,6 +824,24 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `open_bug_for(component, run=, cfg=)` | The open bug a component's failed smoke already has (its title starts SMOKE_BUG), or None: a failure that repeats is a comment on it, never a second issue. |
 | `refused_as_duplicate(title, argv, run=, out=)` | The command line's sweep before `new` or `bug` files anything: open issues like this title (similar()) are listed and nothing is filed, unless `--new` says it is none of them. True when refused. |
 | `body_is_path(argv)` | --body's text when it is only a file's path, else '': one line naming a file that exists, or one line ending in .md or .txt (the plan belongs in the ticket, never a link to a temp file). --body-file reads the file. |
+
+## `chuang_sdlc.titles`: What shipped, in its tickets' own words: the tickets a range of commits names, read from GitHub, ea…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings: `repo`, `area`, `bug`, `tail`, `fixed`, `token`, `mapped`, `workers` (the module's _SET says what each is). Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `repo()` | The repository the tickets live in: configure(repo=), else the board's `repo`. |
+| `area()` | The `area:` label of the readers' Area (configure(area=)); NotConfigured when the host named none. |
+| `bug_label()` | The bug kind's label, lower-cased as fetch() reads labels: configure(bug=), else the board's `labels` {'Bug': ...}, else 'bug'. |
+| `member_label()` | The label of a ticket still titled in a member's words (tickets.label('member_title')), lower-cased as fetch() reads labels; '' when none. |
+| `issue_url(number)` | The ticket's page on GitHub. |
+| `numbers_of(commits, mapped=)` | {ticket number: [shas]} for commits [{'sha', 'message'}] (the message with its trailers), oldest commit first; a commit with no `Ticket:` trailer counts through `mapped` ({sha prefix: [numbers]}, configure(mapped=) when None) by its sha's first seven characte… |
+| `fetch(number, opener=)` | {'number', 'title', 'labels', 'state'} for #number, its labels lower-cased; {'number', 'missing': True} when GitHub has no such issue (a mistyped or deleted ticket, left out for good); None when GitHub does not answer (a WARNING line; the caller retries). Thr… |
+| `read(commits, mapped=, get=)` | [(number, ticket or None)] for the tickets `commits` name, each once, in the order its first commit came, read side by side (`workers` at once). `get(number)` is fetch() unless given. |
+| `title(ticket)` | A ticket's full title as notes print it: word for word, without the host's `tail`. |
+| `line(ticket)` | A reader's line for a ticket: its title (title()) without a closing period, after `fixed` for a bug. |
+| `shipped(commits, mapped=, get=)` | What `commits` shipped, by their tickets: {'new': [lines], 'fixed': [lines], 'behind': N, 'unknown': [numbers]}. 'new' and 'fixed' are the readers' Area's tickets' lines (line()), each once, in the order its first commit came; 'behind' counts the other Areas'… |
 
 ## `chuang_sdlc.trailers`: A commit message's trailers: which lines are plumbing a renderer drops, and a trailer's values.
 

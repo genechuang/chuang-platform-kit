@@ -3,15 +3,18 @@
     Post-Ship: <job> <its arguments>
 
 read against the host's allow-list, {(job, (arg, ...)): what it does, in a reader's words}, so a commit can ask only
-for what the host listed: a step not on it is kept, marked not allowed, for the notes to name. Running the steps (the
-host's job runner and its wait) is the host's; this module reads them and words the results.
+for what the host listed: a step not on it is kept, marked not allowed, for the notes to name. Each allowed step is
+started and waited for to its end by `run`, the start and the status the host's to pass in (its job runner: on Cloud
+Run, the host's starter and `execution_result` over the kit's google_rest), and the results worded for the notes.
 
     found = steps(commits, ALLOWED, script_of)      [{'job', 'args', 'sha', 'what', 'allowed'}]
+    done = run(found, start, state)                 each step with its result, seconds and execution page
     lines(done)                                     one line a step for the release notes
 
-Standard library only.
+Standard library only (`execution_result` imports the kit's google_rest when called).
 """
 import re
+import time
 
 TRAILER = re.compile(r'^\s*Post-Ship:\s*(\S+)((?:\s+\S+)*)\s*$', re.I)
 ICON = {'passed': '✅', 'failed': '🔴', 'timed out': '⏳', 'refused': '🚫'}
@@ -39,6 +42,53 @@ def steps(commits: list, allowed: dict, script_of=None) -> list:
             out.append({'job': job, 'args': list(args), 'sha': c.get('sha') or '', 'what': what or '',
                         'allowed': what is not None})
     return out
+
+
+WAIT = 600     # seconds a step may run before it is called timed out, unless the host says
+POLL = 10      # seconds between two reads of a running step's status
+
+
+def run(found: list, start, state, clock=time.monotonic, sleep=time.sleep, wait: int = WAIT, poll: int = POLL) -> list:
+    """Each step of `found` (steps()) started and waited for, in order: the step with `result` (passed, failed,
+    refused, did not start (<why>), timed out), `seconds` and `url` (its execution's page). A step not allowed is
+    refused and never started. `start(job, args)` is the host's job start, answering {'execution', 'url'} or raising;
+    `state(job, execution)` its status read, 'running', 'passed' or 'failed' (a read that raises counts as running, one
+    unread poll being no verdict); `clock` and `sleep` the test seams."""
+    done = []
+    for s in found:
+        s = dict(s, result='refused', seconds=None, url='')
+        if not s['allowed']:
+            done.append(s)
+            continue
+        t0 = clock()
+        try:
+            got = start(s['job'], s['args'])
+        except Exception as e:   # noqa: BLE001 - the job runner's refusal or the network: said in the notes
+            done.append(dict(s, result=f'did not start ({type(e).__name__}: {str(e)[:120]})'))
+            continue
+        s['url'] = got.get('url') or ''
+        ex = got.get('execution') or ''
+        result = 'timed out'
+        while ex and clock() - t0 < wait:
+            try:
+                now = state(s['job'], ex)
+            except Exception:   # noqa: BLE001 - one unread poll is no verdict
+                now = 'running'
+            if now != 'running':
+                result = now
+                break
+            sleep(poll)
+        done.append(dict(s, result=result if ex else 'did not start (no execution named)', seconds=round(clock() - t0)))
+    return done
+
+
+def execution_result(project: str, region: str, job: str, execution: str, token, opener=None, timeout: int = 15) -> str:
+    """'running', 'passed' or 'failed' for one Cloud Run Job execution, a `state` for run(): the kit's
+    google_rest.get_execution and execution_state (succeeded is passed, failed or cancelled is failed)."""
+    from chuang_platform_kit import google_rest
+    doc = google_rest.get_execution(project, region, job, execution, token, opener=opener, timeout=timeout)
+    got = google_rest.execution_state(doc)
+    return got if got == 'running' else ('passed' if got == 'succeeded' else 'failed')
 
 
 def label(step: dict) -> str:

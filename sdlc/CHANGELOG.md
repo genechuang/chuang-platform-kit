@@ -3,6 +3,36 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.4.0 - 2026-11-07 PT
+
+A ship's release notes and its post-ship runner, moved from the first host's scripts with no project in them. Every
+0.3.1 call reads as before; the main package's floor is 0.27.0 (google_rest.get_execution).
+- `titles`, what a range of commits shipped in its tickets' own words: `configure(repo=, area=, bug=, tail=, fixed=,
+  token=, mapped=, workers=)` (the repository the board's `repo` and the bug label the board's `labels` {'Bug'} unless
+  named; the readers' Area, none by default, NotConfigured when unset; a title's `tail` regex, none by default; the
+  token the kit's github.token unless the host passes its own; `mapped` the host's commits from before the trailer
+  rule), `setting`, `repo`, `area`, `bug_label`, `member_label` (tickets.label('member_title')), both lower-cased
+  as `fetch` reads labels, `issue_url`;
+  `numbers_of` (board.ticket_trailers, then `mapped` by sha prefix), `fetch` (one issue over REST through the kit's
+  github client: its title, lower-cased labels and state, 404 or 410 missing, any other failure None with a WARNING),
+  `read` (side by side, in first-commit order), `title`, `line` and `shipped` ({'new', 'fixed', 'behind' a count,
+  'unknown'}).
+- `notes`, a ship's release notes over `titles`: `configure(sections=, emoji=, tz=, tag_prefix=, not_allowed=, none=,
+  unread=, retitle=, close_note=)` (New, Fixed, Behind the scenes and their emoji, the kit's clock zone and `ship-` by
+  default), `setting`; `groups` (each section's (number, title), `unknown`, `member_titles`), `compare_url`,
+  `ship_time`, `slack_text`, `markdown_text`, `pr_body` (through ship_pr.no_closing_keyword), `slack_blocks` (a
+  section split under `SLACK_TEXT_LIMIT`, the Post-Ship: steps in the host's `not_allowed` words), `release_body`,
+  `when` and `tag_for` in the host's zone, `change_order_number` (the issue labelled tickets.label('change_order') whose
+  title ends with the head's 8 characters; None when the host labels none), `commits` (github.compare) and `release`
+  (github.create_release, an existing tag's Release reused). Posting to Slack, its channel and token, and reading a
+  local git stay the host's.
+- `post_ship`: `run(found, start, state, clock=, sleep=, wait=WAIT, poll=POLL)`, each allowed step started with the
+  host's `start(job, args)` and polled with its `state(job, execution)` to its end (passed, failed, refused, did not
+  start (<why>), timed out, with its seconds and execution page; a step off the list never started, an unread poll
+  counted as running), and `execution_result(project, region, job, execution, token, opener=, timeout=)`, a Cloud Run
+  Job execution's `state` over the kit's google_rest (succeeded is passed, failed or cancelled is failed). The
+  allow-list and the job start stay the host's.
+
 ## 0.3.1 - 2026-11-07 PT
 
 Two branch leaks in `ship_pr`, from the first host's review; every 0.3.0 call reads as before.

@@ -13,8 +13,14 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
              trailer's values (standard library only)
   parity     a commit that changes one or two of the host's release pipelines carries a Pipeline-Parity: trailer, the
              pipelines passed in as path sets (standard library only)
-  post_ship  a release's Post-Ship: steps read against the host's allow-list, and their lines in the release notes
-             (standard library only)
+  post_ship  a release's Post-Ship: steps read against the host's allow-list, each started and waited for with the
+             host's job start and status (run; execution_result for a Cloud Run Job), and their lines in the release
+             notes (standard library only)
+  titles     what a range of commits shipped in its tickets' own words: the tickets read from GitHub by their labels,
+             the readers' Area's titles as lines, the rest counted
+  notes      a ship's release notes: the tickets grouped New, Fixed and Behind the scenes, as a Slack message (text and
+             blocks), Markdown, the ship pull request's body and the GitHub Release's; the Release, its tag and the
+             ship's change-order ticket
   ship_pr    one pull request a ship, from its own branch into the base, its merge the ship's push, linked to each
              ticket as its closing reference only after the ticket closed (tickets.live_numbers), and the
              closing-keyword scrub its title and body go through; a refused open leaves no branch, and the next
@@ -25,4 +31,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.3.1'
+__version__ = '0.4.0'

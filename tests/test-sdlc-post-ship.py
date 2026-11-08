@@ -4,10 +4,14 @@
 Pinned (the positive case first): an allowed step is read with its sha and words; a step off the allow-list is kept,
 not allowed; the same step twice is once, in commit order; a trailer repeating the job's own script is read without
 it; other lines are ignored; the label; a line a step for Slack and for markdown, linked when it has a url, the host's
-words for a step not allowed; failed() is everything that did not pass.
+words for a step not allowed; failed() is everything that did not pass; run starts each allowed step and polls it to its
+end (the unlisted refused and never started), a step past its wait timed out, a start that raises or names no execution
+did not start, an unread poll counts as running; execution_result reads Cloud Run's executions.get (a fake opener).
 
 Run:  python -B tests/test-sdlc-post-ship.py
 """
+import io
+import json
 import os
 import sys
 
@@ -63,6 +67,76 @@ check("an allowed step with no words is never called off the allow-list",
       S.lines([dict(found[0], what='', result='passed', seconds=3, url='')]),
       ['• `worker refresh`: ✅ passed in 3 s (1a2b3c4d)'])
 check('failed: everything not passed', [s['job'] for s in S.failed(done)], ['other'])
+
+
+class Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+print('run')
+started, clock = [], Clock()
+states = iter(['running', 'running', 'passed', 'passed'])
+
+
+def start(job, args):
+    started.append((job, args))
+    return {'execution': 'worker-x1', 'url': 'https://console.example.test/x1'}
+
+
+ran = S.run(found, start, lambda j, e: next(states), clock=clock, sleep=clock.sleep, poll=10)
+check('the positive case: an allowed step started with its arguments and polled to its end; the unlisted refused',
+      (started[0], [(s['result'], s['seconds'], s['url']) for s in ran[:1]], [s['result'] for s in ran[1:]]),
+      (('worker', ['refresh']), [('passed', 20, 'https://console.example.test/x1')], ['passed', 'refused']))
+check('a refused step is never started', [j for j, a in started], ['worker', 'worker'])
+slow = S.run(found[:1], start, lambda j, e: 'running', clock=Clock(), sleep=lambda s: None, wait=0)
+
+
+def boom(job, args):
+    raise RuntimeError('HTTP 403')
+
+
+broke = S.run(found[:1], boom, lambda j, e: 'passed', clock=Clock(), sleep=lambda s: None)
+nameless = S.run(found[:1], lambda j, a: {'url': 'u'}, lambda j, e: 'passed', clock=Clock(), sleep=lambda s: None)
+reads = iter([RuntimeError('no answer'), 'failed'])
+
+
+def flaky(job, ex):
+    got = next(reads)
+    if isinstance(got, Exception):
+        raise got
+    return got
+
+
+shaky = S.run(found[:1], start, flaky, clock=Clock(), sleep=lambda s: None)
+check('past its wait timed out; a start that raises did not start, said; no execution named; an unread poll is running',
+      (slow[0]['result'], broke[0]['result'], nameless[0]['result'], shaky[0]['result']),
+      ('timed out', 'did not start (RuntimeError: HTTP 403)', 'did not start (no execution named)', 'failed'))
+
+print('execution_result')
+asked = []
+
+
+def answer(doc):
+    def opener(req, timeout=None):
+        asked.append((req.get_method(), req.full_url, req.get_header('Authorization')))
+        return io.BytesIO(json.dumps(doc).encode())
+    return opener
+
+
+fin = {'completionTime': '2026-11-06T08:00:00Z', 'succeededCount': 1}
+check('the positive case: running, passed, failed and cancelled read from executions.get with the token',
+      ([S.execution_result('proj-x', 'region-1', 'worker', 'worker-x1', 'tok', opener=answer(d))
+        for d in ({}, fin, dict(fin, failedCount=1), dict(fin, cancelledCount=1))], asked[0]),
+      (['running', 'passed', 'failed', 'failed'],
+       ('GET', 'https://run.googleapis.com/v2/projects/proj-x/locations/region-1/jobs/worker/executions/worker-x1',
+        'Bearer tok')))
 
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)
