@@ -9,9 +9,15 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
              triage line and its sweep, the shipped stage, change orders, the board kept as its config says; wired to a
              host once with `configure()` (its board, GitHub runner, record store, people and hooks), with no default
              that reaches a real service
+  trailers   a commit message's plumbing trailers, the lines a renderer drops (standard shapes plus the host's), and a
+             trailer's values (standard library only)
+  parity     a commit that changes one or two of the host's release pipelines carries a Pipeline-Parity: trailer, the
+             pipelines passed in as path sets (standard library only)
+  post_ship  a release's Post-Ship: steps read against the host's allow-list, and their lines in the release notes
+             (standard library only)
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.1.0'
+__version__ = '0.2.0'

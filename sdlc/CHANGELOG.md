@@ -3,6 +3,23 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.2.0 - 2026-11-07 PT
+
+The commit trailers a project's pipelines read, moved from the first host's scripts with no project in them. Every
+0.1.0 name is unchanged, so a host still on 0.1.0's callers runs on 0.2.0 as before.
+- `trailers`: `SHAPES` and `STANDARD` (Session, the old Claude-Session and a bare session URL, Ticket, Pipeline-Parity,
+  Post-Ship), `shape(key, value)` for a host's own, `matcher(*shapes)`, `is_plumbing(line, pattern)`, `values(message,
+  key)`.
+- `parity`: `which(path, pipelines)`, `only_paths(diff)`, `touched(files, pipelines, diff_of)` and `verdict(message,
+  pipes, pipelines, example, cite)`, the pipelines a host's {name: [glob, ...]}; `TRAILER`, `PATHS_LINE`, `EXAMPLE`.
+- `post_ship`: `steps(commits, allowed, script_of)`, `label`, `lines(done, markdown, not_allowed)`, `failed`;
+  `TRAILER`, `ICON`, `NOT_ALLOWED`. Running the steps stays the host's.
+- Behavior fixes a host inherits from the scripts these came from: a bare `Pipeline-Parity:` no longer passes by
+  borrowing the next line (the old `\s*` crossed the newline), and the ten characters are the stripped value's, so
+  trailing spaces or a carriage return no longer count (`has_trailer`, `MIN_REASON`; any one valid line passes); the
+  same for `values()`; `verdict()` ignores a pipeline name it was not given; `which()` matches case on every platform
+  (`fnmatchcase`); `lines()` reads a step's `allowed`, so an allowed step with no words is never called off the list.
+
 ## 0.1.0 - 2026-11-07 PT
 
 The first release: the ticket tools of the first host's own ticket module, moved here with no project in them (Gene,

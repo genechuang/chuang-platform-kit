@@ -633,6 +633,25 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`; an estimate, the working time or the start that is missing says so (`start_hint`, th… |
 | `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`), the elapsed time from the ticket's first start (`starts`/<n> first_epoch) to the… |
 
+## `chuang_sdlc.parity`: Pipelines kept in step: a commit that changes one or two of a project's release pipelines says how…
+
+| Name | Purpose |
+|---|---|
+| `has_trailer(message)` | Whether any `Pipeline-Parity:` line of the message carries a reason of MIN_REASON characters or more, its own spaces and a carriage return not counted. |
+| `which(path, pipelines)` | The pipeline a file belongs to, or '' when it is shared or no pipeline's (case counts, on every platform). |
+| `only_paths(diff)` | True when every changed line of a file's diff is a generated `paths:` entry. |
+| `touched(files, pipelines, diff_of)` | The pipelines a commit's files change; `diff_of(file)` is that file's diff (a .yml whose diff is only `paths:` lines changes none). |
+| `verdict(message, pipes, pipelines, example=, cite=)` | '' when the commit may go; else the refusal, with `example` (its {first} and {last} the missing pipelines) and the rule's `cite` on its own last line when given. A name in `pipes` that is not one of `pipelines` is ignored. |
+
+## `chuang_sdlc.post_ship`: A release's post-ship steps: the one-off jobs a shipped commit asks for in a `Post-Ship:` trailer,…
+
+| Name | Purpose |
+|---|---|
+| `steps(commits, allowed, script_of=)` | The steps the commits ({'sha', 'message'}) ask for, in commit order, each once: [{'job', 'args', 'sha', 'what', 'allowed'}]. `script_of(job)` is the arguments the host's runner adds before a job's own (its script), dropped when a trailer repeats them. |
+| `label(step)` | '<job> <arg> ...'. |
+| `lines(done, markdown=, not_allowed=)` | One line a run step ({..., 'result', 'seconds', 'url'}) for the notes: '• <job> <args>: ✅ passed in 74 s, <what> (<sha8>)', its label linked to `url` (a markdown link, else Slack's <url\|text>); a step off the allow-list says `not_allowed` (by its `allowed` f… |
+| `failed(done)` | The steps that did not pass. |
+
 ## `chuang_sdlc.tickets`: A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow,…
 
 | Name | Purpose |
@@ -729,4 +748,13 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `open_bug_for(component, run=, cfg=)` | The open bug a component's failed smoke already has (its title starts SMOKE_BUG), or None: a failure that repeats is a comment on it, never a second issue. |
 | `refused_as_duplicate(title, argv, run=, out=)` | The command line's sweep before `new` or `bug` files anything: open issues like this title (similar()) are listed and nothing is filed, unless `--new` says it is none of them. True when refused. |
 | `body_is_path(argv)` | --body's text when it is only a file's path, else '': one line naming a file that exists, or one line ending in .md or .txt (the plan belongs in the ticket, never a link to a temp file). --body-file reads the file. |
+
+## `chuang_sdlc.trailers`: A commit message's trailers: which lines are plumbing a renderer drops, and a trailer's values.
+
+| Name | Purpose |
+|---|---|
+| `shape(key, value=)` | One trailer's line shape, `<key>: <value>` alone on its line (the key matched as written, any case). |
+| `matcher(*shapes)` | The plumbing lines as one pattern: each of `shapes` a name in SHAPES or a regex of its own (shape() makes one); STANDARD when none is given. Case is ignored. |
+| `is_plumbing(line, pattern=)` | Whether one body line is a plumbing trailer, by `pattern` (matcher()'s), the standard shapes when none. |
+| `values(message, key)` | Every value of the trailer `key` in a commit message, in order, each stripped: values(m, 'Post-Ship'). One line each: an empty trailer has no value and never borrows the next line. |
 

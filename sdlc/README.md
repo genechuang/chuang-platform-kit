@@ -4,7 +4,9 @@ A project's tickets on a GitHub Project (v2) board, project-agnostic: the board'
 make, a ticket's fields and moves along it (never a step back), filing with the one estimate stage every new ticket
 passes, the `Triage:` line and its sweep, the shipped stage (the Release, the linked branch, the closing comment), the
 change order a ship files, the board's column labels and placeholder cards kept as its config says, and the level of
-effort estimated and actual.
+effort estimated and actual. And the commit trailers a project's pipelines read: the plumbing lines a renderer drops
+(`trailers`), the `Pipeline-Parity:` check over the project's own pipelines (`parity`), and a release's `Post-Ship:`
+steps against its allow-list (`post_ship`).
 
 It is a distribution of its own in the chuang-platform-kit repository, so a release of it redeploys only what runs
 it: a host pins it where its ticket tools run, never in every service the main package is in.
