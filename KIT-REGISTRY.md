@@ -615,6 +615,52 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `send_image(recipient_id, image_url, caption=, source=, dry_run=, include_signature=, correlation_id=)` | Send an image with optional caption. |
 | `publish_raw(message)` | Publish a pre-constructed WhatsAppMessage. |
 
+## `chuang_sdlc.alerts`: An alert's incident as a GitHub issue, filed once per opening and closed once the alert watcher say…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings (the module's _SET says what each is); `collections` is merged over what is set. Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `repo()` | The repository alert issues are filed in: configure(repo=) (a name, or a callable answering one), else the board's `repo`. |
+| `collection(role)` | The record collection of a role (`claims`, `triage`); NotConfigured when the host named none. |
+| `triaged(iss)` | Whether the alert issue has become a bug ticket: its Triage line swept, the bug label on it. |
+| `closed_by_closer(title, comment)` | Whether an issue was closed by an alert closer: its newest comment opens with a closer's mark, or its title is an alert issue's, as the closers file and close them. |
+| `marker(key, first_at)` | The hidden line an issue's body carries: its incident's key and first failure. |
+| `marked(body)` | (key, first_at) of the incident an issue body was filed for, or None. |
+| `is_filed(inc)` | An incident to file (configure(filed=), the host's own rule, when it gave one): open, told (not held for a schedule's retry) and with a first failure to key it on. |
+| `pt(stamp)` | An incident's ISO instant as `Fri 10/23/26 1:30 AM PT` in the kit's zone; the text itself when it cannot be read. |
+| `issue_title(key, inc)` | The watcher's own subject (its `subject_head` dropped) after the title prefix; a plain one for an incident told before subjects were kept; cut to `max_title`. |
+| `issue_body(key, inc)` | The watcher's message as it was told, then the incident's facts and the marker; every line redacted. |
+| `cleared_why(inc, first)` | Why an open issue's alert is over, or '' while it still holds: the incident gone, Fixed, or failed again since. |
+| `plan(incidents, gh_issues)` | (to_file, to_close). to_file: (key, incident) for each one to file that no GitHub issue, open or closed, carries the marker of. to_close: (gh_issue, why) for each OPEN marked issue whose incident has closed, opened again since, or is gone; never one of a kind… |
+| `plan_cleared(incidents, gh_issues)` | (gh_issue, note) for each OPEN marked issue that is a bug ticket (`triaged`) whose alert is over and that has not been told yet (no cleared label): the note says the alert cleared and the ticket stays open for its fix. A kind that waits for a person waits as… |
+| `for_key(key, gh_issues)` | The issues one incident's plan may touch: those marked with its key (the rest are other incidents'). |
+| `claim_key(key, inc)` | The once-only id of an incident's opening. |
+| `opening_claimed(store, key, inc)` | Whether an incident's opening is claimed already in the host's claims collection (a listener told the same open incident again reads this before it reads GitHub). |
+| `claim_opening(store, key, cid, now)` | An opening's once-only claim, `cid` in the claims collection, created unless held: True when this call took it, False when it was already held. It expires `claim_ttl_days` after `now` (a datetime). A write the store refuses raises, for the caller to say. |
+| `class GitHub` | The issue reads and writes `act` needs, and a host's alert sweeps', through chuang_platform_kit.github's throttled client with one token (the issue search draws on GitHub's search quota; the kit refuses a call locally once the quota is under its floor). `repo… |
+| `GitHub.issues(pages=)` | Every issue, open or closed, whose title starts with the prefix, newest first: 100 a page, at most `pages` pages. |
+| `GitHub.file(title, body)` | A new issue; its number (0 when GitHub answered none). |
+| `GitHub.close(number, why=, comment=)` | The issue closed with a comment: `comment` as given, else `<close_word> <why>.`. |
+| `GitHub.comment(number, text)` | One comment on the issue (the note that its alert cleared while the ticket stays open). |
+| `GitHub.label(number, name)` | One label added to the issue (the cleared label, so the note is written once). |
+| `act(key, inc, gh, claim)` | One incident's issue made right at once: filed (once, through `claim(id) -> bool`) while it is open and told, its open issue closed once it is Fixed or opened again, a triaged one told once that its alert cleared. Lines said. |
+| `triage_claim(number, by, store, now)` | (claimed, line) for one triage pass on an issue: a create-only record in the `triage` collection, so two passes never investigate it at once. True and `claimed #n` when this call created it; False and who holds it otherwise. `now` a callable answering epoch s… |
+| `triage_release(number, store)` | The triage claim dropped, so the next pass may take the issue. |
+
+## `chuang_sdlc.backlog`: The one backlog, read from the board: every open ticket by its state (in progress, next, and the st…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings: `states`, `label_states`, `moving` (roles), `tail`, `id_field`, `needs_field` (the module's _SET says what each is). Unknown names are refused. |
+| `setting(name)` | One of the host's settings (configure). |
+| `moving(cfg=)` | The columns whose cards are in progress: the `moving` roles' columns on the board. |
+| `state_of(status, labels, cfg=)` | A ticket's backlog state from its Status and labels: a moving column is in progress; otherwise the state its first label in `label_states` names, else next. |
+| `board_filter(cfg=)` | GitHub's own filter for the open backlog: open issues, the shipped column left out (and with it the closed tickets and the drafts). |
+| `read_open(run=, cfg=)` | The board's open tickets, each {id (`#213`, then the id_field's value), item (the title without its tail), priority, owner, state, needs, where (its url)}, sorted P1 first and an unset priority last (the order within each state); None when GitHub cannot answe… |
+| `short(text, width=)` | Text cut to `width` with an ellipsis. |
+| `render(backlog, owner=, show_done=, states=)` | The open items by state (`states`, else the configured order), each `P1 #12 Owner: item — needs`, a state's count on its heading, then the done ones ({id, item, closed}) when asked. |
+
 ## `chuang_sdlc.board`: A ticket board's names in one place: its columns by role, the flow they make, a card's place along…
 
 | Name | Purpose |
@@ -688,6 +734,48 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `lines(done, markdown=, not_allowed=)` | One line a run step ({..., 'result', 'seconds', 'url'}) for the notes: '• <job> <args>: ✅ passed in 74 s, <what> (<sha8>)', its label linked to `url` (a markdown link, else Slack's <url\|text>); a step off the allow-list says `not_allowed` (by its `allowed` f… |
 | `failed(done)` | The steps that did not pass. |
 
+## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's settings: `lead` (a name), `store`, `mail`, `finished`, `unplanned`, `closed_question`, `closed_to`, `closed_told`, `closer`, `ship_run_of` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text} for this module's worded const… |
+| `setting(name)` | One of the host's settings (configure). |
+| `lead()` | The project's lead, by the name the board's Owner field gives them. |
+| `captain()` | The release captain (chuang_sdlc.tickets' people): a card with no Owner is theirs to take or assign. |
+| `now_utc()` | The instant now (a stamp, never a day). |
+| `pt(when)` | A stamp for people in the kit's zone, `10/29/26 12:40 PM PT`: the kit's clock.human_time without the weekday. |
+| `scrum_line(comments, login, skip=)` | The newest `Scrum:` line in a comment by `login` (the repository's owner: every session writes as it, and nobody else's line counts): {kind, ref, who, eta, ask, at}; {} when none. `skip` names kinds read past (an open card's `done`, which only a closed card t… |
+| `lead_answer(comments, login, since)` | The lead's reply to a Needs-you ask: the newest comment by `login` after `since` (the ask's time) that is an answer, not a session's own line: a `Scrum:` line in any word but the owners' kinds (`Scrum: Yes`), or a plain comment of at most ANSWER_MAX character… |
+| `gh_stamp(when)` | A stamp in GitHub's own `2026-10-30T00:49:54Z` form, so it compares as text with a comment's createdAt (the sweep's own stamps are Python's isoformat, `+00:00`). |
+| `localize(naive, tz)` | A wall-clock time in `tz`, standard time where the wall clock is ambiguous or skipped (the hour a clock change repeats or leaves out), as a stored stamp is never: an ETA is a future wall-clock time. |
+| `parse_eta(text, now)` | An ETA's instant in the kit's zone: `10/29/26 5:00 PM`, `10/29 5 PM`, `5:00 PM`, `5 PM` (today, or tomorrow once past), or ISO; None when it cannot be read (asked again after STALE_HOURS like any quiet card). A leading weekday, short or full, and a trailing P… |
+| `plan(card, facts, state, now, cfg)` | What the sweep does for one shipyard card: {state (what it found), question (to its owner, '' for none), actions [(kind, value)], change (a line for a new comment, '' for none)}. Pure: `facts` is {line, blockers [(number, state)], last_commit (datetime or Non… |
+| `finished(col, cfg)` | Whether a closed card's column is one it belongs in (configure(finished=), else the shipped and failed columns and a `shipment` column the board may have); an old name is read as its new one. |
+| `unplanned(reason)` | Whether a close was as not planned or a duplicate (configure(unplanned=), else GitHub's two reasons). |
+| `closed_question(number, col)` | The question a closed card's owner is asked (configure(closed_question=), else these words). |
+| `closed_to(who)` | Who is asked about a closed card (configure(closed_to=), else its Owner, the captain for none or the lead). |
+| `closed_filter(cfg)` | GitHub's own filter for the closed cards outside the shipped and failed columns (and a `shipment` column the board may have): a point a hundred cards, never the whole board. |
+| `closed_plan(card, comments, login, state, told, now, cfg)` | What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a finished one (an old column name read as its new one); `wreck` for a close as not planned or a duplicate; `ship` when its owner's newest `Scrum:` line… |
+| `closed_sweep(cfg, gh, store, now, dry, letters, only=, skip=)` | The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with closed_filter, each settled by closed_plan: to the ship column with its shipped Light, to the failed column, or its question added to its owner's le… |
+| `question_key(question)` | A question's short fingerprint ('' for none): a card is asked again only when its question changes. |
+| `letter(owner, items)` | (subject, text) of one owner's letter: every card of theirs with a new question. |
+| `comment_body(when, found, did)` | The card's one scrum master comment, edited in place each sweep: when, what it found and what it did. |
+| `class GitHub` | The sweep's GitHub reads and writes, through the ticket tools' runner (chuang_sdlc.tickets' configure(runner=) unless one is given) and the board helpers. A dry run writes nothing and answers every write True. |
+| `GitHub.card(n)` | One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY); {} when GitHub does not answer. |
+| `GitHub.assign(n, on=)` | The repository's owner (the lead's login) assigned to the card or not. |
+| `GitHub.label(n, name, add=)` | A label added to the card, or taken off. |
+| `GitHub.link(issue_id, blocker_id)` | A native blocked-by link (LINK_MUTATION), by both issues' node ids. |
+| `GitHub.issue_id(n)` | An issue's node id ('' when it cannot be read). |
+| `GitHub.comment(n, body)` | A comment on the card. |
+| `GitHub.edit_comment(cid, body)` | A comment's body replaced. |
+| `GitHub.field(n, field, value)` | One Project field of the card (tickets.set_field). |
+| `GitHub.move(n, role)` | A card back to `role` (the scrum master only ever moves back: a queued or dependent card to the next column); True only once the board took it. |
+| `GitHub.ship(n)` | A closed card to the ship column with its shipped Light: tickets.move, forward only, the move marked first (tickets.mark_ship_move) whatever runner this sweep holds, so the host never takes it for the lead's drag; True only once the board took it. |
+| `GitHub.wreck(n)` | A card closed as not planned or a duplicate to the failed column with its Light cleared: the pipeline's own move, marked first, the column and the Light in one request; True once the board took it. |
+| `GitHub.place(n)` | (column, light) of a card, or None when the board does not answer. |
+| `sweep(cfg=, gh=, store=, mail=, now=, dry=, out=, only=)` | One pass over the shipyard: every card's plan applied, its comment kept, the owners' letters sent. Lines. `only`, a ticket number, runs that one card (an event named it: its Status, Priority, Light or Owner changed, or a `Scrum:` line was written); a card not… |
+| `ship_card_home(cfg, gh, dry=, ship_run=, now=)` | The ship card back in its home column when it sits anywhere but there or the ship column, or in the ship column with no ship under way, and its title made the board config's `ship_card` title: the board's drafts read with its own filter (a dozen cards), kept… |
+
 ## `chuang_sdlc.ship_pr`: One pull request a ship, so each shipped ticket's Development shows the release that shipped it.
 
 | Name | Purpose |
@@ -727,16 +815,36 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Minimal.graphql(query, variables=)` | link_branch's documents answered (the commit resolves, no branch yet); any other {}. |
 | `class ShipFake` | The ticket client with the ship's pull requests: Minimal behind ShipPRs. |
 | `ship_fake(closed=, refuse=, refuse_nodes=, release=)` | A client with the ship's pull request #900 opened from the branch of `release` (ship_pr.branch_of) and merged by the push; `closed` the issues closed already, `refuse` and `refuse_nodes` as ship_setup takes them. |
+| `class Records` | A record store in memory, the shape chuang_sdlc's callers take (get, set, merge, create, delete on (collection, id)): `docs` {(collection, id): doc}; `create` answers False for a record already held. |
+| `Records.get(collection, doc_id)` | The record, or None. |
+| `Records.set(collection, doc_id, doc)` | The record replaced. |
+| `Records.merge(collection, doc_id, doc)` | The fields merged into the record. |
+| `Records.create(collection, doc_id, doc)` | The record made unless one is held: True when this call made it. |
+| `Records.delete(collection, doc_id)` | The record gone, held or not. |
+| `items_page(cards, owner_type=)` | The GraphQL answer to tickets.board_items' query for these cards, one page: each {number (None for a draft), title, status, light, owner, priority, labels, url, type ('Issue' or 'DraftIssue'), draft (a draft's own id), body}. |
+| `class Board` | A ticket client for the scrum master's sweep and the board's reads (scrum.sweep, tickets.board_items, move, ticket_place, set_fields), in memory: `columns` {GitHub filter substring: [card]} answers board_items by the first key its filter contains ('' for any)… |
+| `Board.node_id(number)` | An issue's node id, `I_<n>`. |
+| `Board.item_add(node)` | The issue's Project item, `IT_<n>`. |
+| `Board.item_fields(item, fields)` | Fields written in one request, recorded as ('fields', item, {field id: value}). |
+| `Board.item_field(item, field_id, option_id=, text=, clear=)` | One field, recorded as item_fields records it. |
+| `Board.item_top(item)` | A card to the top of its column, recorded. |
+| `Board.comment(number, body)` | A comment, recorded. |
+| `Board.edit_comment(comment_id, body)` | A comment's body replaced, recorded. |
+| `Board.assign(number, login, on=)` | An assignee added or taken off, recorded. |
+| `Board.add_labels(number, labels)` | Labels added, recorded. |
+| `Board.remove_label(number, label)` | A label taken off, recorded. |
+| `Board.graphql(query, variables=)` | board_items' query by its filter, CARD_QUERY, ticket_place's item read, the blocked-by link and the draft edit; anything else answers {}. |
 
 ## `chuang_sdlc.tickets`: A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow,…
 
 | Name | Purpose |
 |---|---|
 | `class NotConfigured` | The host has not wired what this call needs (configure). |
-| `configure(**wiring)` | Wire the module to the host (module docstring): `board`, `runner`, `store`, `raw_store`, `loe_records`, `factor_of`, `mail`, `before_ship_move`, `decide_letter` (callables), `people`, `labels`, `collections`, `card_fields` (dicts merged over the defaults), `d… |
+| `configure(**wiring)` | Wire the module to the host (module docstring): `board`, `runner`, `store`, `raw_store`, `loe_records`, `factor_of`, `mail`, `before_ship_move`, `decide_letter`, `ship_run` (callables), `people`, `labels`, `collections`, `card_fields` (dicts merged over the d… |
 | `is_host_runner(run)` | Whether `run` is the host's own runner (configure(runner=)), not a suite's fake passed in. |
 | `host_store()` | The host's record store, or None (none wired, or the host has none at hand). |
 | `person(role)` | The name the host gave a role (`triager`, `default_owner`, `captain`); '' when it gave none. |
+| `mark_ship_move(numbers, run=)` | The host's mark of the pipeline's own move into the ship column (configure(before_ship_move=)), whatever runner the caller holds: a caller that writes such a move itself (a sweep putting a closed card in the ship column) marks it first, as move and live_numbe… |
 | `label(role, required=)` | The label the host gave a role (`triage`, `member_title`, `admin_ask`, `change_order`); NotConfigured when it gave none and the caller needs one, '' when `required` is False (a label a board may simply not use). |
 | `collection(role)` | The record collection of a role (`loe`, `starts`); NotConfigured when the host named none. |
 | `body_loe(body)` | The text of a body's `LOE estimate:` line, the whole rest of the line (`2 hours`, `1h 30m`), or None when it has none; loe_minutes reads it. |
@@ -788,11 +896,15 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `light_for(col, cfg=)` | The Light a card moved into this column should show (board.light_for). |
 | `is_placeholder(title, cfg=)` | Whether a card's title is a column's placeholder (board.is_placeholder). |
 | `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. [(number, ok)]. |
-| `sync_columns(run=, cfg=, tmp=, merge=)` | The board made what its config says: its column labels (_sync_options), then its placeholder cards (placeholders), on one line, a WARNING from either first; a board whose columns could not be read is written nothing. `tmp` is kept for older callers. |
+| `sync_columns(run=, cfg=, tmp=, merge=, ship_run=)` | The board made what its config says, at every ship: its column labels (_sync_options), then its placeholder cards (placeholders: a deleted one re-made, a strayed one put back) and the ship card (ship_card_keep: its title and its home, left in the ship column… |
 | `filter_columns(names)` | A board filter's Status term for these columns, each name quoted for the ones with spaces. |
-| `board_items(query, run=, cfg=)` | The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content {type, number, url}) with its i… |
+| `board_items(query, run=, cfg=)` | The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content {type, number, url, and a draft… |
 | `is_draft(card)` | Whether a board_items card is a draft (a column's placeholder, a host's own draft cards): no issue behind it, so nobody's to ask about, light or move. |
-| `placeholders(run=, cfg=)` | One placeholder draft card in each flow column that can empty, the config's `placeholders` by role: the board's drafts read once with GitHub's own `is:draft` filter; a role with no draft titled for it or its column is made (the draft, then its Status; no Ligh… |
+| `placeholders(run=, cfg=, drafts=)` | One placeholder draft card in each flow column that can empty, the config's `placeholders` by role: the board's drafts read once with GitHub's own `is:draft` filter (`drafts`, that read when the caller made it, as sync_columns does); a role with no draft titl… |
+| `ship_card_spec(cfg=)` | The board config's `ship_card`: {home, word, title}, the ship card's home role (`dock` unless named), the word its title carries (`SHIP IT`) and the title ship_card_keep writes on it ('' leaves the title as it is). |
+| `is_ship_card(card, cfg=)` | Whether a board_items card is the ship card: a draft whose title carries the config's `ship_card` `word`, never a column's placeholder (the ship column's own placeholder may carry the word too). |
+| `ship_ended(record, now=)` | Why no ship is under way by the host's ship `record`, or '' while one is: the record says done or failed (any state but configure(ship_under_way=)'s), there is no record, or an under-way record's `at` (ISO UTC; one with no zone read as UTC, never the box's ow… |
+| `ship_card_keep(run=, cfg=, drafts=, dry=, ship_run=, now=)` | The ship card kept as the board config's `ship_card` says: found among the board's drafts (`drafts`, the caller's `is:draft` read, else one here; is_ship_card), its title made the config's when it differs (DRAFT_EDIT on the draft's own id, its body as read se… |
 | `ticket_place(number, run=, cfg=)` | (item id, column, Light, the column's raw name) of one ticket on the Project ('' for a card with no Status or no Light); None when GitHub does not answer. Its item by item_id and the item's own Status, a few GraphQL points a ticket: a move reads only the tick… |
 | `ticket_column(number, run=, cfg=)` | (item id, column) of one ticket (ticket_place's first two); None when GitHub does not answer. |
 | `move(numbers, status, run=, cfg=, back=)` | Every ticket to `status` (a role or a column's name); [(number, ok)]. Along the flow a ticket already at `status` or past it stays where it is (said as moved: it is where the move means), so a re-run never steps a ticket back. `back` is the one deliberate ste… |

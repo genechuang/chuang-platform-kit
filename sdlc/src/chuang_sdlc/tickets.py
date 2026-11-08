@@ -1,6 +1,7 @@
 """A project's tickets on a GitHub Project (v2) board: their fields and moves along the board's flow, filing (with the
 estimate stage every new ticket passes, however it is filed), the triage line and its sweep, the shipped stage, the
-change order a ship files, and the board kept the way its config says.
+change order a ship files, and the board kept the way its config says (its column labels, its placeholder cards and the
+ship card, a draft the lead drags into the ship column to ship, kept at its home and title by the host's ship record).
 
 The board is a dict of `board.py`'s shape. Its fields are a schema every board using this module has: Status (the
 columns), Light (a card's state within its column; optional), Owner, Priority (P1 to P4), Kind (Feature, Bug, Task,
@@ -48,14 +49,19 @@ _HOST = {
     'card_fields': {},      # {key: field name}: more fields board_items reads onto each card
     'start_hint': '',       # the host's command that records a ticket's start, named in an unmeasured LOE
     'calibrated_since': None,   # epoch seconds: before it a record's estimate_min was the raw (raw_on_record); None never
+    'ship_run': None,       # () -> the host's record of its latest ship ({state, at, ...}, or None): ship_card_keep's reader
+    'ship_under_way': ('requested', 'shipping'),   # the ship record's states of a ship not yet ended (ship_ended)
+    'ship_run_name': 'its ship record',   # the ship record as a line names it when it cannot be read
 }
 
 
 def configure(**wiring) -> None:
     """Wire the module to the host (module docstring): `board`, `runner`, `store`, `raw_store`, `loe_records`,
     `factor_of`, `mail`,
-    `before_ship_move`, `decide_letter` (callables), `people`, `labels`, `collections`, `card_fields` (dicts merged over
-    the defaults), `default_area`, `change_order_area`, `start_hint` (text), `calibrated_since` (epoch seconds), and `words` ({name: text} for this module's
+    `before_ship_move`, `decide_letter`, `ship_run` (callables), `people`, `labels`, `collections`, `card_fields` (dicts merged over
+    the defaults), `default_area`, `change_order_area`, `start_hint` (text), `calibrated_since` (epoch seconds),
+    `ship_under_way` (the ship record's states of a ship not yet ended), `ship_run_name` (the record as a line names
+    it), and `words` ({name: text} for this module's
     worded constants: NO_BODY, LOE_RULE, REUSE_RULE, PRIORITY_RULE, P1_RULE, PLACEHOLDER_BODY, CHANGE_ORDER_NOTE,
     ESTIMATE_COMMAND).
     Unknown names are refused."""
@@ -95,6 +101,14 @@ def host_store():
 def person(role: str) -> str:
     """The name the host gave a role (`triager`, `default_owner`, `captain`); '' when it gave none."""
     return (_HOST['people'] or {}).get(role, '')
+
+
+def mark_ship_move(numbers, run=None) -> None:
+    """The host's mark of the pipeline's own move into the ship column (configure(before_ship_move=)), whatever runner
+    the caller holds: a caller that writes such a move itself (a sweep putting a closed card in the ship column) marks it
+    first, as move and live_numbers do for the host's own runner. Nothing when the host wired none."""
+    if _HOST['before_ship_move'] is not None:
+        _HOST['before_ship_move'](list(numbers), run)
 
 
 def label(role: str, required: bool = True) -> str:
@@ -721,18 +735,26 @@ def _status_options(run, cfg) -> list:
 COLUMNS_UNREAD = "WARNING: tickets: the board's columns could not be read; nothing renamed"
 
 
-def sync_columns(run=None, cfg: dict = None, tmp: str = None, merge: bool = False) -> str:
-    """The board made what its config says: its column labels (_sync_options), then its placeholder cards
-    (placeholders), on one line, a WARNING from either first; a board whose columns could not be read is written
-    nothing. `tmp` is kept for older callers."""
+DRAFTS_UNREAD = "WARNING: tickets: the board's drafts could not be read; no placeholder made"
+
+
+def sync_columns(run=None, cfg: dict = None, tmp: str = None, merge: bool = False, ship_run=None) -> str:
+    """The board made what its config says, at every ship: its column labels (_sync_options), then its placeholder
+    cards (placeholders: a deleted one re-made, a strayed one put back) and the ship card (ship_card_keep: its title and
+    its home, left in the ship column while a ship is under way, `ship_run` its record's reader, else the host's), the
+    board's drafts read once for both, on one line, a WARNING from any first; a board whose columns could not be read
+    is written nothing. `tmp` is kept for older callers."""
     run, cfg = _run(run), _cfg(cfg)
     line = _sync_options(run, cfg, merge)
     if line == COLUMNS_UNREAD:
         return line
-    made = placeholders(run, cfg)
-    if made.startswith('WARNING: ') and not line.startswith(('WARNING', 'ERROR')):
+    drafts = board_items('is:draft', run, cfg)
+    made = placeholders(run, cfg, drafts) if drafts is not None else DRAFTS_UNREAD
+    card = ship_card_keep(run, cfg, drafts, ship_run=ship_run) if drafts is not None else []
+    if (made.startswith('WARNING: ') or any(c.startswith('WARNING: ') for c in card)) and not line.startswith(('WARNING', 'ERROR')):
         line = 'WARNING: ' + line
-    return f"{line}; {made.replace('WARNING: ', '', 1).replace('tickets: ', '', 1)}"
+    return '; '.join([line, made.replace('WARNING: ', '', 1).replace('tickets: ', '', 1)]
+                     + [c.replace('WARNING: ', '', 1) for c in card])
 
 
 def _sync_options(run, cfg: dict, merge: bool = False) -> str:
@@ -790,15 +812,15 @@ CARD_FIELDS = (('status', 'Status'), ('light', 'Light'), ('owner', 'Owner'), ('p
 
 
 def _items_query(cfg: dict) -> str:
-    """The board's items query: each card's issue (number, title, url, labels) or draft (title), and its fields
-    (CARD_FIELDS, then the host's card_fields), under the Project's organization or user (`owner_type`)."""
+    """The board's items query: each card's issue (number, title, url, labels) or draft (its own id, title and body),
+    and its fields (CARD_FIELDS, then the host's card_fields), under the Project's organization or user (`owner_type`)."""
     fields = list(CARD_FIELDS) + [(k, v) for k, v in (_HOST['card_fields'] or {}).items() if k not in dict(CARD_FIELDS)]
     owner = 'user' if cfg.get('owner_type') == 'user' else 'organization'
     return (f'query($owner: String!, $number: Int!, $q: String!, $after: String) {{ {owner}(login: $owner) {{ '
             'projectV2(number: $number) { items(first: 100, after: $after, query: $q) { '
             'pageInfo { hasNextPage endCursor } nodes { id '
             'content { __typename ... on Issue { number title url labels(first: 20) { nodes { name } } } '
-            '... on DraftIssue { title } } '
+            '... on DraftIssue { id title body } } '
             + ' '.join(f'{_alias(key)}: fieldValueByName(name: "{name}") {{ {_TEXT} }}' for key, name in fields)
             + ' } } } } }')
 
@@ -816,8 +838,9 @@ def filter_columns(names) -> str:
 def board_items(query: str, run=None, cfg: dict = None):
     """The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh
     project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content
-    {type, number, url}) with its item `id`; None when GitHub does not answer. The filter runs on GitHub's side, so a
-    read costs a point a hundred cards it returns, never the whole board's hundreds."""
+    {type, number, url, and a draft's own id `draft` and `body`, '' and None for an issue}) with its item `id`; None
+    when GitHub does not answer. The filter runs on GitHub's side, so a read costs a point a hundred cards it returns,
+    never the whole board's hundreds."""
     run, cfg = _run(run), _cfg(cfg)
     keys = [k for k, _n in CARD_FIELDS] + [k for k in (_HOST['card_fields'] or {}) if k not in dict(CARD_FIELDS)]
     owner = 'user' if cfg.get('owner_type') == 'user' else 'organization'
@@ -843,7 +866,11 @@ def board_items(query: str, run=None, cfg: dict = None):
             card.update({k: val(k) for k in keys})
             card['labels'] = [n['name'] for n in (content.get('labels') or {}).get('nodes') or []]
             card['content'] = {'type': content.get('__typename') or 'DraftIssue', 'number': content.get('number'),
-                               'url': content.get('url') or ''}
+                               'url': content.get('url') or '',
+                               # a draft's own id, which its title's edit takes (never the item's), and its body, sent
+                               # back unchanged with the title
+                               'draft': (content.get('id') or '') if not content.get('number') else '',
+                               'body': content.get('body') if not content.get('number') else None}
             out.append(card)
         info = page.get('pageInfo') or {}
         if not info.get('hasNextPage'):
@@ -858,19 +885,21 @@ def is_draft(card: dict) -> bool:
     return content.get('type') == 'DraftIssue' or not content.get('number')
 
 
-def placeholders(run=None, cfg: dict = None) -> str:
+def placeholders(run=None, cfg: dict = None, drafts=None) -> str:
     """One placeholder draft card in each flow column that can empty, the config's `placeholders` by role: the board's
-    drafts read once with GitHub's own `is:draft` filter; a role with no draft titled for it or its column is made (the
-    draft, then its Status; no Light), one in another column is put back, one in place is left, and any other draft is
-    never touched. Idempotent. The line said: what was made or put back, a WARNING naming what GitHub refused or that
-    the drafts could not be read, or that all are in place."""
+    drafts read once with GitHub's own `is:draft` filter (`drafts`, that read when the caller made it, as sync_columns
+    does); a role with no draft titled for it or its column is made (the draft, then its Status; no Light), one in
+    another column is put back, one in place is left, and any other draft (the ship card, a host's own drafts) is never
+    touched. Idempotent. The line said: what was made or put back, a WARNING naming what GitHub refused or that the
+    drafts could not be read (DRAFTS_UNREAD), or that all are in place."""
     run, cfg = _run(run), _cfg(cfg)
     want = cfg.get('placeholders') or {}
     if not want:
         return 'tickets: placeholders: none configured'
-    drafts = board_items('is:draft', run, cfg)
     if drafts is None:
-        return "WARNING: tickets: the board's drafts could not be read; no placeholder made"
+        drafts = board_items('is:draft', run, cfg)
+    if drafts is None:
+        return DRAFTS_UNREAD
     have = {}
     for d in drafts:
         role = B.placeholder_role(d.get('title') or '', cfg)
@@ -890,6 +919,129 @@ def placeholders(run=None, cfg: dict = None) -> str:
     parts = (([f"made: {', '.join(made)}"] if made else []) + ([f"put back: {', '.join(righted)}"] if righted else [])
              + ([f"refused by GitHub: {', '.join(refused)}"] if refused else []))
     return ('WARNING: ' if refused else '') + 'tickets: placeholders ' + '; '.join(parts)
+
+
+# ------------------------------------------------------------------ the ship card
+# A draft card the lead drags into the ship column to ship what is ready: its home column, the word its title carries
+# and the title it is kept at are the board config's `ship_card`; the host's ship record says whether a ship is under
+# way (configure(ship_run=)), so a card left in the ship column after its ship ended is brought home too.
+DRAFT_EDIT = ('mutation($d:ID!,$t:String!,$b:String){updateProjectV2DraftIssue(input:{draftIssueId:$d,title:$t,body:$b})'
+              '{draftIssue{id}}}')
+# How old a ship record still under way may be and still be a ship under way: a ship that wrote no later word proves
+# nothing runs, and leaving its card would strand it.
+SHIP_RUN_STALE_SECONDS = 1800
+
+
+def ship_card_spec(cfg: dict = None) -> dict:
+    """The board config's `ship_card`: {home, word, title}, the ship card's home role (`dock` unless named), the word
+    its title carries (`SHIP IT`) and the title ship_card_keep writes on it ('' leaves the title as it is)."""
+    return {'home': 'dock', 'word': 'SHIP IT', 'title': '', **(_cfg(cfg).get('ship_card') or {})}
+
+
+def is_ship_card(card: dict, cfg: dict = None) -> bool:
+    """Whether a board_items card is the ship card: a draft whose title carries the config's `ship_card` `word`, never
+    a column's placeholder (the ship column's own placeholder may carry the word too)."""
+    cfg = _cfg(cfg)
+    title = (card or {}).get('title') or ''
+    return is_draft(card) and ship_card_spec(cfg)['word'] in title.upper() and not is_placeholder(title, cfg)
+
+
+def ship_ended(record, now: float = None) -> str:
+    """Why no ship is under way by the host's ship `record`, or '' while one is: the record says done or failed (any
+    state but configure(ship_under_way=)'s), there is no record, or an under-way record's `at` (ISO UTC; one with no zone
+    read as UTC, never the box's own zone, which would make it hours younger) is older than SHIP_RUN_STALE_SECONDS or
+    not readable. `now` epoch seconds, else the clock."""
+    import time as _time
+    from datetime import datetime, timezone
+    if not record:
+        return 'no ship on record'
+    state = str(record.get('state') or '')
+    if state not in tuple(_HOST['ship_under_way'] or ()):
+        return f'the last ship is {state or "of no state"}'
+    try:
+        parsed = datetime.fromisoformat(str(record.get('at') or '').replace('Z', '+00:00'))
+        if parsed.tzinfo is None:   # utc-ok: every writer stamps UTC, so a zoneless `at` is UTC, never the box's own zone
+            parsed = parsed.replace(tzinfo=timezone.utc)   # utc-ok: as above
+        at = parsed.timestamp()
+    except ValueError:
+        return f'the last ship is {state} with no readable time'
+    age = (_time.time() if now is None else now) - at
+    if age > SHIP_RUN_STALE_SECONDS:
+        return f'the last ship has said {state} for {int(age // 60)} minutes'
+    return ''
+
+
+def _ship_run_reader():
+    """The host's ship record reader (configure(ship_run=)); NotConfigured when it wired none, which ship_card_keep
+    says as an unread record."""
+    if _HOST['ship_run'] is None:
+        raise NotConfigured('no ship record: configure(ship_run=)')
+    return _HOST['ship_run']()
+
+
+def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, ship_run=None, now: float = None) -> list:
+    """The ship card kept as the board config's `ship_card` says: found among the board's drafts (`drafts`, the
+    caller's `is:draft` read, else one here; is_ship_card), its title made the config's when it differs (DRAFT_EDIT on
+    the draft's own id, its body as read sent back unchanged), and moved to its home column when it sits anywhere but
+    there or the ship column. A card in the ship column is left while a ship is under way, which the host's ship brings
+    home at its end, and moved home when none is (ship_ended on the host's ship record, read once and only for a card
+    in the ship column, through `ship_run`, else configure(ship_run=); `now` epoch seconds): a card stranded there after
+    its ship ended is wayward too. A record that cannot be read leaves the card where it is, said as a WARNING line. A
+    title edit is no Status edit, so a listener on single-select edits hears nothing of it. A dry run writes nothing and
+    says what it would. Lines, each said; [] when the card is in place, or none is on the board, or the drafts could not
+    be read (the placeholders' pass says so); a WARNING line for what GitHub refused."""
+    run, cfg = _run(run), _cfg(cfg)
+    spec = ship_card_spec(cfg)
+    if drafts is None:
+        drafts = board_items('is:draft', run, cfg) or []
+    home, ship = stage(spec['home'], cfg), stage('shipping', cfg)
+    name = f"the {spec['word']} card"
+    out, read = [], []   # read: the one ship record answer, ('ok', record) or ('error', why), kept for every card
+
+    def ended() -> tuple:
+        if not read:
+            try:
+                read.append(('ok', (ship_run or _ship_run_reader)()))
+            except Exception as e:   # noqa: BLE001 - unread is not ended: the card stays where it is
+                read.append(('error', f'{type(e).__name__}: {str(e)[:120]}'))
+        return read[0]
+    for c in drafts:
+        if not is_ship_card(c, cfg):
+            continue
+        title = c.get('title') or ''
+        if spec['title'] and title != spec['title']:
+            draft = (c.get('content') or {}).get('draft') or ''
+            if dry:
+                out.append(f'{name} would be retitled "{spec["title"]}" (dry run)')
+            elif not draft:
+                out.append(f"WARNING: {name}'s draft id was not read, so it was not retitled")
+            elif run.graphql(DRAFT_EDIT, {'d': draft, 't': spec['title'],
+                                          **({'b': body} if (body := (c.get('content') or {}).get('body')) is not None else {})}) is None:
+                out.append(f"WARNING: {name} was not retitled ({(getattr(run, 'error', '') or '').strip()[:160]})")
+            else:
+                out.append(f'{name} retitled "{spec["title"]}"')
+        where = column(c.get('status') or '', cfg)
+        if where == home:
+            continue
+        why = ''
+        if where == ship:
+            how, got = ended()
+            if how == 'error':
+                out.append(f"WARNING: {name} is in {ship} and {_HOST['ship_run_name']} could not be read ({got}), "
+                           'so it was left there')
+                continue
+            why = ship_ended(got, now)
+            if not why:
+                continue
+            why = f' with no ship under way ({why})'
+        if dry:
+            out.append(f"{name} is in {where or 'no column'}{why}; it would go back to {home} (dry run)")
+        elif set_fields(c['id'], {'Status': spec['home']}, run, cfg):
+            out.append(f"{name} was in {where or 'no column'}{why}; moved back to {home}")
+        else:
+            out.append(f"WARNING: {name} is in {where or 'no column'} and was not moved back to {home} "
+                       f"({(getattr(run, 'error', '') or '').strip()[:160]})")
+    return out
 
 
 ITEM_STATUS_QUERY = ('query($id: ID!) { node(id: $id) { ... on ProjectV2Item { id '

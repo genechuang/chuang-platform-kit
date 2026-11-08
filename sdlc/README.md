@@ -12,7 +12,14 @@ push, and linked to each shipped ticket as its closing reference only after the 
 Development shows the release that shipped it. And a ship's release notes in its tickets' own words: the tickets a
 range of commits names, read from GitHub by their labels (`titles`), grouped New, Fixed and Behind the scenes and
 written as the Slack post, the GitHub Release (made here, with its tag) and the ship pull request's body, with the
-ship's change-order ticket (`notes`); the post itself, its channel and token, stay the project's.
+ship's change-order ticket (`notes`); the post itself, its channel and token, stay the project's. And the board's
+ship card (a draft the lead drags into the ship column to ship), kept at its home and title by the project's ship record
+(`tickets.ship_card_keep`). And the scrum master (`scrum`): a sweep of the shipyard column that reads each owner's one
+`Scrum:` line (building with an ETA, next, blocked by, depends on, needs the lead, paused, done), asks each owner only
+what the board cannot say, in one letter a sweep, keeps one comment a card, and catches the closed cards outside the
+finished columns. And the one backlog read from the board and rendered by state, P1 first (`backlog`). And an alert's
+incident as a GitHub issue, filed once per opening and closed once it is fixed, with a triage pass's create-only claim
+(`alerts`); the project's watcher, its words, its repository and collections are configured.
 
 It is a distribution of its own in the chuang-platform-kit repository, so a release of it redeploys only what runs
 it: a host pins it where its ticket tools run, never in every service the main package is in.

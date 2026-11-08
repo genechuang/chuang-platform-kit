@@ -11,6 +11,14 @@
 
 Nothing here reaches a network. The documents answered are ship_pr's own and link_branch's (tickets.LINK_QUERY,
 LINK_MUTATION); any other GraphQL document goes to the fake behind ShipPRs.
+
+And for the scrum master's sweep, the board's reads and the claims (scrum, backlog, alerts):
+
+    store = Records()                       # get / set / merge / create / delete on (collection, id)
+    gh = Board({'status:"Building"': [{'number': 7, 'title': 't', 'light': 'busy', 'owner': 'Ann'}]},
+               issues={7: {'id': 'G7', 'state': 'OPEN', 'blockedBy': {'nodes': []}, 'comments': {'nodes': []}}})
+    scrum.sweep(cfg, scrum.GitHub(cfg, run=gh), store, mail)
+    items_page(cards)                       # the board_items answer for these cards
 """
 from . import ship_pr as P
 from . import tickets as T
@@ -194,3 +202,135 @@ def ship_fake(closed=(), refuse=(), refuse_nodes=(), release: str = RELEASE):
     gh.ship_refs[branch] = release
     gh.prs[900] = {'number': 900, 'head': branch, 'state': 'MERGED', 'merged': True, 'body': '', 'title': 't'}
     return gh
+
+
+class Records:
+    """A record store in memory, the shape chuang_sdlc's callers take (get, set, merge, create, delete on
+    (collection, id)): `docs` {(collection, id): doc}; `create` answers False for a record already held."""
+
+    def __init__(self, docs=None):
+        self.docs = dict(docs or {})
+
+    def get(self, collection, doc_id):
+        """The record, or None."""
+        return self.docs.get((collection, str(doc_id)))
+
+    def set(self, collection, doc_id, doc):
+        """The record replaced."""
+        self.docs[(collection, str(doc_id))] = dict(doc)
+
+    def merge(self, collection, doc_id, doc):
+        """The fields merged into the record."""
+        self.docs[(collection, str(doc_id))] = dict(self.get(collection, doc_id) or {}, **doc)
+
+    def create(self, collection, doc_id, doc) -> bool:
+        """The record made unless one is held: True when this call made it."""
+        if (collection, str(doc_id)) in self.docs:
+            return False
+        self.set(collection, doc_id, doc)
+        return True
+
+    def delete(self, collection, doc_id):
+        """The record gone, held or not."""
+        self.docs.pop((collection, str(doc_id)), None)
+
+
+def items_page(cards, owner_type: str = 'organization') -> dict:
+    """The GraphQL answer to tickets.board_items' query for these cards, one page: each {number (None for a draft),
+    title, status, light, owner, priority, labels, url, type ('Issue' or 'DraftIssue'), draft (a draft's own id), body}."""
+    nodes = []
+    for c in cards:
+        draft = c.get('number') is None
+        content = ({'__typename': 'DraftIssue', 'id': c.get('draft', ''), 'title': c.get('title', ''), 'body': c.get('body')}
+                   if draft else
+                   {'__typename': c.get('type', 'Issue'), 'number': c['number'], 'title': c.get('title', ''),
+                    'url': c.get('url', ''), 'labels': {'nodes': [{'name': n} for n in c.get('labels', ())]}})
+        node = {'id': c.get('id') or (f"IT_{c['number']}" if not draft else 'DRAFT'), 'content': content}
+        for key in ('status', 'light', 'owner', 'priority', 'area'):
+            if c.get(key):
+                node[key] = {'name': c[key]}
+        nodes.append(node)
+    return {owner_type: {'projectV2': {'items': {'pageInfo': {'hasNextPage': False}, 'nodes': nodes}}}}
+
+
+class Board:
+    """A ticket client for the scrum master's sweep and the board's reads (scrum.sweep, tickets.board_items, move,
+    ticket_place, set_fields), in memory: `columns` {GitHub filter substring: [card]} answers board_items by the first
+    key its filter contains ('' for any); `issues` {number: CARD_QUERY's issue}; `places` {number: (column, light)}.
+    Every write is recorded in `writes` as (verb, ...); `refuse` names verbs answered False ('fields', 'comment')."""
+
+    def __init__(self, columns=None, issues=None, places=None, refuse=()):
+        self.columns, self.issues_, self.places = dict(columns or {}), dict(issues or {}), dict(places or {})
+        self.refuse, self.writes, self.queries, self.error = set(refuse), [], [], ''
+
+    def node_id(self, number):
+        """An issue's node id, `I_<n>`."""
+        return f'I_{number}'
+
+    def item_add(self, node):
+        """The issue's Project item, `IT_<n>`."""
+        return 'IT_' + node.split('_', 1)[1]
+
+    def item_fields(self, item, fields):
+        """Fields written in one request, recorded as ('fields', item, {field id: value})."""
+        self.writes.append(('fields', item, dict(fields)))
+        return 'fields' not in self.refuse
+
+    def item_field(self, item, field_id, option_id=None, text=None, clear=False):
+        """One field, recorded as item_fields records it."""
+        return self.item_fields(item, {field_id: None if clear else ({'text': text} if text is not None else option_id)})
+
+    def item_top(self, item):
+        """A card to the top of its column, recorded."""
+        self.writes.append(('top', item))
+        return True
+
+    def comment(self, number, body):
+        """A comment, recorded."""
+        self.writes.append(('comment', int(number), body))
+        return 'comment' not in self.refuse
+
+    def edit_comment(self, comment_id, body):
+        """A comment's body replaced, recorded."""
+        self.writes.append(('edit', int(comment_id), body))
+        return True
+
+    def assign(self, number, login, on=True):
+        """An assignee added or taken off, recorded."""
+        self.writes.append(('assign' if on else 'unassign', int(number), login))
+        return True
+
+    def add_labels(self, number, labels):
+        """Labels added, recorded."""
+        self.writes.append(('label', int(number), list(labels)))
+        return True
+
+    def remove_label(self, number, label):
+        """A label taken off, recorded."""
+        self.writes.append(('unlabel', int(number), label))
+        return True
+
+    def graphql(self, query, variables=None):
+        """board_items' query by its filter, CARD_QUERY, ticket_place's item read, the blocked-by link and the draft
+        edit; anything else answers {}."""
+        from . import scrum as S
+        v = variables or {}
+        if 'projectV2(number:' in query:
+            q = v.get('q') or ''
+            self.queries.append(q)
+            key = next((k for k in self.columns if k and k in q), '' if '' in self.columns else None)
+            return items_page(self.columns.get(key, []) if key is not None else [],
+                              'user' if 'user(login:' in query else 'organization')
+        if query == S.CARD_QUERY:
+            return {'repository': {'issue': self.issues_.get(int(v['n']))}}
+        if 'fieldValueByName(name: "Status")' in query and 'node(id:' in query:
+            n = int(v['id'].split('_', 1)[1])
+            col, light = self.places.get(n, ('', ''))
+            return {'node': {'id': v['id'], 'status': {'name': col}, 'light': {'name': light}}}
+        if query == S.LINK_MUTATION:
+            self.writes.append(('link', v['i'], v['b']))
+            return {'addBlockedBy': {'issue': {'number': 0}}}
+        if 'updateProjectV2DraftIssue' in query:
+            self.writes.append(('retitle', v.get('d'), v.get('t'), v.get('b')))
+            return {'updateProjectV2DraftIssue': {'draftIssue': {'id': v.get('d')}}}
+        return {}

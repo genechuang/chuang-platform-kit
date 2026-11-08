@@ -3,6 +3,36 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.5.0 - 2026-11-07 PT
+
+The scrum master, the ship card's keeper, the backlog read and the alert issues, moved from the first host's code with no
+project in them. Every 0.4.0 call reads as before, apart from board_items' query, which now reads a draft's own id and
+body (one more fragment, the same cards).
+- `tickets`, the ship card: `ship_card_spec` (the board config's `ship_card`: home, word, title), `is_ship_card`,
+  `ship_ended` (the host's ship record under way, else why not; `SHIP_RUN_STALE_SECONDS`), `ship_card_keep` (retitled on
+  the draft's own id with its body sent back, `DRAFT_EDIT`; sent home from anywhere but home and the ship column; left
+  in the ship column while a ship is under way; a record that cannot be read leaves it with a WARNING), configured by
+  `configure(ship_run=, ship_under_way=, ship_run_name=)`. `board_items` reads a draft's `draft` id and `body`;
+  `placeholders(drafts=)` takes the caller's drafts read (`DRAFTS_UNREAD` when there is none); `sync_columns(ship_run=)`
+  reads the drafts once for the placeholders pass and the card's. `mark_ship_move(numbers, run)`: the host's mark of a
+  move into the ship column, whatever runner the caller holds.
+- `scrum` (new): `configure(lead=, store=, mail=, state=, finished=, unplanned=, closed_question=, closed_to=,
+  closed_told=, closer=, ship_run_of=, tz=, words=)`, `SCRUM_RE` (the one regex of an owner's line, `needs <lead>` and
+  `paused` among its kinds, made again for the lead) and `NEEDS_KIND`; `scrum_line`, `lead_answer`, `gh_stamp`,
+  `parse_eta` and `localize` (in the kit's clock zone, standard time where the wall clock repeats or skips), `pt`,
+  `plan`, `closed_filter`, `closed_plan`, `closed_sweep`, `question_key`, `letter`, `comment_body`, `GitHub` (the
+  sweep's reads and writes; `ship` and `wreck` mark their move first), `sweep` (a closed shipyard card to the ship
+  column, its move marked first), `ship_card_home`. The captain is tickets' `captain`.
+- `backlog` (new): `configure(states=, label_states=, moving=, tail=, id_field=, needs_field=)`, `moving`, `state_of`,
+  `board_filter`, `read_open` (one filtered read, P1 first), `short`, `render`.
+- `alerts` (new): `configure(repo=, title_prefix=, max_title=, marker_tag=, subject_head=, closer_marks=, alert_titles=,
+  person_closes=, bug_label=, cleared_label=, intro=, closes_itself=, close_word=, cleared_note=, collections=,
+  claim_ttl_days=, filed=)`; `marker`, `marked`, `is_filed`, `triaged`, `closed_by_closer`, `pt`, `issue_title`,
+  `issue_body`, `cleared_why`, `plan`, `plan_cleared`, `for_key`, `claim_key`, `opening_claimed`, `claim_opening`,
+  `GitHub` (the repository configure's unless given), `act`, `triage_claim`, `triage_release`.
+- `testing`: `Records` (a record store in memory), `items_page` (board_items' answer for a list of cards) and `Board` (a
+  client for the sweep and the board's reads).
+
 ## 0.4.0 - 2026-11-07 PT
 
 A ship's release notes and its post-ship runner, moved from the first host's scripts with no project in them. Every

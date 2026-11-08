@@ -18,7 +18,11 @@ Pinned (the positive case first, on a fake runner and a fake store, never GitHub
   - the shipped stage: Release `CO #n · head8`, closed with its commits, the branch linked at the last one, the LOE
     reported for the host's runner only; the change order's title, body and settle; open_bug_for;
   - the board kept: placeholders made and put back; sync_columns renames with every option's own id and refuses drift;
-    board_items reads the host's card fields under an organization or a user;
+    board_items reads the host's card fields under an organization or a user, and a draft's own id and body;
+  - the ship card: read among the drafts, retitled on its own id with its body sent back, sent home from any column but
+    home and the ship column, left there while the host's ship record says one is under way, home once it ended,
+    left with a WARNING when the record cannot be read; sync_columns reads the drafts once for both passes;
+    mark_ship_move calls the host's mark whatever the runner;
   - the backfill's plan for each kind of card; the Client refuses without a token.
 
 Run:  python -B tests/test-sdlc-tickets.py
@@ -201,9 +205,13 @@ class FakeGH:
                                    'ref': {'id': f"REF_{v['ref']}", 'target': {'oid': at}} if at else None}}
         if 'linkedBranches' in query:
             return {'organization': {'projectV2': {'items': {'pageInfo': {}, 'nodes': self.shipped}}}}
+        if 'updateProjectV2DraftIssue' in query:   # the ship card's title
+            self.retitled = getattr(self, 'retitled', []) + [dict(v)]
+            return {'updateProjectV2DraftIssue': {'draftIssue': {'id': v['d']}}}
         if 'projectV2(number:' in query:
             owner = 'user' if 'user(login:' in query else 'organization'
             self.last_items_query = query
+            self.item_reads = getattr(self, 'item_reads', []) + [v.get('q')]
             return {owner: {'projectV2': {'items': {'pageInfo': {}, 'nodes': self.drafts}}}}
         raise AssertionError(f'unexpected query: {query[:80]}')
 
@@ -501,6 +509,53 @@ check("board_items reads the host's card fields", (cards[0]['status'], cards[0][
 user_cfg = dict(CFG, owner_type='user')
 T.board_items('is:open', gh, user_cfg)
 check("a user's Project is read under user(login:)", 'user(login: $owner)' in gh.last_items_query, True)
+
+print('the ship card')
+SHIP_CFG = dict(CFG, ship_card={'home': 'dock', 'word': 'SHIP IT', 'title': 'SHIP IT: drag me to Done'})
+T.configure(board=lambda: SHIP_CFG)
+draft = lambda status, title='SHIP IT old', body='keep me': {'id': 'SC', 'status': {'name': status},  # noqa: E731
+                                                             'content': {'__typename': 'DraftIssue', 'id': 'DI_sc', 'title': title,
+                                                                         'body': body}}
+gh = fresh(drafts=[draft('Backlog')])
+cards = T.board_items('is:draft', gh)
+check("the positive case: a draft's own id and body are read", (cards[0]['content']['draft'], cards[0]['content']['body'],
+                                                                'DraftIssue { id title body }' in gh.last_items_query),
+      ('DI_sc', 'keep me', True))
+check('the ship card is a draft carrying the word, never a placeholder', (T.is_ship_card(cards[0]),
+                                                                       T.is_ship_card({'title': '— Building: SHIP IT —', 'content': {'type': 'DraftIssue'}}),
+                                                                       T.is_ship_card({'title': 'SHIP IT', 'content': {'type': 'Issue', 'number': 4}})),
+      (True, False, False))
+lines = T.ship_card_keep(gh)
+check('kept: retitled on its own id with its body sent back, and sent home', (lines, gh.retitled, gh.writes[-1]),
+      (['the SHIP IT card retitled "SHIP IT: drag me to Done"', 'the SHIP IT card was in Backlog; moved back to Ready'],
+       [{'d': 'DI_sc', 't': 'SHIP IT: drag me to Done', 'b': 'keep me'}], ('SC', {'F_status': 'o_r'})))
+gh = fresh(drafts=[draft('Done', 'SHIP IT: drag me to Done')])
+reads = []
+check('in the ship column while a ship is under way: left, the record read once',
+      (T.ship_card_keep(gh, ship_run=lambda: reads.append(1) or {'state': 'shipping', 'at': '2026-10-29T19:36:00Z'},
+                        now=1793302800.0), reads, gh.writes), ([], [1], []))   # now: 10/29/26 12:40 PM PT
+check('in the ship column with its ship ended: home, and why', T.ship_card_keep(gh, ship_run=lambda: {'state': 'done'}),
+      ['the SHIP IT card was in Done with no ship under way (the last ship is done); moved back to Ready'])
+check("no ship record wired: left, said as a WARNING naming the record", T.ship_card_keep(fresh(drafts=[draft('Done', 'SHIP IT: drag me to Done')])),
+      ["WARNING: the SHIP IT card is in Done and its ship record could not be read (NotConfigured: no ship record: "
+       "configure(ship_run=)), so it was left there"])
+check('ship_ended: a recent under-way record is none; a stale one, a zoneless one read as UTC, no record',
+      (T.ship_ended({'state': 'requested', 'at': '2026-10-29T19:36:00Z'}, 1793302800.0),
+       T.ship_ended({'state': 'shipping', 'at': '2026-10-29T18:00:00'}, 1793302800.0), T.ship_ended(None)),
+      ('', 'the last ship has said shipping for 100 minutes', 'no ship on record'))
+gh = fresh(options=[{'id': i, 'name': nm, 'color': 'GRAY', 'description': 'Filed' if nm == 'Backlog' else ''}
+                    for nm, i in CFG['fields']['Status']['options'].items()],
+           drafts=[draft('Backlog', 'SHIP IT: drag me to Done')])
+line = T.sync_columns(gh, ship_run=lambda: None)
+check('sync_columns reads the drafts once for the placeholders and the ship card', (gh.item_reads, line.endswith(
+    'the SHIP IT card was in Backlog; moved back to Ready')), (['is:draft'], True))
+gh = fresh()
+gh.graphql = lambda q, v=None: None if 'projectV2(number:' in q else FakeGH.graphql(gh, q, v)
+check('drafts unread: the placeholders say so', T.placeholders(gh), T.DRAFTS_UNREAD)
+marks.clear()
+T.mark_ship_move([7], gh)
+check("mark_ship_move calls the host's mark whatever the runner", marks, [7])
+T.configure(board=lambda: CFG)
 
 print('the backfill plan')
 card = {'number': 5, 'release': '', 'original': None, 'estimate': None, 'branches': 0, 'body': ''}

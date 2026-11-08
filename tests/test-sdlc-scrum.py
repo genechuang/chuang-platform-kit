@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""chuang_sdlc.scrum: the scrum master's sweep of the shipyard column, wired to a host through configure().
+
+Pinned (the positive case first, on chuang_sdlc.testing's Board and Records, never GitHub):
+  - an owner's `Scrum:` line: the newest by the repository's owner, never the sweep's own comment; the lead's `needs
+    <lead>` kind from configure(lead=), and `paused`; SCRUM_RE made again for a new lead; configure refuses a name;
+  - the lead's answer after an ask, never an owner's line;
+  - parse_eta in the kit's zone: a bare time today or tomorrow, a weekday, a full stamp with PT, ISO, none;
+  - plan's rules: a working card asked for an ETA, a depends-on card back to the next column, paused, blocked by the
+    lead, Needs you with and without an ask, no Light and no Priority, a next card Queued, a Queued card back after its
+    idle clock;
+  - closed_plan: done ships, an alert closer ships (the host's hook), unplanned wrecks, a person's close asks once a day;
+  - the sweep: one letter per owner, its comment kept, a closed shipyard card to the ship column with the move marked
+    first, the ship card kept through the host's ship record; GitHub.ship marks before it moves; a dry run writes
+    nothing.
+
+Run:  python -B tests/test-sdlc-scrum.py
+"""
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+sys.path.insert(0, os.path.join(ROOT, 'src'))
+sys.path.insert(0, os.path.join(ROOT, 'sdlc', 'src'))
+os.environ.pop('CHUANG_PLATFORM_TZ', None)
+
+from chuang_sdlc import scrum as S, tickets as T  # noqa: E402
+from chuang_sdlc.testing import Board, Records  # noqa: E402
+
+fails = []
+
+
+def check(label, got, want):
+    ok = got == want
+    print(f"  {'PASS' if ok else 'FAIL'}  {label}")
+    if not ok:
+        print(f"        got  {got!r}\n        want {want!r}")
+        fails.append(label)
+
+
+CFG = {
+    'repo': 'acme/app', 'owner': 'acme', 'number': 3, 'id': 'PVT_board',
+    'fields': {
+        'Status': {'id': 'F_status', 'options': {'Backlog': 'o_b', 'Up Next': 'o_n', 'Building': 'o_y', 'Ready': 'o_r',
+                                                 'Done': 'o_d', 'Broken': 'o_x'}},
+        'Light': {'id': 'F_light', 'options': {'busy': 'l_busy', 'later': 'l_q', 'warm': 'l_warm', 'ok': 'l_ok',
+                                               'going': 'l_go', 'gone': 'l_gone', 'red': 'l_red', 'ask': 'l_ask'}},
+        'Owner': {'id': 'F_owner', 'options': {'Ann': 'u_a', 'Cap': 'u_c', 'Lee': 'u_l'}},
+        'Priority': {'id': 'F_pri', 'options': {'P1': 'p1', 'P2': 'p2', 'P3': 'p3', 'P4': 'p4'}}},
+    'stages': {'backlog': 'Backlog', 'next': 'Up Next', 'shipyard': 'Building', 'dock': 'Ready', 'dev': 'Ready',
+               'shipping': 'Done', 'shipped': 'Done', 'failed': 'Broken'},
+    'flow': ['backlog', 'next', 'shipyard', 'dock', 'dev', 'shipping', 'shipped'],
+    'lights': {'backlog': '', 'next': '', 'shipyard': '', 'working': 'busy', 'queued': 'later', 'dock': 'warm',
+               'dev': 'ok', 'shipping': 'going', 'shipped': 'gone', 'failed': 'red', 'needs': 'ask'},
+    'placeholders': {'shipyard': '— Building: a card here is being built —'},
+    'ship_card': {'home': 'dock', 'word': 'SHIP IT', 'title': 'SHIP IT: drag me to Done'},
+    'labels': {'Bug': 'bug'},
+}
+NOW = datetime(2026, 10, 29, 19, 40, tzinfo=timezone.utc)   # 12:40 PM PT
+LOGIN = 'acme'
+marks, letters = [], []
+T.configure(board=lambda: CFG, people={'captain': 'Cap'},
+            before_ship_move=lambda numbers, run: marks.append(list(numbers)), collections={'starts': 'starts'},
+            ship_run=lambda: {'state': 'done', 'at': '2026-10-29T19:30:00Z'})
+
+
+def say(body, minutes_ago=5, login=LOGIN):
+    return {'body': body, 'createdAt': (NOW - timedelta(minutes=minutes_ago)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'author': {'login': login}, 'databaseId': 11}
+
+
+def card(n=600, light='', prio='P2', owner='Ann', labels=()):
+    return {'number': n, 'light': light, 'priority': prio, 'owner': owner, 'labels': list(labels), 'title': f't{n}'}
+
+
+def plan(c, line=None, state=None, **facts):
+    return S.plan(c, dict({'line': line or {}, 'blockers': []}, **facts), state or {}, NOW, CFG)
+
+
+print('wiring')
+check('the positive case: unwired, the lead is `lead` and its kind `needs lead`', (S.lead(), S.NEEDS_KIND), ('lead', 'needs lead'))
+S.configure(lead='Lee', mail=lambda to, text, subject, sender='': letters.append((to, subject)) or f'mailed {to}',
+            words={'LIGHT_CLEAR': 'board light {n} clear'})
+check("configure(lead=) makes the lead's kind and the regex again", (S.NEEDS_KIND, bool(S.SCRUM_RE.search('Scrum: needs Lee | pick'))),
+      ('needs lee', True))
+check('the regex reads paused and done, never another name', [bool(S.SCRUM_RE.search(t)) for t in
+                                                              ('Scrum: paused | later', 'Scrum: done', 'Scrum: needs Bob | x')],
+      [True, True, False])
+for bad in ({'nope': 1}, {'words': {'NOPE': 'x'}}):
+    try:
+        S.configure(**bad)
+        check(f'configure refuses {bad}', 'accepted', 'TypeError')
+    except TypeError:
+        check(f'configure refuses {bad}', True, True)
+check('the captain is the ticket tools\' people', S.captain(), 'Cap')
+
+print('lines')
+comments = [say('Scrum: next | after #12', 30), say('Scrum: building | eta 5 PM', 10),
+            say('Scrum: blocked by #9 | Lee', 1, login='someone'), say(S.MARKER + ' · x\n\nScrum: depends on #3', 0)]
+got = S.scrum_line(comments, LOGIN)
+check("the positive case: the owner's newest line, never another account's or the sweep's", (got['kind'], got['eta']),
+      ('building', '5 PM'))
+check("the lead's ask", S.scrum_line([say('Scrum: needs Lee | pick A or B')], LOGIN)['ask'], 'pick A or B')
+check('paused and its why', (S.scrum_line([say('Scrum: paused | after the launch')], LOGIN)['kind'],
+                             S.scrum_line([say('Scrum: paused | after the launch')], LOGIN)['ask']), ('paused', 'after the launch'))
+check('`done` read past when skipped', S.scrum_line([say('Scrum: building', 3), say('Scrum: done', 1)], LOGIN, skip=('done',))['kind'],
+      'building')
+asked = say('x', 20)['createdAt']
+check("the lead's answer after the ask, never an owner's line", (S.lead_answer([say('Yes, A', 2)], LOGIN, asked)['text'],
+                                                                 S.lead_answer([say('Scrum: next', 2)], LOGIN, asked)),
+      ('Yes, A', {}))
+
+print('the ETA, in the kit zone')
+check('the positive case: a bare time later today', S.pt(S.parse_eta('5 PM', NOW)), '10/29/26 5:00 PM PT')
+check('a bare time already past is tomorrow', S.pt(S.parse_eta('9 AM', NOW)), '10/30/26 9:00 AM PT')
+check('a weekday names the next such day', S.pt(S.parse_eta('Sat 1 PM', NOW)), '10/31/26 1:00 PM PT')
+check('a full stamp with PT', S.pt(S.parse_eta('11/2/26 6:00 AM PT', NOW)), '11/2/26 6:00 AM PT')
+check('ISO, and nothing readable', (S.parse_eta('2026-10-29T23:00:00Z', NOW), S.parse_eta('when it is done', NOW)),
+      (datetime(2026, 10, 29, 23, tzinfo=timezone.utc), None))
+check('an hour the clock repeats (1:30 AM on 11/1/26) is read in standard time', S.localize(datetime(2026, 11, 1, 1, 30), S._zone()).utcoffset(),
+      timedelta(hours=-8))
+
+print('the plan')
+p = plan(card(light='busy'))
+check('the positive case: a working card with no line is asked its ETA', ("what's its ETA?" in p['question'], p['state']),
+      (True, 'building, no ETA'))
+p = plan(card(), {'kind': 'depends on', 'ref': 44})
+check('depends on an open ticket: back to the next column, linked', (p['actions'], p['change']),
+      ([('move', 'next'), ('link', 44)], 'Moved back to Up Next: it depends on #44, which is not finished.'))
+p = plan(card(light='busy'), {'kind': 'paused', 'ask': 'the launch first'})
+check('paused: back to the next column with its why', (p['actions'], p['state']),
+      ([('move', 'next')], 'paused (the launch first): back to Up Next'))
+p = plan(card(), {'kind': 'blocked by', 'ref': 9, 'who': 'Lee'})
+check('blocked by the lead: the label, Needs you on the blocker, the link', p['actions'],
+      [('label', 'blocked'), ('needs_on', 9), ('link', 9)])
+p = plan(card(light='ask'), {'kind': 'needs lee', 'ask': 'pick A or B'})
+check('Needs you with its ask: the lead assigned once', (p['state'], p['actions']), ('ask, Lee: pick A or B', [('assign', 600)]))
+p = plan(card(light='ask', prio='P2'))
+check('Needs you with no ask: the owner asked to write it, the host\'s clear command named',
+      ('board light 600 clear' in p['question'], p['state']), (True, 'ask, but no ask on record'))
+p = plan(card(prio=''))
+check('no Light and no Priority: Needs you for the lead', (p['actions'], p['state']),
+      ([('needs', 600)], f'no Light and no Priority: ask, Lee: {S.PRIORITY_ASK}'))
+p = plan(card(), {'kind': 'next', 'ref': 12})
+check('next: Queued', (p['actions'], p['change']), ([('light', 'queued')], 'Switched to later: its owner says it is next, after #12.'))
+since = (NOW - timedelta(minutes=S.QUEUED_IDLE_MINUTES + 1)).isoformat()
+p = plan(card(light='later'), state={'queued_idle_since': since})
+check('Queued past its idle clock with nothing building: back', p['actions'], [('move', 'next'), ('forget', 'queued_idle_since')])
+
+print('closed cards')
+closed = {'number': 70, 'status': 'Ready', 'owner': 'Ann', 'title': 't70'}
+check('the positive case: `Scrum: done` ships it', S.closed_plan(closed, [say('Scrum: done', 1)], LOGIN, {}, False, NOW, CFG)['action'],
+      'ship')
+S.configure(closer=lambda title, comment: comment.startswith('Closed by the watcher:'))
+check("the host's alert closer ships it", S.closed_plan(closed, [say('Closed by the watcher: fixed', 1)], LOGIN, {}, False, NOW, CFG)['action'],
+      'ship')
+check('not planned wrecks it; a finished column is left', (S.closed_plan(dict(closed, reason='not_planned'), [], LOGIN, {}, False, NOW, CFG)['action'],
+                                                          S.closed_plan(dict(closed, status='Done'), [], LOGIN, {}, False, NOW, CFG)['action']),
+      ('wreck', ''))
+p = S.closed_plan(closed, [say('closing', 1)], LOGIN, {}, False, NOW, CFG)
+check("a person's close asks its owner", (p['action'], p['question']),
+      ('ask', '#70 was closed while in Ready: if it is done, verified and closed, answer `Scrum: done`; otherwise reopen it.'))
+check('asked within the day: wait', S.closed_plan(closed, [], LOGIN, {'closed_asked_at': (NOW - timedelta(hours=2)).isoformat()},
+                                                  False, NOW, CFG)['action'], 'wait')
+check('closed_to: the captain for no owner or the lead', (S.closed_to(''), S.closed_to('Lee'), S.closed_to('Ann')), ('Cap', 'Cap', 'Ann'))
+check('the closed filter leaves out the finished columns', S.closed_filter(CFG), 'is:closed is:issue -status:"Done" -status:"Broken"')
+
+print('the sweep')
+issue = lambda n, comments=(), state='OPEN': {'id': f'G{n}', 'state': state, 'blockedBy': {'nodes': []},  # noqa: E731
+                                              'comments': {'nodes': list(comments)}}
+ship_card = {'number': None, 'id': 'SC', 'title': 'SHIP IT old title', 'status': 'Backlog', 'draft': 'DI_sc', 'body': 'b'}
+gh = Board({'status:"Building"': [dict(card(600, light='busy'), status='Building'), dict(card(601), status='Building'),
+                                  dict(card(602), status='Building')],
+            'is:closed': [], 'is:draft': [ship_card]},
+           issues={600: issue(600), 601: issue(601, [say('Scrum: next | after #600', 3)]), 602: issue(602, state='CLOSED')})
+store = Records()
+letters.clear()
+marks.clear()
+lines = S.sweep(CFG, S.GitHub(CFG, run=gh), store, now=NOW)
+check('the positive case: one letter to the owner for the new questions', letters,
+      [('Ann', 'Scrum master: 1 Shipyard card needs a word')])
+check('a next card behind its owner\'s build is Queued; a closed one goes to Done with the move marked first',
+      (any('#601 next, after #600: later' in ln for ln in lines), marks, any('#602 is closed: moved to Done' in ln for ln in lines)),
+      (True, [[602]], True))
+check("each card's one comment, its state kept", (any(w[0] == 'comment' and w[1] == 600 and w[2].startswith(S.MARKER + ' ·') for w in gh.writes),
+                                                  bool(store.get('scrum', '600'))), (True, True))
+check('the ship card retitled and sent home through the host\'s record', [ln for ln in lines if 'SHIP IT' in ln],
+      ['scrum: the SHIP IT card retitled "SHIP IT: drag me to Done"', 'scrum: the SHIP IT card was in Backlog; moved back to Ready'])
+again = S.sweep(CFG, S.GitHub(CFG, run=gh), store, now=NOW + timedelta(minutes=10))
+check('the same question is not asked twice', (len(letters), any('asked Ann' in ln for ln in again)), (1, False))
+dry = Board({'status:"Building"': [dict(card(603, light='busy'), status='Building')]}, issues={603: issue(603)})
+S.sweep(CFG, S.GitHub(CFG, run=dry, dry=True), Records(), now=NOW, dry=True)
+check('a dry run writes nothing', dry.writes, [])
+marks.clear()
+moved = Board(places={604: ('Ready', '')})
+ok = S.GitHub(CFG, run=moved).ship(604)
+check('GitHub.ship marks the move before it is written, then moves it forward', (ok, marks, moved.writes[0][0]), (True, [[604]], 'fields'))
+try:
+    S.configure(store=None)
+    S.sweep(CFG, S.GitHub(CFG, run=Board({'': []})), now=NOW)
+    check('no store wired is NotConfigured', 'swept', 'NotConfigured')
+except T.NotConfigured:
+    check('no store wired is NotConfigured', True, True)
+
+print(f'\n{len(fails)} failure(s)')
+sys.exit(1 if fails else 0)

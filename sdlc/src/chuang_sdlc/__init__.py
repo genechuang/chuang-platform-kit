@@ -25,10 +25,17 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
              ticket as its closing reference only after the ticket closed (tickets.live_numbers), and the
              closing-keyword scrub its title and body go through; a refused open leaves no branch, and the next
              ship's open closes any a killed ship left (close_stale)
-  testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake)
+  scrum      the scrum master: the shipyard column's sweep (each owner's `Scrum:` line, building and its ETA in the
+             kit's zone, next and queued, blocked, depends on, paused, Needs you for the lead), the closed cards'
+             catch, one letter per owner and one comment a card, the ship card brought home
+  backlog    the one backlog read from the board (open tickets, GitHub's own filter) and rendered by state, P1 first
+  alerts     an alert's incident as a GitHub issue, filed once per opening and closed once it is fixed, and a triage
+             pass's create-only claim; the words, the repository and the collections the host's
+  testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake), and
+             of the sweep, the board's reads and the claims (Board, Records, items_page)
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.4.0'
+__version__ = '0.5.0'
