@@ -455,6 +455,20 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `normalize_us_phone(phone)` | Normalize a US phone number to 11-digit format (1XXXXXXXXXX). Strips formatting, adds country code if needed. Returns None if the phone number is invalid. |
 | `format_phone_for_whatsapp(phone)` | Convert phone number to WhatsApp format (e.g., 12345678901@c.us). Handles US numbers (normalizes to 1XXXXXXXXXX) and international numbers (uses raw digits as-is, e.g. 85298011875 for Hong Kong). Returns None if the phone number is invalid. |
 
+## `posthog_api`: PostHog's REST API, one client for every project (SMAD PickleBot #1132, out of its picklebot_core/p…
+
+| Name | Purpose |
+|---|---|
+| `class Refused` | PostHog refused or did not answer: the line says the call, the status and PostHog's own words. |
+| `class Client` | PostHog's API for one project: `host` is its cloud (US by default), `project_id` the one its links name. |
+| `Client.replay_url(session_id)` | The session's replay in PostHog ('' for no id): a ticket links the session it was sent from. |
+| `Client.person_url(distinct_id)` | The person's events in PostHog by distinct id ('' for none): the id as PostHog keeps it, never an email. |
+| `Client.api(method, path, body=, k=)` | One call to PostHog's API by path under the host; the JSON back (None for an empty answer); Refused on a refusal or no answer. |
+| `Client.events(params=, k=)` | The newest events matching `params` (event, after, before, limit, properties): GET .../events/. |
+| `Client.query(hogql, k=)` | A HogQL query ({columns, results}), PostHog's SQL over its events: POST .../query/. |
+| `Client.insight(insight_id, k=)` | One saved insight with its last result, refreshed before it answers (a dashboard tile). |
+| `Client.run(action, args=, k=)` | One named action with its args ({event, after, before, limit} for events, {hogql}, {id}); Refused for an unknown action, a missing arg or PostHog's refusal. |
+
 ## `pubsub`: Pub/Sub without the client library: one REST publish, one token, one envelope, one decoder.
 
 | Name | Purpose |

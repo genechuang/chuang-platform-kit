@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.30.0 - 2026-11-07 PT
+
+Additive; no host call site changes. `posthog_api` is PostHog's REST API, one client for every project (SMADPickleBot
+#1132; Gene, 11/7/26 4:25 PM PT: "picklebot runtime should only use chuang-kit sdks"), out of SMADPickleBot's
+`picklebot_core/posthog_api.py` as `sentry_api` came out in 0.12.0: `Client(project_id, key, host=)` with `events`,
+`query` (HogQL), `insight`, `api` by path, `replay_url` and `person_url`, and `run(action, args)` for a script or a
+listener; a refusal is `Refused`, a SystemExit naming the call, the status and PostHog's words, never the key; the key
+may be a function the client calls at its first call. A fix in `sentry_api`: `Client._tok` called `.strip()` before
+its `callable()` check, so a token passed as a function raised AttributeError; it is called first now.
+
 ## 0.29.1 - 2026-11-07 PT
 
 A fix; no host call site changes. `secrets.writers` no longer reports the module's own command

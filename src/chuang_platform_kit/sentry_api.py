@@ -58,9 +58,10 @@ class Client:
         self.opener, self.timeout, self.zone = opener or urllib.request.urlopen, timeout, zone
 
     def _tok(self, tok: str = '') -> str:
-        tok = (tok or self.token or '').strip()
-        if callable(tok):
+        tok = tok or self.token
+        if callable(tok):   # a function the host passes for the token is called first (0.30.0: .strip() ran before it)
             tok = tok()
+        tok = (tok or '').strip()
         if not tok:
             raise Refused('no Sentry token: the host passes one to the client')
         return tok

@@ -169,6 +169,14 @@ check("0.18.0: request() answers (status, body) and never raises: a 2xx with the
       ((200, {'id': 9}), (503, '{"detail": "nope"}'), 0))
 check('0.18.0: get_bytes() is the raw download', rq.get_bytes('/organizations/acme/att/'), b'PNG')
 
+asked = []
+lazy = S.Client('acme', token=lambda: asked.append(1) or ' t ', opener=opener_for({('POST', '/organizations/acme/releases/v1/deploys/'): {'id': 9}}, []))
+before = len(asked)
+check("0.30.0: a function passed for the token is called at the first call and its answer stripped (it raised AttributeError before)",
+      (before, lazy._tok(), lazy.request('POST', '/organizations/acme/releases/v1/deploys/', {})[0], len(asked),
+       S.Client('acme', token=lambda: '').request('GET', '/x')[0]),
+      (0, 't', 200, 2, 0))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
