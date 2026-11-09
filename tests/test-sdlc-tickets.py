@@ -416,6 +416,18 @@ gh = fresh({60: {'title': 'Alert'}})
 line = T.triage(60, 'P1', 'Nobody', '', 0, gh)
 check("triage in place: the host's default owner and area, a P1 to the shipyard",
       (line, gh.cards['IT_60']['status'], gh.labels_added[0]), ('tickets: #60 triaged P1, Bob, Product', 'Building', (60, ['bug'])))
+gh = fresh({61: {'title': 'A'}, 62: {'title': 'B'}, 63: {'title': 'C'}},
+           {'IT_61': {'number': 61, 'status': 'Backlog', 'light': ''}, 'IT_62': {'number': 62, 'status': '', 'light': ''}})
+lines = T.triage_many(['#61', 62, 63, 61], 'P2', 'Nobody', '', 0, gh)
+check("0.12.0 (SMADPickleBot #1228): triage_many reads every card in ONE aliased query and writes every placed card's fields in ONE aliased mutation; a card not on the board takes triage()'s one-card path; the labels and the comment stay per issue; a repeat is one",
+      (lines, len(gh.batch_reads), gh.batch_writes, gh.cards['IT_62']['status'], gh.cards['IT_63']['status'],
+       sorted({n for n, _l in gh.labels_added}), sorted(n for n, _b in gh.comments)),
+      (['tickets: #61 triaged P2, Bob, Product', 'tickets: #62 triaged P2, Bob, Product', 'tickets: #63 triaged P2, Bob, Product'],
+       1, [['IT_61', 'IT_62']], 'Backlog', 'Backlog', [61, 62, 63], [61, 62, 63]))
+gh = fresh({64: {'title': 'D'}}, {'IT_64': {'number': 64, 'status': '', 'light': ''}})
+gh.refuse_items = {'IT_64'}
+check('  a card GitHub refuses is said, with no label or comment', (T.triage_many([64], 'P2', run=gh), gh.labels_added, gh.comments),
+      (['tickets: #64 not triaged (GitHub refused its fields)'], [], []))
 gh = fresh({70: {'title': 'Members want X'}}, {'IT_70': {'number': 70, 'status': 'Backlog', 'light': ''}})
 said = []
 line = T.decide(70, 'now', 'Bob', 'P2', gh, mail=lambda to, text, subject: said.append((to, subject)) or 'mailed')

@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.12.0 - 2026-11-09 PT
+
+- `tickets.triage_many(numbers, priority, owner, area, feature)`: triage() for many tickets in a few GitHub requests,
+  every card's item in one aliased read (`places`) and every placed card's Kind, Priority, Owner, Area, Status and Light
+  in one aliased mutation a MOVE_CHUNK (`_write_many`), where triage() spends about six GraphQL calls a card; a ticket
+  not on the board takes triage()'s one-card path; the labels and the comment stay per issue. SMADPickleBot #1228:
+  "when I tell you to bulk prioritize, use bulk graphql ... don't let GH throttle us".
+
 ## 0.11.1 - 2026-11-08 PT
 
 - `scrum.dock_catch` says nothing for a runner with no `compare` (an older host's, a suite's fake): 0.11.0 put "could

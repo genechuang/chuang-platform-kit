@@ -1475,6 +1475,50 @@ def triage(number: int, priority: str, owner: str = '', area: str = '', feature:
     return f'tickets: #{number} triaged {priority}, {owner}, {area}'
 
 
+def triage_many(numbers, priority: str, owner: str = '', area: str = '', feature: int = 0, run=None,
+                cfg: dict = None) -> list:
+    """triage() for many tickets in a few GitHub requests (0.12.0, SMADPickleBot #1228; Gene, 11/8/26 11:58 PM PT: "when
+    I tell you to bulk prioritize, use bulk graphql ... don't let GH throttle us"): the owner and the area resolved once,
+    every card's item in one aliased read (places), then every card's Kind, Priority, Owner, Area, Status and Light in
+    one aliased mutation a MOVE_CHUNK of cards (_write_many), where triage() spends about six GraphQL calls a card. A
+    ticket not on the board yet is triaged one by one (triage(), which adds it). The labels, the sub-issue link and the
+    comment stay per issue, since GitHub's REST has no batch for them. One line a ticket, in the order given."""
+    run, cfg = _run(run), _cfg(cfg)
+    numbers = [int(n) for n in dict.fromkeys(int(str(n).lstrip('#')) for n in numbers)]
+    owner = owner if owner in cfg['fields']['Owner']['options'] else person('default_owner')
+    area = (area if area in cfg['fields']['Area']['options']
+            else (area_of(feature, run, cfg) if feature else '') or _HOST['default_area'])
+    role = 'shipyard' if (priority or '').upper() == 'P1' else 'backlog'
+    fields = [_option('Kind', 'Bug', cfg), _option('Priority', priority, cfg), _option('Owner', owner, cfg),
+              _option('Area', area, cfg), _option('Status', column(role, cfg), cfg)]
+    if 'Light' in cfg['fields'] and role in cfg.get('lights', {}):
+        fields.append(_option('Light', cfg['lights'][role], cfg))
+    if any(opt is False for _fid, opt in fields):
+        return [f'tickets: #{n} not triaged (the board has no option for {priority}, {owner} or {area})' for n in numbers]
+    got = places(numbers, run, cfg)
+    placed = [n for n in numbers if n in got]
+    took = set()
+    for i in range(0, len(placed), MOVE_CHUNK):
+        took |= _write_many([(got[n][0], dict(fields)) for n in placed[i:i + MOVE_CHUNK]], set(), run, cfg)
+    lines = {}
+    for n in numbers:
+        if n not in got:   # not on the board yet: the one-card path adds it
+            lines[n] = triage(n, priority, owner, area, feature, run, cfg)
+            continue
+        if got[n][0] not in took:
+            lines[n] = f'tickets: #{n} not triaged (GitHub refused its fields)'
+            continue
+        run.add_labels(n, [cfg['labels']['Bug']])
+        add_area_label(n, area, run, cfg)
+        if feature:
+            _link_sub_issue(feature, n, run)
+        run.comment(n, f'Triaged: a bug ticket on the Project, {priority}, owner {owner}, area {area}'
+                       + (f', found after #{feature}' if feature else '') + '. The fix commit names it (`Ticket: #'
+                       + f'{n}`), and the release that ships it closes it.' + (f' {P1_RULE}' if priority == 'P1' else ''))
+        lines[n] = f'tickets: #{n} triaged {priority}, {owner}, {area}'
+    return [lines[n] for n in numbers]
+
+
 def queue(run=None, cfg: dict = None) -> list:
     """The open tickets labelled with the triage label, newest first: [(number, title, kind label, filed ISO)]."""
     run, cfg = _run(run), _cfg(cfg)
