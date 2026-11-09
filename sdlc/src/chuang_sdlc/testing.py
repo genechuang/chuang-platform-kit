@@ -254,6 +254,8 @@ def items_page(cards, owner_type: str = 'organization') -> dict:
         for key in ('status', 'light', 'owner', 'priority', 'area'):
             if c.get(key):
                 node[key] = {'name': c[key]}
+                if c.get(f'{key}_at'):   # 0.14.0: a card's status_at / light_at as the single select's updatedAt
+                    node[key]['updatedAt'] = c[f'{key}_at']
         nodes.append(node)
     return {owner_type: {'projectV2': {'items': {'pageInfo': {'hasNextPage': False}, 'nodes': nodes}}}}
 

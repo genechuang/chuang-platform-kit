@@ -652,6 +652,42 @@ check("a board with no app status column: the ship column alone waits",
                        ship_run=lambda: {'state': 'shipping', 'at': '2026-10-29T19:36:00Z'}, now=1793302800.0),
       ['the SHIP IT card was in Apps; moved back to Ready'])
 T.configure(board=lambda: SHIP_CFG)
+
+
+class Ordered:
+    """board_items by column (its Status filter), in board order, and the position mutation recorded (0.14.0, #1234)."""
+    error = ''
+
+    def __init__(self, columns, refuse=False):
+        self.columns, self.refuse, self.moved = columns, refuse, []
+
+    def graphql(self, query, variables=None):
+        from chuang_sdlc.testing import items_page
+        v = variables or {}
+        if 'projectV2(number:' in query:
+            q = v.get('q') or ''
+            return items_page(next((cs for k, cs in self.columns.items() if f'"{k}"' in q), []))
+        if 'updateProjectV2ItemPosition' in query:
+            if self.refuse:
+                return None
+            self.moved = [(v[f'i{j}'], v.get(f'a{j}')) for j in range(query.count('updateProjectV2ItemPosition'))]
+            return {f'm{j}': {'items': {'nodes': []}} for j in range(len(self.moved))}
+        return {}
+
+
+ph_y = {'number': None, 'id': 'PH_Y', 'title': '— Building: a card here is being built —', 'status': 'Building'}
+ph_r = {'number': None, 'id': 'PH_R', 'title': '— Ready: built and tested —', 'status': 'Ready'}
+ship_r = {'number': None, 'id': 'SC', 'title': 'SHIP IT: drag me to Done', 'status': 'Ready'}
+issue_r = lambda n, col: {'number': n, 'id': f'IT_{n}', 'title': f't{n}', 'status': col}  # noqa: E731
+out_of_order = Ordered({'Building': [issue_r(1, 'Building'), ph_y],
+                        'Ready': [issue_r(2, 'Ready'), ph_r, issue_r(3, 'Ready'), ship_r]})
+in_order = Ordered({'Building': [ph_y, issue_r(1, 'Building')], 'Ready': [ph_r, ship_r, issue_r(2, 'Ready')]})
+check('the positive case (#1234): each placeholder to the top, the ship card right after Dock\'s, in one write; a board '
+      'in order writes nothing; a refused write is said',
+      (T.card_order_keep(out_of_order, SHIP_CFG), out_of_order.moved, T.card_order_keep(in_order, SHIP_CFG), in_order.moved,
+       [ln.startswith('WARNING') for ln in T.card_order_keep(Ordered(out_of_order.columns, refuse=True), SHIP_CFG)]),
+      (['the Building placeholder put at the top', 'the Ready placeholder put at the top', 'the SHIP IT card put second in Ready'],
+       [('PH_Y', None), ('PH_R', None), ('SC', 'PH_R')], [], [], [True, True, True]))
 check('ship_ended: a recent under-way record is none; a stale one, a zoneless one read as UTC, no record',
       (T.ship_ended({'state': 'requested', 'at': '2026-10-29T19:36:00Z'}, 1793302800.0),
        T.ship_ended({'state': 'shipping', 'at': '2026-10-29T18:00:00'}, 1793302800.0), T.ship_ended(None)),

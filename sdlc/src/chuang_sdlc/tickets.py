@@ -1082,6 +1082,63 @@ def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, s
     return out
 
 
+# 0.14.0 (SMADPickleBot #1234; Gene, 11/9/26 12:51 AM PT: "Make sure the Draft cards in On Deck, Shipyard, Dock are all
+# on top of column, and SHIP IT! is 2nd card in Dock, if it is done hanging out in Ship or App Status"): the roles whose
+# placeholder opens the column, and the ship card second in its home column, right under that column's placeholder.
+ORDER_ROLES = ('next', 'shipyard', 'dock')
+POSITION = 'updateProjectV2ItemPosition(input: {{projectId: $p, itemId: $i{j}{after}}}) {{ items(first: 1) {{ nodes {{ id }} }} }}'
+
+
+def card_order_keep(run=None, cfg: dict = None, dry: bool = False) -> list:
+    """The board's order kept (0.14.0): each ORDER_ROLES column read once with GitHub's own filter (it answers in the
+    board's order), its placeholder put first when it is not, and in the ship card's home column the ship card put
+    right after that placeholder when it is not (a ship card in a door is the keeper's, ship_card_keep, never moved
+    here); every move in one aliased position mutation. Lines, each said; a column that does not answer is a WARNING
+    line and nothing in it is moved; [] when every column is in order."""
+    run, cfg = _run(run), _cfg(cfg)
+    want = cfg.get('placeholders') or {}
+    home = ship_card_spec(cfg)['home']
+    moves, out = [], []   # moves: (item, the item it goes after or None for the top, the line)
+    for role in ORDER_ROLES:
+        if role not in want or role not in cfg.get('stages', {}):
+            continue
+        col = stage(role, cfg)
+        cards = board_items(filter_columns([col]), run, cfg)
+        if cards is None:
+            out.append(f'WARNING: tickets: {col} could not be read; its order is kept next time')
+            continue
+        ph = next((c for c in cards if is_draft(c) and B.placeholder_role(c.get('title') or '', cfg) == role), None)
+        if ph is None:
+            continue   # placeholders() makes a missing one
+        if cards[0].get('id') != ph.get('id'):
+            moves.append((ph['id'], None, f'the {col} placeholder put at the top'))
+        if role == home:
+            rest = [c for c in cards if c.get('id') != ph.get('id')]
+            ship = next((c for c in rest if is_ship_card(c, cfg)), None)
+            if ship and rest[0].get('id') != ship.get('id'):
+                moves.append((ship['id'], ph['id'], f"the {ship_card_spec(cfg)['word']} card put second in {col}"))
+    if not moves:
+        return out
+    if dry:
+        return out + [f'{line} (dry run)' for _i, _a, line in moves]
+    decl, body, variables = ['$p: ID!'], [], {'p': cfg['id']}
+    for j, (item, after, _line) in enumerate(moves):
+        decl.append(f'$i{j}: ID!')
+        variables[f'i{j}'] = item
+        if after:
+            decl.append(f'$a{j}: ID!')
+            variables[f'a{j}'] = after
+        body.append(f'm{j}: ' + POSITION.format(j=j, after=f', afterId: $a{j}' if after else ''))
+    try:
+        data = run.graphql('mutation(' + ', '.join(decl) + ') { ' + ' '.join(body) + ' }', variables)
+    except Exception:   # noqa: BLE001 - a client that raises is a refusal, said
+        data = None
+    for j, (_item, _after, line) in enumerate(moves):
+        took = isinstance(data, dict) and isinstance(data.get(f'm{j}'), dict)
+        out.append(line if took else f"WARNING: tickets: not done: {line} ({(getattr(run, 'error', '') or '').strip()[:120]})")
+    return out
+
+
 ITEM_STATUS_QUERY = ('query($id: ID!) { node(id: $id) { ... on ProjectV2Item { id '
                      'status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
                      'light: fieldValueByName(name: "Light") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }')

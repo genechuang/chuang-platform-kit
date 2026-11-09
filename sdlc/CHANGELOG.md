@@ -3,6 +3,22 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.14.0 - 2026-11-09 PT
+
+- `scrum.warming_sweep` and `warming_letter`: every full sweep reads the dock column once and mails each owner (the
+  captain for none or the lead) one letter naming each of their Dock cards whose Warming Light was set more than
+  the board config's `warming_minutes` ago (else WARMING_MINUTES, 3), its fallback option counted, once per Warming
+  episode (the card's scrum record keeps the `light_at` told). SMADPickleBot
+  #1233; Gene, 11/9/26 12:51 AM PT: "look at Dock tickets that have been Warming for more than 3 minutes and tell owner
+  to investigate".
+- `tickets.card_order_keep`: the next, shipyard and dock columns each open with their placeholder, and the ship card is
+  second in its home column, right after that placeholder; each column read once with GitHub's own filter, every move
+  in one aliased position mutation; run by the scrum master's full sweep after the ship card's keeper. SMADPickleBot
+  #1234; Gene, 11/9/26 12:51 AM PT: "Make sure the Draft cards in On Deck, Shipyard, Dock are all on top of column, and
+  SHIP IT! is 2nd card in Dock".
+- `scrum._send` takes `compose=` (the warming letter's words); `testing.items_page` carries a card's `status_at` and
+  `light_at` as the single select's `updatedAt`.
+
 ## 0.13.0 - 2026-11-09 PT
 
 - `tickets.ship_card_keep`: every door the ship card is dragged to is a column it waits in while a ship is under way,

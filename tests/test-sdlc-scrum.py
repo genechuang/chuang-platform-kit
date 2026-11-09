@@ -212,6 +212,32 @@ check('the same question is not asked twice', (len(letters), any('asked Ann' in 
 dry = Board({'status:"Building"': [dict(card(603, light='busy'), status='Building')]}, issues={603: issue(603)})
 S.sweep(CFG, S.GitHub(CFG, run=dry, dry=True), Records(), now=NOW, dry=True)
 check('a dry run writes nothing', dry.writes, [])
+# 0.14.0 (SMADPickleBot #1233): a Dock card Warming past WARMING_MINUTES is told to its owner once per Warming
+at = lambda minutes: (NOW - timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731
+docked = Board({'status:"Ready"': [dict(card(900, light='warm'), status='Ready', light_at=at(4)),
+                                  dict(card(901, light='warm'), status='Ready', light_at=at(2)),
+                                  dict(card(902, light='ok'), status='Ready', light_at=at(30)),
+                                  dict(card(903, light='warm', owner='Lee'), status='Ready', light_at=at(9))]})
+store, told = Records(), {}
+first = S.warming_sweep(CFG, S.GitHub(CFG, run=docked), store, NOW, told)
+told_first = {k: [i[0] for i in v] for k, v in told.items()}
+second = S.warming_sweep(CFG, S.GitHub(CFG, run=docked), store, NOW + timedelta(minutes=10), {})
+warm_again = Board({'status:"Ready"': [dict(card(900, light='warm'), status='Ready', light_at=at(-6))]})
+third = {}
+S.warming_sweep(CFG, S.GitHub(CFG, run=warm_again), store, NOW + timedelta(minutes=10), third)
+subject, text = S.warming_letter('Ann', [(900, 't900', 4, 'u')])
+check('the positive case: a Dock card Warming past 3 minutes is told once to its owner (the captain for the lead), '
+      'a newer Warming or a Ready card never; a card that warms again is told again',
+      (told_first, len(first), [ln.split()[1] for ln in second], [i[0] for i in third.get('Ann', [])], subject,
+       '#900 t900: Warming 4 minutes' in text),
+      ({'Ann': [900], 'Cap': [903]}, 2, ['#901'], [900], 'Scrum master: 1 Dock card stuck Warming', True))
+longer = {}
+S.warming_sweep(dict(CFG, warming_minutes=10), S.GitHub(CFG, run=docked), Records(), NOW, longer)
+shown = Board({'status:"Ready"': [dict(card(904, light='hot'), status='Ready', light_at=at(5))]})
+fell = {}
+S.warming_sweep(dict(CFG, light_fallback={'warm': 'hot'}), S.GitHub(CFG, run=shown), Records(), NOW, fell)
+check("  the board's warming_minutes, and the fallback option the board shows for the Warming light",
+      ({k: [i[0] for i in v] for k, v in longer.items()}, [i[0] for i in fell.get('Ann', [])]), ({}, [904]))
 marks.clear()
 moved = Board(places={604: ('Ready', '')})
 ok = S.GitHub(CFG, run=moved).ship(604)

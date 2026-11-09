@@ -1033,9 +1033,17 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         # The sweep's own store reads the ship record too: no second client.
         reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
         lines += ship_card_home(cfg, gh, dry, ship_run=reader)
+        # 0.14.0 (#1234): each column's placeholder first, the ship card second in its home, after the keeper's move
+        lines += [('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
+                  for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
+        warming = {}
+        lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
+    else:
+        warming = {}
     lines += gh.flush()   # #1207: every field write this sweep decided, in one aliased mutation
     gh.batch = False
     lines += _send(letters, mail, dry)
+    lines += _send(warming, mail, dry, compose=warming_letter)
     return lines or [f'scrum: the {_tickets.stage("shipyard", cfg)} is empty']
 
 
@@ -1050,12 +1058,69 @@ def ship_card_home(cfg, gh, dry: bool = False, ship_run=None, now: float = None)
     return [('WARNING: scrum: ' + ln[len('WARNING: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}' for ln in lines]
 
 
-def _send(letters: dict, mail, dry: bool) -> list:
-    """Each owner's one letter of the sweep's questions; the lines."""
+# 0.14.0 (SMADPickleBot #1233; Gene, 11/9/26 12:51 AM PT: "scrum master should look at Dock tickets that have been
+# Warming for more than 3 minutes and tell owner to investigate"): on 11/9/26 eight Dock cards sat Warming half an hour
+# after their warm and dev Deploy passed, and Gene found it before any session did.
+WARMING_MINUTES = 3
+
+
+def warming_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool = False) -> list:
+    """Each Dock card whose Light is the dock's Warming light and was set more than WARMING_MINUTES ago (its `light_at`,
+    the board's updatedAt) goes into its owner's warming letter (the captain's for none or the lead), once per Warming
+    episode: the card's scrum record keeps the `light_at` it was told about, so a card that warms again is told again.
+    One read of the Dock column with GitHub's own filter. Lines."""
+    warm = (cfg.get('lights') or {}).get('dock') or ''
+    if not warm:
+        return []
+    # the option the board shows for it when it lacks the Light's own (light_fallback), as rank() reads it
+    lit = {warm, (cfg.get('light_fallback') or {}).get(warm) or warm}
+    limit = int(cfg.get('warming_minutes') or WARMING_MINUTES)   # the board config's, else Gene's 3
+    col = _tickets.stage('dock', cfg)
+    cards = _tickets.board_items(_tickets.filter_columns([col]) + ' is:issue', gh.run, cfg)
+    if cards is None:
+        return [f'scrum: the {col} column did not answer; Warming cards are read next sweep']
+    lines = []
+    for c in cards:
+        n = (c.get('content') or {}).get('number')
+        if not n or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg) or (c.get('light') or '') not in lit:
+            continue
+        at = c.get('light_at') or ''
+        try:
+            since = datetime.fromisoformat(at.replace('Z', '+00:00'))
+        except ValueError:
+            continue   # no time read: never a guess at its age
+        minutes = int((now - since).total_seconds() // 60)
+        if minutes < limit:
+            continue
+        state = store.get(_SET['state'], str(n)) or {}
+        if state.get('warming_told') == at:
+            continue
+        to = c.get('owner') or captain()
+        to = captain() if to == lead() else to
+        letters.setdefault(to, []).append((n, c.get('title') or '', minutes, (c.get('content') or {}).get('url') or ''))
+        state['warming_told'] = at
+        if not dry:
+            store.set(_SET['state'], str(n), state)
+        lines.append(f'scrum: #{n} has been {warm} {minutes} minutes in {col}: {to} told to investigate')
+    return lines
+
+
+def warming_letter(owner: str, items) -> tuple:
+    """(subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit."""
+    subject = f"Scrum master: {len(items)} Dock card{'s' if len(items) != 1 else ''} stuck Warming"
+    lines = [f"{owner}, these Dock cards are still Warming past the board's limit. Look at the warm's own log and stage "
+             "line, its dev Deploy run and the board move's line, then put each right (Ready, or the stage that failed):"]
+    for n, title, minutes, url in items:
+        lines.append(f'- #{n} {title}: Warming {minutes} minutes\n  {url}')
+    return subject, '\n'.join(lines)
+
+
+def _send(letters: dict, mail, dry: bool, compose=None) -> list:
+    """Each owner's one letter of the sweep's questions (or `compose`'s, the warming letter); the lines."""
     out = []
     send = mail or _SET['mail']
     for to, items in letters.items():
-        subject, text = letter(to, items)
+        subject, text = (compose or letter)(to, items)
         if dry:
             said = 'not mailed (dry run)'
         elif send is None:
