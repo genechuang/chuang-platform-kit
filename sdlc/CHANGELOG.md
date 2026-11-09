@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.11.1 - 2026-11-08 PT
+
+- `scrum.dock_catch` says nothing for a runner with no `compare` (an older host's, a suite's fake): 0.11.0 put "could
+  not be read" on every sweep such a runner ran, so an empty Shipyard's sweep was no longer empty (SMADPickleBot's
+  scrum suite, #1203). A compare GitHub refuses is still the one line.
+
 ## 0.11.0 - 2026-11-08 PT
 
 - `scrum.dock_catch`, run by the sweep beside the closed-card passes: the tickets the dock branch's commits since the

@@ -627,7 +627,9 @@ def dock_catch(cfg: dict, gh, dry: bool = False) -> list:
     place in one aliased read (tickets.places), and each card still before the dock column moved forward to it in one
     aliased write (tickets.move_many, forward only). Lines, one a card moved; a compare GitHub does not answer is one."""
     main, dock = cfg.get('main_branch', 'main'), cfg.get('dock_branch', 'dock')
-    commits = gh.run.compare(main, dock) if hasattr(gh.run, 'compare') else None
+    if not hasattr(gh.run, 'compare'):
+        return []   # 0.11.1: a runner with no compare (an older host's, a suite's fake) has nothing to read; no line
+    commits = gh.run.compare(main, dock)
     if commits is None:
         return [f'scrum: {main}...{dock} could not be read; the dock catch runs next sweep']
     from . import board as _board
