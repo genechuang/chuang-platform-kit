@@ -620,6 +620,39 @@ def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, 
     return lines
 
 
+def dock_catch(cfg: dict, gh, dry: bool = False) -> list:
+    """The catch for a dock landing nothing told (0.11.0; SMADPickleBot #1203, split from #1202: GitHub never delivered
+    a dock push, so no card moved): the tickets the dock branch's commits since the main branch name in their `Ticket:`
+    trailers (one compare through the runner, cfg's `main_branch` and `dock_branch`, else main and dock), every card's
+    place in one aliased read (tickets.places), and each card still before the dock column moved forward to it in one
+    aliased write (tickets.move_many, forward only). Lines, one a card moved; a compare GitHub does not answer is one."""
+    main, dock = cfg.get('main_branch', 'main'), cfg.get('dock_branch', 'dock')
+    commits = gh.run.compare(main, dock) if hasattr(gh.run, 'compare') else None
+    if commits is None:
+        return [f'scrum: {main}...{dock} could not be read; the dock catch runs next sweep']
+    from . import board as _board
+    numbers = sorted({n for c in commits for n in _board.ticket_numbers((c or {}).get('message') or '')})
+    if not numbers:
+        return []
+    got = _tickets.places(numbers, gh.run, cfg)
+    target = cfg['flow'].index('dock')
+    behind = []
+    for n in numbers:
+        if n not in got:
+            continue
+        _item, now, light, raw = got[n]
+        at = _tickets.rank(now, light, raw, cfg)
+        if at is not None and at < target:
+            behind.append(n)
+    if not behind:
+        return []
+    if dry:
+        return [f"scrum: #{n} is on {dock} but not in {_tickets.stage('dock', cfg)}; it would move there (dry run)" for n in behind]
+    moved = dict(_tickets.move_many(behind, 'dock', gh.run, cfg))
+    return [f"scrum: #{n} is on {dock} but was not in {_tickets.stage('dock', cfg)}: " +
+            ('moved there' if moved.get(n) else 'the move was refused; next sweep tries again') for n in behind]
+
+
 def closed_needs_filter(cfg: dict) -> str:
     """GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column."""
     return f'is:closed is:issue light:"{cfg["lights"]["needs"]}"'
@@ -994,6 +1027,7 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         shipyard = {(c.get('content') or {}).get('number') for c in cards}   # its closed cards were just moved above
         lines += closed_sweep(cfg, gh, store, now, dry, letters, skip=shipyard)
         lines += closed_needs_sweep(cfg, gh, dry)
+        lines += dock_catch(cfg, gh, dry)   # #1203: a dock ticket a lost landing never moved
         # The sweep's own store reads the ship record too: no second client.
         reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
         lines += ship_card_home(cfg, gh, dry, ship_run=reader)

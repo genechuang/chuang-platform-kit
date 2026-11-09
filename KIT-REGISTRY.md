@@ -774,6 +774,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `closed_filter(cfg)` | GitHub's own filter for the closed cards outside the shipped and failed columns (and a `shipment` column the board may have): a point a hundred cards, never the whole board. |
 | `closed_plan(card, comments, login, state, told, now, cfg)` | What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a finished one (an old column name read as its new one); `wreck` for a close as not planned or a duplicate; `ship` when its owner's newest `Scrum:` line… |
 | `closed_sweep(cfg, gh, store, now, dry, letters, only=, skip=)` | The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with closed_filter, each settled by closed_plan: to the ship column with its shipped Light, to the failed column, or its question added to its owner's le… |
+| `dock_catch(cfg, gh, dry=)` | The catch for a dock landing nothing told (0.11.0; SMADPickleBot #1203, split from #1202: GitHub never delivered a dock push, so no card moved): the tickets the dock branch's commits since the main branch name in their `Ticket:` trailers (one compare through… |
 | `closed_needs_filter(cfg)` | GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column. |
 | `closed_needs_sweep(cfg, gh, dry=)` | A closed ticket never keeps the needs-the-lead Light (0.8.2; SMADPickleBot #1133: a Needs you set on a shipped card sat there three days, outside every column the other sweeps read): each closed card carrying it, read with closed_needs_filter in any column, h… |
 | `question_key(question)` | A question's short fingerprint ('' for none): a card is asked again only when its question changes. |
@@ -902,6 +903,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Client.graphql(query, variables=)` | The `data` of one GraphQL call; None on a refusal. |
 | `Client.issue(number)` | One issue in gh's shape (its labels, body, state and ids); None when GitHub does not answer or has none. |
 | `Client.node_id(number)` | An issue's GraphQL node id, read once a process; '' when GitHub does not answer. |
+| `Client.compare(base, head)` | The commits after `base` up to `head`, [{'sha', 'message'}] oldest first (the kit's github.compare); None when GitHub does not answer (0.11.0). |
 | `Client.issues(state=, labels=, search=, limit=, comments=)` | The repository's issues in gh's shape (github.issues: a list, or GitHub's search when `search` is given, with the last `comments` of each when asked); None when GitHub does not answer. |
 | `Client.create_issue(title, body, labels=)` | A new issue; its number, or None. |
 | `Client.comment(number, body)` | A comment on the issue. |

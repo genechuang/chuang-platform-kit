@@ -259,5 +259,42 @@ check('the positive case: eight Shipyard cards read in one aliased query, never 
 check('their eight Needs you writes in one aliased mutation',
       (sum(1 for q in big.queries if q.startswith('mutation')), len([w for w in big.writes if w[0] == 'batch'])), (1, 8))
 
+print('the dock catch (#1203)')
+
+
+class Docked(Batched):
+    """A board whose dock branch names tickets (compare) and whose cards answer places' aliased read."""
+    def __init__(self, commits, *a, **k):
+        super().__init__(*a, **k)
+        self.commits = commits
+
+    def compare(self, base, head):
+        self.queries.append(f'compare {base}...{head}')
+        return self.commits
+
+    def graphql(self, query, variables=None):
+        import re as _re
+        if 'projectItems(first: 10)' in query:
+            self.queries.append('places')
+            return {'repository': {f'i{n}': {'projectItems': {'nodes': [
+                {'id': f'IT_{n}', 'project': {'id': CFG['id']}, 'status': {'name': self.places[int(n)][0]},
+                 'light': {'name': self.places[int(n)][1]}}] if int(n) in self.places else []}}
+                for n in _re.findall(r'\bi(\d+): issue\(number: \d+\)', query)}}
+        return super().graphql(query, variables)
+
+
+dock = Docked([{'sha': 'a1', 'message': 'One\n\nTicket: #900\n'}, {'sha': 'a2', 'message': 'Two\n\nTicket: #901, #902\n'}],
+              {'': []}, places={900: ('Building', 'busy'), 901: ('Done', 'gone'), 902: ('Ready', 'ok')})
+lines = S.dock_catch(CFG, S.GitHub(CFG, run=dock))
+check('the positive case: a ticket the dock names that sits before Dock moves there in one batched write; one past it stays',
+      (lines, dock.queries.count('places') >= 1, [w for w in dock.writes if w[0] == 'batch']),
+      (['scrum: #900 is on dock but was not in Ready: moved there'], True, [('batch', 'IT_900'), ('batch', 'IT_900')]))
+down = Docked(None, {'': []})
+check('a compare GitHub does not answer is one line, nothing moved', (S.dock_catch(CFG, S.GitHub(CFG, run=down)), down.writes),
+      (['scrum: main...dock could not be read; the dock catch runs next sweep'], []))
+check('a dry run says what it would move and writes nothing',
+      (S.dock_catch(CFG, S.GitHub(CFG, run=Docked([{'message': 'Ticket: #900'}], {'': []}, places={900: ('Building', '')})), dry=True)),
+      ['scrum: #900 is on dock but not in Ready; it would move there (dry run)'])
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

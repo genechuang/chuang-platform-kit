@@ -274,6 +274,11 @@ class Client:
             self.issue(number)
         return self._nodes.get(int(number), '')
 
+    def compare(self, base: str, head: str):
+        """The commits after `base` up to `head`, [{'sha', 'message'}] oldest first (the kit's github.compare); None
+        when GitHub does not answer (0.11.0)."""
+        return self._call('compare', base, head)
+
     def issues(self, state: str = 'open', labels=(), search: str = '', limit: int = 100, comments: int = 0):
         """The repository's issues in gh's shape (github.issues: a list, or GitHub's search when `search` is given,
         with the last `comments` of each when asked); None when GitHub does not answer."""

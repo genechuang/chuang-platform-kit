@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.11.0 - 2026-11-08 PT
+
+- `scrum.dock_catch`, run by the sweep beside the closed-card passes: the tickets the dock branch's commits since the
+  main branch name (one compare, cfg `main_branch` / `dock_branch`, else main and dock), their places in one aliased
+  read and each card still before the dock column moved there in one aliased write (move_many, forward only); the
+  catch for a dock landing nothing told (SMADPickleBot #1203, split from #1202). `Client.compare` exposes the kit's
+  github.compare to the ticket tools.
+
 ## 0.10.0 - 2026-11-08 PT
 
 - `scrum`: a sweep's GitHub reads and writes batched (SMADPickleBot #1207; Gene, 11/8/26 9:27 PM PT: "scrum master
