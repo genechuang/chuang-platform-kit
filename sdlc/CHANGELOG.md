@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.14.2 - 2026-11-09 PT
+
+- `Client.close_issue` and `add_sub_issue` answer True when GitHub took them: the kit's verbs answer None on success,
+  and `_call(...) is not None` read every success as a refusal (`_did`). 0.14.1's `settle_carried` closed
+  SMADPickleBot's three stale change orders and reported none.
+
 ## 0.14.1 - 2026-11-09 PT
 
 - `change_order_for` finds an open change order by the label's listing (`open_change_orders`) before GitHub's search,

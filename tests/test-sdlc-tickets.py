@@ -750,6 +750,21 @@ c = T.Client(tok=None, cfg=CFG)
 check('the positive case: no token is a refusal, never a call', (c.issue(1), c.error.startswith('no GitHub token')), (None, True))
 c = T.Client(tok=lambda: '', cfg=CFG)
 check("a token callable answering '' is no token", (c.auth_ok(), c.repo), (False, 'acme/app'))
+from chuang_platform_kit import github as _gh  # noqa: E402
+_keep = _gh.close_issue
+c = T.Client(tok=lambda: 'tok', cfg=CFG)
+try:
+    _gh.close_issue = lambda *a, **k: None   # GitHub's close answers nothing when it worked
+
+    def _refuse(*a, **k):
+        raise _gh.GitHubError(403, 'Forbidden', '/issues/5')
+    done = c.close_issue(5)
+    _gh.close_issue = _refuse
+    refused = (c.close_issue(5), c.error)
+finally:
+    _gh.close_issue = _keep
+check("0.14.2: a close GitHub answered with nothing is done, a refusal is not and keeps its reason",
+      (done, refused, T.Client(tok=None, cfg=CFG).close_issue(5)), (True, (False, 'GitHub /issues/5: HTTP 403 (Forbidden)'), False))
 
 print('the command line helpers')
 check('a body that is a path is said', T.body_is_path(['new', '--body', 'plan.md']), 'plan.md')

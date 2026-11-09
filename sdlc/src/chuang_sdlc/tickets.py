@@ -317,13 +317,23 @@ class Client:
         """`login` assigned to the issue, or unassigned."""
         return self._call('add_assignees' if on else 'remove_assignees', int(number), [login]) is not None
 
+    def _did(self, verb, *args) -> bool:
+        """A kit verb that answers None when it worked (close_issue, add_sub_issue): True unless there is no token or
+        GitHub refused it. `_call(...) is not None` read every such success as a refusal (0.14.2: settle_carried counted
+        none of the three change orders it closed)."""
+        if self._refused():
+            return False
+        self.error = ''
+        self._call(verb, *args)
+        return not self.error
+
     def close_issue(self, number: int, reason: str = 'completed', comment: str = '') -> bool:
         """The issue closed with its reason, the comment posted first when given."""
-        return self._call('close_issue', int(number), reason, comment) is not None
+        return self._did('close_issue', int(number), reason, comment)
 
     def add_sub_issue(self, parent: int, child_id) -> bool:
         """#child (by its numeric id) a sub-issue of #parent."""
-        return self._call('add_sub_issue', int(parent), int(child_id)) is not None
+        return self._did('add_sub_issue', int(parent), int(child_id))
 
     def _project(self, verb, *args, **kw):
         """One of the kit's Projects v2 mutations on the board (its `id`); None on a refusal."""
