@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.8.1 - 2026-11-08 PT
+
+- `tickets.sweep`: an alert issue (off the Project, not waiting for triage) whose newest owner's `Triage:` line is
+  `none (why)` is closed as not planned, the reason in its closing comment (`close_none`, `NONE_COMMENT`); a waiting or
+  filed ticket's none line is still left. The host's ticket.closed listener files the card as any not-planned close.
+  Before, a none line changed nothing, so an alert a triage pass had claimed sat open in the shipyard as building
+  (SMADPickleBot #1199: three alerts, 11/8/26 7:42 PM PT). A refused close is a WARNING the next sweep tries again.
+
 ## 0.8.0 - 2026-11-08 PT
 
 The generic half of a release pipeline, `chuang_sdlc.cicd`, standard library only (SMADPickleBot #235; Gene, 10/22/26

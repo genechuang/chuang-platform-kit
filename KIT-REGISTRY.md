@@ -962,7 +962,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `queue(run=, cfg=)` | The open tickets labelled with the triage label, newest first: [(number, title, kind label, filed ISO)]. |
 | `decide_letter(number, choice, title, url, priority, owner, held, ranked, target)` | (subject, text) of the letter a triage decision sends its owner, in neutral words (a host passes its own `decide_letter` to configure): where the card stayed when it was held, now and at what priority, or the backlog. |
 | `decide(number, choice, owner=, priority=, run=, cfg=, mail=)` | The triager's decision on a waiting ticket: `now` puts it in the shipyard (worked at once) at `priority` (P1 unless one is given) on `owner` (the host's triager unless an Owner option is named); `backlog` puts it in the backlog, keeping the `priority` and `ow… |
-| `sweep(run=, cfg=, mail=)` | Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody else's line counts), names a priority: triaged. `Triage: none (why)` and an issue already on the Project (its `area:` label) are left, except a ticket… |
+| `close_none(number, why, run=, cfg=)` | An alert issue whose Triage line is `none (why)` closed as not planned, the reason in its closing comment, so it never sits open on the board under a triage pass's claim (0.8.1: three alerts sat in the shipyard as building after their none lines); the host's… |
+| `sweep(run=, cfg=, mail=)` | Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody else's line counts), names a priority: triaged. `Triage: none (why)` on such an issue closes it as not planned (close_none, 0.8.1); an issue already o… |
 | `live_comment(release, commits=)` | A shipped ticket's closing comment: the release, then each commit that did its work by short sha and subject (GitHub links a sha in an issue comment), so a closed ticket shows the code that shipped it. |
 | `release_text(release, co=)` | The board's Release for a ship: `CO #12 · 1a2b3c4d`, its change order and its head, or the head alone for a ship with no change order. |
 | `link_branch(number, sha, run=, cfg=)` | The issue's Development shows its work: a branch `ticket/<n>` at `sha`, the ticket's last commit, linked to the issue (GitHub's createLinkedBranch), live_numbers' fallback for a ticket the ship's pull request did not link (a push with no ship pull request, a… |
@@ -1035,20 +1036,20 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `class Ignore` | gitignore semantics, as gcloudignore has them: the last matching line wins, '!' re-includes, a trailing '/' matches directories only, a pattern with no inner '/' matches at any depth, and nothing under an ignored directory can be re-included. |
-| `Ignore.load(path)` | (no docstring) |
-| `Ignore.ignored(rel, is_dir=)` | (no docstring) |
+| `Ignore.load(path)` | The rules of the ignore file at `path`; no rules when there is no path. |
+| `Ignore.ignored(rel, is_dir=)` | Whether the path `rel` (relative, forward slashes) is ignored, itself or through an ignored folder above it. |
 | `copy_sources(dockerfile_text)` | The context paths a Dockerfile's COPY and ADD lines read (not --from= stages), in order. |
 | `context_files(context, sources, ignore)` | Every file the sources name under context, relative to it, sorted; ignored ones left out. |
 | `content_key(root, files, extra=)` | The key: VERSION, the extra bytes (a Dockerfile and its build arguments), then each file's relative path and its sha256, in order. |
-| `load_lock(path=)` | (no docstring) |
+| `load_lock(path=)` | The base-images lock's images, {name: {tag, digest}}, from `path` or the lock BASE_IMAGES_LOCK names. |
 | `base_images(dockerfile_text, args=)` | The external base images a Dockerfile builds FROM, its global ARGs and the build arguments applied (`python:${PYTHON_VERSION}-slim` -> `python:3.14-slim`); its own stages, `scratch` and refs already by digest left out. |
 | `pin_dockerfile(text, args, lock)` | The Dockerfile with every external FROM naming `tag@digest` from the lock; ERROR when a base image is not in it. |
 | `image_plan(dockerfile, context, ignore_path, args, lock=)` | (files, key, pinned Dockerfile text) for an image: the files its COPY lines take, the content key over them, the pinned Dockerfile and the build arguments. |
 | `image_marked(image, key, mark)` | True when IMAGE:<mark>-<key> exists: the tag a desktop build adds (build --mark desktop), which tells a deploy that the desktop made this image and will smoke-test it (Gene, 10/11/26: the smoke test runs on the desktop when the box is up, on the runner when i… |
 | `zip_marked(url, mark)` | True when the marker object beside a function's zip exists (zip --mark): gs://.../<key>.<mark>. |
-| `find_image(image, key)` | (no docstring) |
-| `cmd_key(a)` | (no docstring) |
-| `cmd_stage(a)` | (no docstring) |
+| `find_image(image, key)` | IMAGE@sha256:... of the image already built for content `key` (its tag in the registry), '' when none is. |
+| `cmd_key(a)` | `key`: print an image's content key. |
+| `cmd_stage(a)` | `stage`: copy exactly the files the image's COPY lines read, and its pinned Dockerfile, into `--out`; print the key. |
 | `cmd_find(a)` | (no docstring) |
 | `mark_bucket(env=)` | The bucket the desktop's build marks are read from: BUILD_MARK_BUCKET, '' when the host set none. |
 | `from_mark(image, key, sha, fetch=, bucket=)` | IMAGE@sha256:... from the desktop's build mark for `sha` when it lists this image under this very key, else '' (10/20/26: one public fetch instead of the registry's find, mark check, tag and size calls, about 7 s a deploy job; the host's build script writes t… |

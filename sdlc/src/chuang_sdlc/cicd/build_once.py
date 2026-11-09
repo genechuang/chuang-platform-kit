@@ -122,6 +122,7 @@ class Ignore:
 
     @classmethod
     def load(cls, path):
+        """The rules of the ignore file at `path`; no rules when there is no path."""
         if not path:
             return cls()
         with open(path, encoding="utf-8") as f:
@@ -137,6 +138,7 @@ class Ignore:
         return hit
 
     def ignored(self, rel, is_dir=False):
+        """Whether the path `rel` (relative, forward slashes) is ignored, itself or through an ignored folder above it."""
         parts = rel.split("/")
         for n in range(1, len(parts)):
             if self._match("/".join(parts[:n]), True):
@@ -236,6 +238,7 @@ _ARG = re.compile(r"(?i)^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)(?:=(\S*))?\s*$")
 
 
 def load_lock(path=None):
+    """The base-images lock's images, {name: {tag, digest}}, from `path` or the lock BASE_IMAGES_LOCK names."""
     import json
     path = path or LOCK_PATH
     try:
@@ -327,6 +330,7 @@ def zip_marked(url, mark):
 
 
 def find_image(image, key):
+    """IMAGE@sha256:... of the image already built for content `key` (its tag in the registry), '' when none is."""
     r = _gcloud("artifacts", "docker", "images", "describe", f"{image}:{TAG_PREFIX}{key}",
                 "--format=value(image_summary.digest)")
     digest = r.stdout.strip() if r.returncode == 0 else ""
@@ -335,11 +339,13 @@ def find_image(image, key):
 
 # --------------------------------------------------------------------------- commands
 def cmd_key(a):
+    """`key`: print an image's content key."""
     _files, key, _pinned = image_plan(a.dockerfile, a.context, a.ignore, a.arg)
     print(key)
 
 
 def cmd_stage(a):
+    """`stage`: copy exactly the files the image's COPY lines read, and its pinned Dockerfile, into `--out`; print the key."""
     files, key, pinned = image_plan(a.dockerfile, a.context, a.ignore, a.arg)
     ctx = os.path.join(a.out, "ctx")
     if os.path.exists(a.out):

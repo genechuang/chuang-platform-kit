@@ -389,6 +389,19 @@ check("an alert's line triaged with its LOE stage, no factor: LOE original alone
 check("an admin's ask is now whatever its rank", lines[1].startswith('tickets: #83 now'), True)
 check('a waiting P3 goes to the backlog, said with no LOE', lines[2],
       'tickets: #84 backlog, Backlog P3 Bob; no LOE in its Triage line (`tool estimate #84 <loe>` writes it)')
+gh = fresh({86: {'title': 'Alert B', 'comments': [mine('finding\nTriage: none (fixed in October)')]},
+            87: {'title': 'Feedback none', 'labels': ['waiting'], 'comments': [mine('Triage: none (a duplicate)')]},
+            88: {'title': 'Filed none', 'labels': ['area:product'], 'comments': [mine('Triage: none (done)')]}})
+lines = T.sweep(gh)
+check("a none line on an alert issue closes it as not planned with its reason; a waiting or filed one is left",
+      (lines, gh.closed),
+      (['tickets: #86 closed as not planned: Triage: none (fixed in October)'],
+       [(86, 'not_planned', T.NONE_COMMENT.format(why='fixed in October'))]))
+gh.close_issue = lambda number, reason='completed', comment='': False
+gh.error = 'HTTP 403 Resource not accessible'
+check('a refused close is a WARNING the next sweep tries again', T.close_none(91, 'x', gh),
+      'WARNING: tickets: #91 not closed for its Triage: none line (GitHub: HTTP 403 Resource not accessible); '
+      'the next sweep tries again')
 gh = fresh({85: {'title': 'Configured mail'}}, {'IT_85': {'number': 85, 'status': 'Backlog', 'light': ''}})
 told = []
 T.configure(mail=lambda to, text, subject: told.append(to) or 'mailed by the host')

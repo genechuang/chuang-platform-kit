@@ -1432,10 +1432,27 @@ def decide(number: int, choice: str, owner: str = '', priority: str = '', run=No
     return line
 
 
+NONE_COMMENT = ('Closed as not planned by the ticket sweep: its Triage line says nothing is left to fix ({why}). '
+                'A new failure files a new issue.')
+
+
+def close_none(number: int, why: str, run=None, cfg: dict = None) -> str:
+    """An alert issue whose Triage line is `none (why)` closed as not planned, the reason in its closing comment, so
+    it never sits open on the board under a triage pass's claim (0.8.1: three alerts sat in the shipyard as building
+    after their none lines); the host's ticket.closed listener then files the card as any not-planned close. A
+    refused close is a WARNING the next sweep tries again."""
+    run = _run(run)
+    if run.close_issue(int(number), 'not_planned', NONE_COMMENT.format(why=why or 'no reason given')):
+        return f'tickets: #{number} closed as not planned: Triage: none ({why})'
+    return (f'WARNING: tickets: #{number} not closed for its Triage: none line '
+            f'(GitHub: {(getattr(run, "error", "") or "").strip()[:120]}); the next sweep tries again')
+
+
 def sweep(run=None, cfg: dict = None, mail=None) -> list:
     """Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody
-    else's line counts), names a priority: triaged. `Triage: none (why)` and an issue already on the Project (its
-    `area:` label) are left, except a ticket still carrying the triage label: its line is the triager's decision,
+    else's line counts), names a priority: triaged. `Triage: none (why)` on such an issue closes it as not planned
+    (close_none, 0.8.1); an issue already on the Project (its
+    `area:` label) is left, except a ticket still carrying the triage label: its line is the triager's decision,
     applied by `decide`: a P1 is now, P2 to P4 the backlog at that priority and owner, `Triage: backlog` the backlog
     with neither; a ticket carrying the admin-ask label is now whatever its rank. A line's `LOE:` is the ticket's
     estimate stage, said on its line. Lines, one per issue acted on."""
@@ -1453,6 +1470,10 @@ def sweep(run=None, cfg: dict = None, mail=None) -> list:
                          if ((c.get('author') or {}).get('login') or '').lower() == repo_owner(cfg))
         t = triage_line(mine)
         if not t:
+            continue
+        if 'none' in t:
+            if not waiting:
+                lines.append(close_none(i['number'], t['none'], run, cfg))
             continue
         acted = len(lines)
         if waiting:
