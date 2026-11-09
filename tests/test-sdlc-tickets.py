@@ -117,6 +117,8 @@ class FakeGH:
                 continue
             if search and not any(w.strip('"').lower() in i.get('title', '').lower() for w in search.replace(' in:title', '').split()):
                 continue
+            if search and n in getattr(self, 'unindexed', ()):   # GitHub's search index trailing a new issue
+                continue
             rows.append({'number': n, 'title': i.get('title', ''), 'labels': [{'name': x} for x in i.get('labels', [])],
                          'createdAt': i.get('createdAt', ''), 'comments': i.get('comments', [])})
         return rows
@@ -571,6 +573,24 @@ check("the change order's body lists the tickets and the range, with the host's 
 gh = fresh({120: {'title': 'Ship 11/7/26 12:08 PM PT: 1a2b3c4d', 'labels': ['release']}})
 check('settle: the change order shipped and closed', (T.change_order_settle('1a2b3c4dcafe', 'shipped', 'done', gh), gh.closed),
       ('; change order #120 gone', [(120, 'completed', 'done')]))
+gh = fresh({121: {'title': 'Ship 11/9/26 12:57 AM PT: 514dc30b', 'labels': ['release']}})
+gh.unindexed = {121}
+check("settle: a change order the search's index has not caught up with is found by the label's listing (CO #1235)",
+      (T.change_order_for('514dc30bcafe', gh), T.change_order_settle('514dc30bcafe', 'shipped', 'done', gh), gh.closed),
+      (121, '; change order #121 gone', [(121, 'completed', 'done')]))
+gh = fresh({122: {'title': 'Ship 11/8/26 6:56 PM PT: bf9db521', 'labels': ['release']},
+            123: {'title': 'Ship 11/8/26 9:24 PM PT: c7c3bfc8', 'labels': ['release']},
+            124: {'title': 'Ship 11/9/26 4:08 AM PT: ca22fed6', 'labels': ['release']},
+            125: {'title': 'Ship 11/9/26 9:00 AM PT: 99990000', 'labels': ['release']}})
+carried = {'bf9db521', 'c7c3bfc8'}
+line = T.settle_carried('ca22fed6aaaa', lambda h: h in carried, gh)
+check("settle_carried: the stopped change orders whose heads this release carries are closed as shipped, naming it; "
+      "its own and one it does not carry are left",
+      (line, sorted(c[0] for c in gh.closed), gh.closed[0][2]),
+      ('; change orders #122, #123 settled as carried by ca22fed6', [122, 123],
+       'Shipped with change order #124 (ca22fed6): every commit of bf9db521 is in that release.'))
+check('  none carried, or no release: nothing', (T.settle_carried('ca22fed6aaaa', lambda h: False, fresh({})),
+                                              T.settle_carried('', lambda h: True, gh)), ('', ''))
 gh = fresh({130: {'title': 'api failed its smoke: 502'}})
 check('open_bug_for', (T.open_bug_for('api', gh), T.open_bug_for('site', gh)), (130, None))
 

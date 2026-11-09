@@ -2024,11 +2024,46 @@ def change_order_body(base: str, head: str, numbers, run=None, how: str = '', cf
             + (f' {CHANGE_ORDER_NOTE}' if CHANGE_ORDER_NOTE else ''))
 
 
+def open_change_orders(run=None) -> list:
+    """Every open change order as (number, its head's 8 characters, the title's last word), from the label's listing,
+    never GitHub's search, whose index trails a new issue by minutes; [] when GitHub does not answer."""
+    rows = _run(run).issues(state='open', labels=[label('change_order')], limit=100) or []
+    return [(r['number'], str(r.get('title', '')).rsplit(' ', 1)[-1][:8]) for r in rows if r.get('number')]
+
+
 def change_order_for(head: str, run=None):
     """The change order of the ship whose head is `head` (its title ends with the head's 8 characters), open or closed,
-    or None."""
+    or None. An open one is found by the label's listing first (open_change_orders): a settle minutes after the filing
+    found none through the search's lagging index, and CO #1235 stayed open after its release shipped (11/9/26); a
+    closed one by the search."""
+    found = next((n for n, h in open_change_orders(run) if h == head[:8]), None)
+    if found:
+        return found
     rows = _run(run).issues(state='all', labels=[label('change_order')], search=f'"{head[:8]}" in:title', limit=10) or []
     return next((r['number'] for r in rows if str(r.get('title', '')).endswith(head[:8])), None)
+
+
+def settle_carried(release: str, carried, run=None, cfg: dict = None) -> str:
+    """Every other open change order whose head `carried(head8)` says the release at `release` carries (the host's
+    git ancestry), settled as shipped: its Light the shipped one, closed with a note naming this release. A ship that
+    stopped before its push leaves its change order open for the next word on that head (change_order_stop); when dock
+    moved on and a later head shipped instead, nothing else closes it (#1193, #1205 sat open with their commits live).
+    '' when none; a refused write is a word."""
+    run, cfg = _run(run), _cfg(cfg)
+    if not release:
+        return ''
+    mine = change_order_for(release, run)
+    done = []
+    for n, head in open_change_orders(run):
+        if n == mine or head == release[:8] or not carried(head):
+            continue
+        item = item_id(n, run, cfg)
+        lit = bool(item) and set_fields(item, {'Light': cfg['lights']['shipped']}, run, cfg)
+        note = (f'Shipped with {f"change order #{mine}" if mine else "the release"} ({release[:8]}): every commit of '
+                f'{head} is in that release.')
+        if run.close_issue(n, 'completed', note):
+            done.append(f'#{n}' + ('' if lit else ' (its Light was not set)'))
+    return f"; change orders {', '.join(done)} settled as carried by {release[:8]}" if done else ''
 
 
 def change_order_settle(release: str, role: str, note: str, run=None, cfg: dict = None) -> str:

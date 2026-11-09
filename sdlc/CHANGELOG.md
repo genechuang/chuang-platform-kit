@@ -3,6 +3,16 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.14.1 - 2026-11-09 PT
+
+- `change_order_for` finds an open change order by the label's listing (`open_change_orders`) before GitHub's search,
+  whose index trails a new issue by minutes: SMADPickleBot's CO #1235 was filed at 12:57 AM PT and its release's
+  settle at about 1:01 AM PT found none, so it stayed open with its release live.
+- `settle_carried(release, carried)`: every other open change order whose head the release carries (the host's
+  `carried(head8)`, its git ancestry) is closed as shipped, its Light the shipped one, with a note naming the release.
+  A ship that stopped before its push leaves its change order open for the next word on that head; when dock moved
+  on and a later head shipped, nothing closed it (SMADPickleBot #1193 and #1205). No signature changes.
+
 ## 0.14.0 - 2026-11-09 PT
 
 - `scrum.warming_sweep` and `warming_letter`: every full sweep reads the dock column once and mails each owner (the
