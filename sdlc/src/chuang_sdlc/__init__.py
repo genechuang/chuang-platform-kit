@@ -38,6 +38,9 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   webhooks   what one of GitHub's deliveries means, decided from the delivery alone: a comment's route (a `Scrum:`
              answer, a `Triage:` line), an issue's (a close, a feedback ticket, an alert), a dock push's tickets, a
              Project item's move before and after its read, the delivery's age
+  signature  who wrote a comment when everyone writes with one person's token: the signature footer, its signer (the
+             host's, CHUANG_SIGNED_AS, the Claude Code session's registry row) and signed_by, the read that tells a
+             session's or the pipeline's comment from the person's own words (standard library only)
   triage     a triage pass on a box: the request over the host's bus, the prompt, the read-only worktree, one pass at a
              time by its lock, the headless run on the subscriptions' accounts (chuang_platform_kit.headless_claude),
              capped and logged; the worktree, prompt file, logs and model the host's
@@ -52,4 +55,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.14.2'   # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26)
+__version__ = '0.15.0'   # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26)

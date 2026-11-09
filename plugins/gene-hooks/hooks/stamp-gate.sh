@@ -56,6 +56,15 @@ helper() {
   printf '%s %s agent %s %s\n' "$now" "${s//[^A-Za-z0-9-]/}" "$a" "$tu" >> "$log" 2>/dev/null
   return 0
 }
+# 1.23.0 (SMADPickleBot #1279): a GitHub comment a session writes is signed, a helper's too (an agent writes with the same
+# token), from Bash or PowerShell; only a shell call naming a comment write's verb pays the Python (~150 ms).
+case "$event" in
+  *'"tool_name":"Bash"'*|*'"tool_name": "Bash"'*|*'"tool_name":"PowerShell"'*|*'"tool_name": "PowerShell"'*)
+    case "$event" in *'issue comment'*|*'pr comment'*|*'issue close'*|*'pr close'*|*'pr review'*|*api*comments*)
+      sign_err=$(printf '%s' "$event" | bash "$(dirname "${BASH_SOURCE[0]}")/comment-sign.sh" 2>&1 >/dev/null)
+      if [ $? -eq 2 ]; then printf '%s\n' "$sign_err" >&2; exit 2; fi ;;
+    esac ;;
+esac
 case "$event" in *'"agent_id"'*) helper; exit 0 ;; esac
 # The foreground guard rides this hook (1.7.0, Gene 10/21/26 12:05 AM PT: long runners in the background, "add it to a
 # hook"): a hook added to hooks.json reaches a session only at its next start, while this script runs from the newest

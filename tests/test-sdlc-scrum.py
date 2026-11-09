@@ -110,6 +110,12 @@ asked = say('x', 20)['createdAt']
 check("the lead's answer after the ask, never an owner's line", (S.lead_answer([say('Yes, A', 2)], LOGIN, asked)['text'],
                                                                  S.lead_answer([say('Scrum: next', 2)], LOGIN, asked)),
       ('Yes, A', {}))
+check("  0.15.0: a signed comment after the ask is never the lead's answer (a session's or the pipeline's, same login); "
+      "the lead's own reply before it still is",
+      (S.lead_answer([say('Live in release abc.\n\n— **Snow White** · Claude session', 2)], LOGIN, asked),
+       S.lead_answer([say('LOE: estimated 2h\n\n— **Picklebot** · pipeline', 1), say('Go with B', 3)], LOGIN, asked)['text'],
+       S.scrum_line([say('Scrum: next | after #4\n\n— **Snow White** · Claude session')], LOGIN)['kind']),
+      ({}, 'Go with B', 'next'))
 
 print('the ETA, in the kit zone')
 check('the positive case: a bare time later today', S.pt(S.parse_eta('5 PM', NOW)), '10/29/26 5:00 PM PT')

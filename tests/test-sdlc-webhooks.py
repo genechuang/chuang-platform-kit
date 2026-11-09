@@ -68,6 +68,16 @@ check("  anyone else's, an edit, and neither", (route(comment('Triage: P1', by='
       (('ignored', 'ignored: a comment on #7 by someone, not the owner'), ('ignored', 'ignored: an issue_comment edited'),
        ('ignored', 'ignored: a comment on #7 with no Triage line')))
 check('  a bare regex works too', W.comment_route(comment('Scrum: next'), 'owner', SCRUM)['route'], 'scrum')
+SESSION, PIPE = '\n\n— **Snow White** · Claude session', '\n\n— **Picklebot** · pipeline'
+check("  0.15.0: a signed comment on an assigned card is no reply of the owner's; a session's signed Scrum: and Triage "
+      "lines still count; the pipeline's own Triage note is never applied",
+      (route(comment('Live in release abc.' + SESSION, assignees=('owner',))),
+       route(comment('LOE: estimated 2h' + PIPE, assignees=('owner',))),
+       route(comment('Scrum: building | eta 3 PM' + SESSION, assignees=('owner',)))[0],
+       route(comment('Found it.\nTriage: P2 | Owner: Ann' + SESSION))[0],
+       route(comment('Triage: now. Moved to the Shipyard.' + PIPE))),
+      (('ignored', 'ignored: a comment on #7 with no Triage line'), ('ignored', 'ignored: a comment on #7 with no Triage line'),
+       'scrum', 'triage', ('ignored', "ignored: the pipeline's own Triage note on #7 (Picklebot)")))
 
 print('an issue')
 MARK = re.compile(r'Feedback item:\s*FB-[A-Z0-9]+\s*\Z')

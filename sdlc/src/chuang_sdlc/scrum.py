@@ -24,6 +24,7 @@ import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 
+from . import signature as _signature
 from . import tickets as _tickets
 
 
@@ -179,11 +180,14 @@ def lead_answer(comments, login: str, since: str) -> dict:
     """The lead's reply to a Needs-you ask: the newest comment by `login` after `since` (the ask's time) that is an
     answer, not a session's own line: a `Scrum:` line in any word but the owners' kinds (`Scrum: Yes`), or a plain
     comment of at most ANSWER_MAX characters with no scrum master marker, Triage line or owner's `Scrum:` line. Every
-    session writes as the same login, so the card's state (asked, and assigned to the lead) is what makes it theirs.
-    {text, at}; {} when none."""
+    session writes as the same login, so the card's state (asked, and assigned to the lead) is what makes it theirs; and
+    a signed comment (chuang_sdlc.signature: a session's or the pipeline's, 0.15.0) is never the lead's. {text, at}; {}
+    when none."""
     for c in sorted(comments or [], key=lambda c: c.get('createdAt') or '', reverse=True):
         body = (c.get('body') or '').strip()
         if (c.get('author') or {}).get('login') != login or (c.get('createdAt') or '') <= (since or ''):
+            continue
+        if _signature.signed_by(body):
             continue
         owners = [m for m in SCRUM_RE.finditer(body) if m.group(1).lower() != 'done']   # `done` is a closed card's
         if MARKER in body or re.search(r'^[\s*_>]*Triage:', body, re.I | re.M) or owners:

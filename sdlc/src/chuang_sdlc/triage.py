@@ -172,7 +172,7 @@ def start_pass(why: str, kind: str, module: str, root: str, lock: str, logs: str
 def run_pass(why: str, kind: str, root: str, worktree: str, cmd: list, prompt, logs: str, run=None, now=None,
              limit: int = 600, prepare=None, attempts=None, attempts_of=None, resting=None, resting_of=None,
              zone_of=None, auth_refused=AUTH_REFUSED, refused_rest_s: int = REFUSED_REST_S,
-             refused_note: str = REFUSED_NOTE) -> str:
+             refused_note: str = REFUSED_NOTE, signed_as: str = '') -> str:
     """One pass: the worktree refreshed (`prepare(root, worktree, run)`, else prepare_worktree), the CLI `cmd` run there
     with the prompt (`prompt()`, read once the worktree is ready) on stdin, capped at `limit` seconds, its output in
     `logs/<stamp>-<why>.log`; the one-line result for the listener's log, or why it did not run. `run` is
@@ -180,7 +180,8 @@ def run_pass(why: str, kind: str, root: str, worktree: str, cmd: list, prompt, l
     an account whose answer names a limit rests (`resting.rest`, until headless_claude.reset_at in `zone_of()`) and the
     next runs the same pass; one whose token the service refused (`auth_refused`) rests `refused_rest_s` and is said in
     `refused_note` ({accounts}); the box's own sign-in (headless_claude.LOGIN) never rests. `resting` is the marks'
-    object, else `resting_of()`."""
+    object, else `resting_of()`. `signed_as` (`Name|kind`, 0.15.0) is the pass's own CHUANG_SIGNED_AS, so every comment
+    it writes is signed by the triager it is (chuang_sdlc.signature), never by the host that started it."""
     head = (prepare or prepare_worktree)(root, worktree, run or subprocess.run)
     if not head:
         return f'triage pass for {why}: the worktree at {worktree} could not be brought to origin/main; not run'
@@ -196,7 +197,8 @@ def run_pass(why: str, kind: str, root: str, worktree: str, cmd: list, prompt, l
     try:
         for account, token in (attempts if attempts is not None else attempts_of(resting)):
             r = (run or subprocess.run)(cmd, cwd=worktree, input=text_in, capture_output=True, text=True, encoding='utf-8',
-                                        timeout=limit, shell=(os.name == 'nt'), creationflags=NO_WINDOW, env=hc.child_env(token))
+                                        timeout=limit, shell=(os.name == 'nt'), creationflags=NO_WINDOW,
+                                        env=dict(hc.child_env(token), **({'CHUANG_SIGNED_AS': signed_as} if signed_as else {})))
             verdict = hc.judge(r.returncode, r.stdout, r.stderr)
             if verdict['limited'] and account != hc.LOGIN:
                 resting.rest(account, hc.reset_at(verdict['detail'], time.time(), zone_of() if zone_of else ''), verdict['detail'])

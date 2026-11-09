@@ -25,6 +25,7 @@ import sys
 
 from . import board as B
 from . import loe as L
+from . import signature as _signature
 
 
 class NotConfigured(RuntimeError):
@@ -294,12 +295,12 @@ class Client:
         return int(got['number'])
 
     def comment(self, number: int, body: str) -> bool:
-        """A comment on the issue."""
-        return self._call('comment', int(number), body) is not None
+        """A comment on the issue, signed by whoever this process writes as (chuang_sdlc.signature, 0.15.0)."""
+        return self._call('comment', int(number), _signature.sign(body)) is not None
 
     def edit_comment(self, comment_id: int, body: str) -> bool:
-        """An issue comment's body replaced."""
-        return self._call('edit_comment', int(comment_id), body) is not None
+        """An issue comment's body replaced, signed as comment() signs."""
+        return self._call('edit_comment', int(comment_id), _signature.sign(body)) is not None
 
     def add_labels(self, number: int, labels) -> bool:
         """Labels added; False when GitHub refused (a label the repository lacks is a 422: create_label, then again)."""
@@ -328,8 +329,8 @@ class Client:
         return not self.error
 
     def close_issue(self, number: int, reason: str = 'completed', comment: str = '') -> bool:
-        """The issue closed with its reason, the comment posted first when given."""
-        return self._did('close_issue', int(number), reason, comment)
+        """The issue closed with its reason, the comment posted first when given (signed as comment() signs)."""
+        return self._did('close_issue', int(number), reason, _signature.sign(comment) if comment else comment)
 
     def add_sub_issue(self, parent: int, child_id) -> bool:
         """#child (by its numeric id) a sub-issue of #parent."""

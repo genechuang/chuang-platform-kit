@@ -3,6 +3,22 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.15.0 - 2026-11-09 PT
+
+- `chuang_sdlc.signature` (SMADPickleBot #1279): every session and the pipeline write GitHub comments with one person's
+  token, so their comments read as that person's, on the page and to the code. A comment now ends with
+  `— **<who>** · Claude session` or `· pipeline`. The signer is `configure()`'s, then `CHUANG_SIGNED_AS` (`Name|kind`),
+  then the Claude Code session the process runs under (`~/.claude/sessions/$CLAUDE_PID.json`), then
+  `configure(default=)`'s. The footer goes at the end, so readers that check a comment's first words are unaffected.
+- `tickets.Client` signs `comment`, `edit_comment` and a `close_issue` comment, and `alerts.GitHub` signs `close` and
+  `comment`. Issue and pull request bodies are left alone.
+- `scrum.lead_answer` and `webhooks.comment_route`'s assigned-card reply never take a signed comment as the lead's
+  answer. `comment_route` routes no pipeline-signed `Triage:` note, such as the sweep's own `Triage: now`. A
+  session-signed `Scrum:` or `Triage:` line counts as before.
+- `triage.run_pass(signed_as=)`: a pass's own `CHUANG_SIGNED_AS`, so a headless triager signs as itself and never as
+  the host that started it.
+- No signature changes; `signed_as` is a new keyword with a default. A host with no signer at all posts as before.
+
 ## 0.14.2 - 2026-11-09 PT
 
 - `Client.close_issue` and `add_sub_issue` answer True when GitHub took them: the kit's verbs answer None on success,

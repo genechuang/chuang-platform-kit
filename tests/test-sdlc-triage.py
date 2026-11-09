@@ -80,6 +80,14 @@ check('the CLI runs in the refreshed tree with the prompt on stdin, its output l
       (calls, order, line.startswith('triage pass for #7: done in 0 s on abc1234, 4 turns (log '), line.endswith(': nothing to triage'),
        os.path.exists(log)),
       ([(['cli', '-p'], '/wt', 'the prompt', 60, False)], ['prepare', 'prompt'], True, True, True))
+envs = []
+TR.run_pass('#7b', 'issue', '/repo', '/wt', ['cli'], prompt, logs, run=lambda cmd, **kw: envs.append(kw['env']) or answer()(cmd),
+            prepare=prepare, attempts=[('login', '')], resting=Resting(), signed_as='Mr Sandman|Claude session')
+TR.run_pass('#7c', 'issue', '/repo', '/wt', ['cli'], prompt, logs, run=lambda cmd, **kw: envs.append(kw['env']) or answer()(cmd),
+            prepare=prepare, attempts=[('login', '')], resting=Resting())
+check("  0.15.0: signed_as is the pass's own CHUANG_SIGNED_AS; none given, the child sets none",
+      (envs[0].get('CHUANG_SIGNED_AS'), 'CHUANG_SIGNED_AS' in envs[1] and envs[1]['CHUANG_SIGNED_AS'] == os.environ.get('CHUANG_SIGNED_AS')),
+      ('Mr Sandman|Claude session', 'CHUANG_SIGNED_AS' in os.environ))
 check('  a tree that cannot be readied runs nothing',
       TR.run_pass('#8', 'issue', '/repo', '/wt', ['cli'], prompt, logs, run=run, prepare=lambda *a: '', attempts=[]),
       'triage pass for #8: the worktree at /wt could not be brought to origin/main; not run')

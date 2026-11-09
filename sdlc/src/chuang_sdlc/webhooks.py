@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timezone
 
 from . import board as _board
+from . import signature as _signature
 
 # A `Triage:` line anywhere in a comment (a quote, a bullet, bold): the ticket sweep's to apply.
 TRIAGE_LINE = re.compile(r'^[\s*_>]*Triage:', re.I | re.M)
@@ -27,7 +28,9 @@ def comment_route(payload: dict, owner: str, scrum_re, marker: str = SCRUM_MARKE
     """{route, number, comment, line}: `scrum` for an owner's answer to the scrum master (a `Scrum:` line, `scrum_re`
     a regex or a callable answering one, read only when needed; or the repository owner's plain reply on an issue
     assigned to them, which is no sweep's own comment, `marker`), `triage` for a `Triage:` line, `ignored` with the line
-    otherwise. Only the repository owner's comment counts (`owner`, its login)."""
+    otherwise. Only the repository owner's comment counts (`owner`, its login). A signed comment (chuang_sdlc.signature:
+    a session or the pipeline writing with the owner's token, 0.15.0) is never the owner's plain reply, and a
+    pipeline-signed one is no Triage line to apply (the sweep's own `Triage: now` note)."""
     comment = payload.get('comment') or {}
     number = (payload.get('issue') or {}).get('number')
     out = {'route': 'ignored', 'number': number, 'comment': comment, 'line': ''}
@@ -41,11 +44,14 @@ def comment_route(payload: dict, owner: str, scrum_re, marker: str = SCRUM_MARKE
                    for a in (payload.get('issue') or {}).get('assignees') or [])
     # A card assigned to the lead is waiting on them with its ask on record, so their plain reply on it (no Triage
     # line, no scrum master marker) is their answer, read by the scrum master at once.
-    answer = assigned and marker not in body
+    signed = _signature.signed_by(body)
+    answer = assigned and marker not in body and not signed
     if (answer or (scrum_re() if callable(scrum_re) else scrum_re).search(body)) and not triage_re.search(body):
         return dict(out, route='scrum')
-    if not triage_re.search(comment.get('body') or ''):
+    if not triage_re.search(body):
         return dict(out, line=f'ignored: a comment on #{number} with no Triage line')
+    if signed.get('kind') == 'pipeline':
+        return dict(out, line=f"ignored: the pipeline's own Triage note on #{number} ({signed['who']})")
     return dict(out, route='triage')
 
 

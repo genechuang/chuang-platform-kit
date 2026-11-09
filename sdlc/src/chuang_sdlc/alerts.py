@@ -21,6 +21,7 @@ import re
 import urllib.parse
 from datetime import datetime
 
+from . import signature as _signature
 from . import tickets as _tickets
 
 _SET = {
@@ -292,12 +293,13 @@ class GitHub:
     def close(self, number: int, why: str = '', comment: str = '') -> None:
         """The issue closed with a comment: `comment` as given, else `<close_word> <why>.`."""
         self._call('POST', f'/repos/{self.repo}/issues/{number}/comments',
-                   {'body': comment or f"{_SET['close_word']} {why}."})
+                   {'body': _signature.sign(comment or f"{_SET['close_word']} {why}.")})
         self._call('PATCH', f'/repos/{self.repo}/issues/{number}', {'state': 'closed', 'state_reason': 'completed'})
 
     def comment(self, number: int, text: str) -> None:
-        """One comment on the issue (the note that its alert cleared while the ticket stays open)."""
-        self._call('POST', f'/repos/{self.repo}/issues/{number}/comments', {'body': text})
+        """One comment on the issue (the note that its alert cleared while the ticket stays open), signed
+        (chuang_sdlc.signature: the closer's mark stays its first words)."""
+        self._call('POST', f'/repos/{self.repo}/issues/{number}/comments', {'body': _signature.sign(text)})
 
     def label(self, number: int, name: str) -> None:
         """One label added to the issue (the cleared label, so the note is written once)."""

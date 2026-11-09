@@ -642,7 +642,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `GitHub.issues(pages=)` | Every issue, open or closed, whose title starts with the prefix, newest first: 100 a page, at most `pages` pages. |
 | `GitHub.file(title, body)` | A new issue; its number (0 when GitHub answered none). |
 | `GitHub.close(number, why=, comment=)` | The issue closed with a comment: `comment` as given, else `<close_word> <why>.`. |
-| `GitHub.comment(number, text)` | One comment on the issue (the note that its alert cleared while the ticket stays open). |
+| `GitHub.comment(number, text)` | One comment on the issue (the note that its alert cleared while the ticket stays open), signed (chuang_sdlc.signature: the closer's mark stays its first words). |
 | `GitHub.label(number, name)` | One label added to the issue (the cleared label, so the note is written once). |
 | `act(key, inc, gh, claim)` | One incident's issue made right at once: filed (once, through `claim(id) -> bool`) while it is open and told, its open issue closed once it is Fixed or opened again, a triaged one told once that its alert cleared. Lines said. |
 | `triage_claim(number, by, store, now)` | (claimed, line) for one triage pass on an issue: a create-only record in the `triage` collection, so two passes never investigate it at once. True and `claimed #n` when this call created it; False and who holds it otherwise. `now` a callable answering epoch s… |
@@ -820,6 +820,17 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `wrecked(pr, note, run=, cfg=)` | A release whose production smoke failed: its pull request commented `Wrecked: <note>` (the components and the bug), and its branch deleted, the head being in the base already; nothing again when it was told already (_told: a `Wrecked:` comment among its last… |
 | `note_change_order(pr, co, run=, cfg=)` | The ship's change order named at the top of its pull request's body (edited once, after the push files the change order); True when it is there. |
 
+## `chuang_sdlc.signature`: Who wrote a comment, when everyone writes with one person's token: a signature line at a comment's…
+
+| Name | Purpose |
+|---|---|
+| `configure(who=, kind=, default=)` | Who this process signs as: `who` and `kind` win over everything; `default`, a (who, kind) pair, is used only when neither the environment nor a Claude Code session names one (a pipeline job's own name). |
+| `footer(who, kind=)` | The signature line for `who`, `kind` one of KINDS. |
+| `signed_by(body)` | {who, kind} of the signature on the body's last non-empty line; {} when that line is none (a person's own words, even one that quotes a signature above their reply). |
+| `signer(env=, home=)` | (who, kind) for this process, or None: configure()'s, else CHUANG_SIGNED_AS (`Name` or `Name\|kind`), else the Claude Code session it runs under (CLAUDE_PID's registry row; a script a session runs inherits it), else configure(default=)'s. |
+| `sign(body, who=, kind=, env=, home=)` | The body with its signature line added at the end, once: `who`/`kind` when given, else signer()'s. A body that already ends signed, or no signer at all, is answered as given. |
+| `is_persons(body)` | Whether a comment can be its author's own words: True unless it carries a signature (a session's or the pipeline's, written with the person's token). |
+
 ## `chuang_sdlc.testing`: A fake GitHub for a host's suites of the ship's pull request (chuang_sdlc.ship_pr) and the shipped…
 
 | Name | Purpose |
@@ -908,13 +919,13 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Client.compare(base, head)` | The commits after `base` up to `head`, [{'sha', 'message'}] oldest first (the kit's github.compare); None when GitHub does not answer (0.11.0). |
 | `Client.issues(state=, labels=, search=, limit=, comments=)` | The repository's issues in gh's shape (github.issues: a list, or GitHub's search when `search` is given, with the last `comments` of each when asked); None when GitHub does not answer. |
 | `Client.create_issue(title, body, labels=)` | A new issue; its number, or None. |
-| `Client.comment(number, body)` | A comment on the issue. |
-| `Client.edit_comment(comment_id, body)` | An issue comment's body replaced. |
+| `Client.comment(number, body)` | A comment on the issue, signed by whoever this process writes as (chuang_sdlc.signature, 0.15.0). |
+| `Client.edit_comment(comment_id, body)` | An issue comment's body replaced, signed as comment() signs. |
 | `Client.add_labels(number, labels)` | Labels added; False when GitHub refused (a label the repository lacks is a 422: create_label, then again). |
 | `Client.remove_label(number, label)` | A label taken off; True whether or not the issue carried it, False only on a refusal. |
 | `Client.create_label(name, color, description=)` | A repository label made, or one of that name given this color and description. |
 | `Client.assign(number, login, on=)` | `login` assigned to the issue, or unassigned. |
-| `Client.close_issue(number, reason=, comment=)` | The issue closed with its reason, the comment posted first when given. |
+| `Client.close_issue(number, reason=, comment=)` | The issue closed with its reason, the comment posted first when given (signed as comment() signs). |
 | `Client.add_sub_issue(parent, child_id)` | #child (by its numeric id) a sub-issue of #parent. |
 | `Client.item_add(node)` | The Project item of an issue (by its node id), added when it is not on the board (GitHub's add is idempotent); None when GitHub does not answer. |
 | `Client.item_field(item, field_id, option_id=, text=, clear=)` | A Project item's field: a single-select by its option's id, a text by `text`, or emptied with `clear`. |
@@ -1031,7 +1042,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `stamp(now=)` | An instant as a log file's name part, `20261030T220000Z`. |
 | `running(lock, now=, stale=)` | The pass under way by its lock file ({why, kind, pid, started}), or {} when none or when the lock is older than `stale` seconds (a pass killed without its cleanup: the next one takes over). |
 | `start_pass(why, kind, module, root, lock, logs, popen=, now=, stale=)` | Start one pass detached (`python -m <module> pass <why> <kind>` from `root`, the hidden console every box process shares); the line for the listener's log. A pass already running (`running`) covers this request: its prompt lists every waiting issue itself, so… |
-| `run_pass(why, kind, root, worktree, cmd, prompt, logs, run=, now=, limit=, prepare=, attempts=, attempts_of=, resting=, resting_of=, zone_of=, auth_refused=, refused_rest_s=, refused_note=)` | One pass: the worktree refreshed (`prepare(root, worktree, run)`, else prepare_worktree), the CLI `cmd` run there with the prompt (`prompt()`, read once the worktree is ready) on stdin, capped at `limit` seconds, its output in `logs/<stamp>-<why>.log`; the on… |
+| `run_pass(why, kind, root, worktree, cmd, prompt, logs, run=, now=, limit=, prepare=, attempts=, attempts_of=, resting=, resting_of=, zone_of=, auth_refused=, refused_rest_s=, refused_note=, signed_as=)` | One pass: the worktree refreshed (`prepare(root, worktree, run)`, else prepare_worktree), the CLI `cmd` run there with the prompt (`prompt()`, read once the worktree is ready) on stdin, capped at `limit` seconds, its output in `logs/<stamp>-<why>.log`; the on… |
 | `result_record(stdout)` | The run's `result` record from its streamed output (the last line whose type is `result`), or the one JSON document when the output was not streamed; {} when neither parses. |
 | `locked_pass(why, kind, lock, run_pass_, now=)` | The detached process's body: the lock written ({why, kind, pid, started}), `run_pass_(why, kind)` run, the lock removed however it ends; the pass's line, also appended to passes.log beside the lock for the record. |
 
