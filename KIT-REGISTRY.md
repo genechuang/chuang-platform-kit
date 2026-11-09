@@ -1091,6 +1091,20 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `cmd_zip(a)` | (no docstring) |
 | `main(argv=)` | (no docstring) |
 
+## `chuang_sdlc.cicd.gh_deploy`: Record a release's rung as a GitHub deployment, so the repository's Deployments view is the CI/CD c…
+
+| Name | Purpose |
+|---|---|
+| `configure(**kw)` | The host's names: repo ('owner/name'), project (the GCP project of the token's secret), secret (its name), user_agent and bump (a callable taking the record's reason). An unknown name is refused. |
+| `repo(env=)` | The repository the deployments are recorded on: the process's GITHUB_REPOSITORY, else GITHUB_REPO, else the configured one. Read from os.environ, never a call's `env`, which feeds the token, the commit and the log link. |
+| `token(env=, run=)` | The first token that can be had, in the docstring's order; '' when none. |
+| `ref(given=, env=, run=)` | The commit recorded: --ref, else RELEASE_SHA, GITHUB_SHA, SHA, else `git rev-parse HEAD`. |
+| `log_url(env=)` | The status's log link: LOG_URL, else this GitHub Actions run's page, else ''. |
+| `call(method, path, body, tok, opener=)` | One GitHub call through chuang_platform_kit.github's throttled client, or the standard library's where the kit is not installed (_plain); the JSON. A refusal is raised as urllib's HTTPError with GitHub's status, so main's token fallback reads it; no answer, o… |
+| `start(environment, sha, description, tok, opener=, env=)` | Create the deployment (no merge, no required checks: a record, not a gate) and mark it in progress; its id. |
+| `status(did, state, url, description, tok, opener=, env=)` | A status on deployment `did`: its state, the description, the log link and the live address when given. |
+| `main(argv=, env=, opener=, run=, out=, bump=)` | The command line; always 0, a refusal one WARNING line on stderr. |
+
 ## `chuang_sdlc.cicd.jest`: The app's Jest suites that test a pipeline script, run when a push changes that script (SMADPickleB…
 
 | Name | Purpose |

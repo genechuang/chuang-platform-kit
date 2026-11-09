@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 #   chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc
 [project]
 name = "chuang-sdlc"
-version = "0.18.0"
+version = "0.19.0"
 description = "A project's tickets on a GitHub Project board: fields and moves along its flow, filing with one estimate stage, the triage sweep, the shipped stage and change orders, the ship card, the level of effort estimated and actual, the commit trailers its pipelines read and its post-ship steps run, one pull request a ship, a ship's release notes in its tickets' own words, the scrum master's sweep, the backlog by state, alert issues filed once per opening, the board's event listeners and what a webhook delivery means, and a triage pass on a box."
 readme = "README.md"
 license = { text = "MIT" }

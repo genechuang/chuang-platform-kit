@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.19.0 - 2026-11-09 PT
+
+- `chuang_sdlc.cicd.gh_deploy` (SMADPickleBot #1285, phase 2 of #235) records a release's rung as a GitHub
+  deployment, so the repository's Deployments view is the CI/CD console. It was SMADPickleBot's
+  pipeline/shared/gh-deploy.py, now that file's shim.
+  - `configure(repo=, project=, secret=, user_agent=, bump=)` names the host. `repo()` reads the process's
+    GITHUB_REPOSITORY before it.
+  - Its parts: `token`, `ref`, `log_url`, `call` with the standard-library fallback `_plain`, `start`, `status` and
+    `main`.
+  - A refusal is one WARNING line and exit 0. A bump that raises is swallowed.
+
 ## 0.18.0 - 2026-11-09 PT
 
 - `proc.lend_dir(work, sources, folder='app/node_modules', lock='app/package-lock.json')` and

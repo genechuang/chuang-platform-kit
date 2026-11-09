@@ -13,4 +13,6 @@ own names in).
                   lower rung, or change what a live revision still reads (`contract`)
   jest            the app's Jest suites a pipeline change reaches, read from the suites' own text, and jest on them by
                   path, passed on its own JSON's word; the host's repo, app folder, prefix and command configured (#1188)
+  gh_deploy       a release's rung as a GitHub deployment (the Deployments view as the CI/CD console): start and finish,
+                  the token's fallbacks, the kit's client or the standard library, never stopping a release (#1285)
 """
