@@ -59,7 +59,9 @@ def primary_root(start: str, run=None) -> str:
     return os.path.dirname(os.path.normpath(os.path.join(start, common)))
 
 
-SHIMS = ('gh', 'gcloud')   # .cmd files on Windows, so only the shell finds them
+# .cmd files on Windows, so only the shell finds them; Node's npx, npm and yarn too (cicd.jest runs `npx jest`, which
+# could not start without the shell, SMADPickleBot #1188, 11/9/26)
+SHIMS = ('gh', 'gcloud', 'npx', 'npm', 'yarn')
 GITHUB_API = 'https://api.github.com'
 # The kit's throttled GitHub client (#364, #679), optional: a box without the kit (the Mac mini's Simulator job installs
 # nothing) keeps the plain paths below, and scripts/check-workflow-installs.py reads the guard as optional.

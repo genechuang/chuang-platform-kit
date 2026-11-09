@@ -80,6 +80,10 @@ def test_shell_only_for_the_windows_shims():
         lib.shutil.which = lambda c: {'gh': r'C:\Program Files\GitHub CLI\gh.exe'}.get(c)
         lib.run(['gh', 'api', 'x'])
         lib.run(['gcloud', 'x'])
+        lib._FOUND.clear()
+        lib.shutil.which = lambda c: {'npx': r'C:\Program Files\nodejs\npx.CMD', 'npm': r'C:\Program Files\nodejs\npm.CMD'}.get(c)
+        lib.run(['npx', 'jest', '--ci'])
+        lib.run(['npm', 'ci'])
     finally:
         lib.subprocess.run, lib.os.name, lib.shutil.which = keep, keep_os, keep_which
         lib._FOUND.clear()
@@ -88,7 +92,10 @@ def test_shell_only_for_the_windows_shims():
     eq('shims', seen, [('gh', True, lib.NO_WINDOW, None), ('git', False, lib.NO_WINDOW, None),
                        ('gcloud', False, lib.NO_WINDOW, None),
                        # gh.exe runs directly (the desktop's: no cmd.exe to cut its URL); a shim not on PATH keeps the shell
-                       ('gh', False, lib.NO_WINDOW, None), ('gcloud', True, lib.NO_WINDOW, None)])
+                       ('gh', False, lib.NO_WINDOW, None), ('gcloud', True, lib.NO_WINDOW, None),
+                       # Node's npx.CMD and npm.CMD (an upper-case extension on the desktop) go through the shell: without
+                       # it `npx jest` could not start (WinError 2, SMADPickleBot #1188)
+                       ('npx', True, lib.NO_WINDOW, None), ('npm', True, lib.NO_WINDOW, None)])
 
 
 def test_a_shell_command_keeps_its_ampersand():

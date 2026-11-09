@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.17.1 - 2026-11-09 PT
+
+- `proc.SHIMS` holds Node's `npx`, `npm` and `yarn` beside `gh` and `gcloud`. On Windows each is a .cmd file only the
+  shell finds, so 0.17.0's `cicd.jest` could not start `npx jest` (WinError 2). SMADPickleBot's Linux gate refused the
+  push that would have run it (#1188). `needs_shell` still runs an .exe directly.
+
 ## 0.17.0 - 2026-11-09 PT
 
 - `chuang_sdlc.cicd.jest` (SMADPickleBot #1188, phase 2 of #235): the app's Jest suites a pipeline change reaches, and
