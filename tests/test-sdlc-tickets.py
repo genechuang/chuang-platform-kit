@@ -85,6 +85,7 @@ class FakeGH:
         self.writes, self.comments, self.closed, self.labels_added, self.removed = [], [], [], [], []
         self.created, self.subs, self.tops, self.renames, self.links, self.error = [], [], [], [], [], ''
         self.moves, self.refs, self.refuse_move = [], {}, ''
+        self.batch_reads, self.batch_writes, self.refuse_items = [], [], set()   # 0.9.0's places and move_many
         self.next_number = 500
 
     def auth_ok(self):
@@ -175,6 +176,33 @@ class FakeGH:
 
     def graphql(self, query, variables=None):
         v = variables or {}
+        if 'projectItems(first: 10)' in query and 'repository(owner: $o' in query:   # places' one aliased read (0.9.0)
+            import re as _re
+            self.batch_reads.append(query)
+            repo = {}
+            for m in _re.finditer(r'i(\d+): issue\(number: \d+\)', query):
+                n = int(m.group(1))
+                repo[f'i{n}'] = {'projectItems': {'nodes': [
+                    {'id': it, 'project': {'id': CFG['id']}, 'status': {'name': c['status']}, 'light': {'name': c['light']}}
+                    for it, c in self.cards.items() if c.get('number') == n]}}
+            return {'repository': repo}
+        if ' c0_0: ' in query or query.startswith('mutation(') and 'c0_0:' in query:   # move_many's one aliased write
+            import re as _re
+            items = {k[1:]: it for k, it in v.items() if _re.fullmatch(r'i\d+', k)}
+            if self.refuse_items & set(items.values()):
+                self.error = 'HTTP 422 a refused item'
+                return None
+            self.batch_writes.append(sorted(items.values()))
+            out = {}
+            for j, it in items.items():
+                k = 0
+                while f'f{j}_{k}' in v:
+                    self.item_fields(it, {v[f'f{j}_{k}']: (lambda x: x.get('singleSelectOptionId', x) if isinstance(x, dict) else x)(v.get(f'v{j}_{k}'))})
+                    out[f'c{j}_{k}'] = {'projectV2Item': {'id': it}}
+                    k += 1
+                if f't{j}:' in query:
+                    self.tops.append(it)
+            return out
         if 'fieldValueByName(name: "Status")' in query and 'node(id:' in query:   # ticket_place
             card = self.cards.get(v['id'])
             if card is None or card.get('unread'):
@@ -322,6 +350,32 @@ gh = fresh({6: {}, 7: {}}, {'IT_6': {'number': 6, 'status': 'Up Next', 'light': 
                             'IT_7': {'number': 7, 'status': 'Building', 'light': 'ask'}})
 check('start: to the shipyard with the working light; needs is kept', T.start([6, 7], gh), [(6, True), (7, True)])
 check('start lights', (gh.cards['IT_6']['light'], gh.cards['IT_7']['light']), ('busy', 'ask'))
+
+print('moves, batched (0.9.0)')
+cards = {f'IT_{n}': {'number': n, 'status': 'Ready', 'light': 'ok'} for n in range(10, 30)}
+cards['IT_29'] = {'number': 29, 'status': 'Done', 'light': 'going'}   # already in the ship column
+gh = fresh({n: {} for n in range(10, 31)}, cards)
+marks.clear()
+got = T.move_many(list(range(10, 31)), 'shipping', gh)
+check('the positive case: 20 cards in one read and one write, a card already there said as moved, one off the board not moved',
+      (len(gh.batch_reads), len(gh.batch_writes), len(gh.batch_writes[0]), got[-2:], got[0]),
+      (1, 1, 19, [(29, True), (30, False)], (10, True)))
+check('each moved card is in the ship column with its Light, at the top, the ship mark once for all of them',
+      (gh.cards['IT_10']['status'], gh.cards['IT_10']['light'], len(gh.tops), sorted(set(marks)) == list(range(10, 29))),
+      ('Done', 'going', 19, True))
+gh = fresh({1: {}, 2: {}}, {'IT_1': {'number': 1, 'status': 'Done', 'light': 'going'}, 'IT_2': {'number': 2, 'status': 'Backlog', 'light': ''}})
+check('forward only: a card past the target stays where it is', (T.move_many([1], 'dock', gh), gh.batch_writes), ([(1, True)], []))
+gh = fresh({n: {} for n in range(40, 44)}, {f'IT_{n}': {'number': n, 'status': 'Ready', 'light': 'ok'} for n in range(40, 44)})
+gh.refuse_items = {'IT_42'}
+check('a refused document is halved and sent again: only the bad card is not moved',
+      T.move_many([40, 41, 42, 43], 'shipping', gh), [(40, True), (41, True), (42, False), (43, True)])
+saved = T.MOVE_CHUNK
+T.MOVE_CHUNK = 2
+gh = fresh({n: {} for n in range(50, 55)}, {f'IT_{n}': {'number': n, 'status': 'Ready', 'light': 'ok'} for n in range(50, 55)})
+T.move_many(list(range(50, 55)), 'shipping', gh)
+T.MOVE_CHUNK = saved
+check('chunked: five cards at a chunk of two are three writes', len(gh.batch_writes), 3)
+check('the chunk is 100 cards (Gene, 11/8/26 9:12 PM PT)', T.MOVE_CHUNK, 100)
 
 print('filing')
 gh = fresh()

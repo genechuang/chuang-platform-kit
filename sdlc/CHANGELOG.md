@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.9.0 - 2026-11-08 PT
+
+- `tickets.places(numbers)`: every card's (item, column, Light, raw column) in ONE aliased GraphQL query a
+  PLACES_CHUNK (50) of issues, through the issue's own project items, so no card is added to the board to read it.
+- `tickets.move_many(numbers, status)`: move() for a release's cards in a few requests: places' one read, the same
+  forward-only rule, the host's ship mark once for all of them, then every card's Status, Light and top position in ONE
+  aliased mutation document a MOVE_CHUNK (100) of cards, a refused document halved and sent again. `live_numbers`
+  writes its cards' Status, Light and Release the same way, a ticket not on the board taking the one-card path.
+  SMADPickleBot #1197 (Gene, 11/8/26 9:11 PM PT: "cant we batch graphql calls for all tickets in dock"): a 20-card
+  move spent about 140 calls and the kit's 60-a-minute cap; it now spends about 2 to 4. move() keeps its one-card form.
+
 ## 0.8.3 - 2026-11-08 PT
 
 - `scrum.closed_needs_sweep` acts only on a card whose own Light is the needs Light, not on GitHub's filter alone: a

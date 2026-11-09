@@ -1069,6 +1069,134 @@ def ticket_place(number: int, run=None, cfg: dict = None):
     return item, column(raw, cfg), ((node.get('light') or {}).get('name') or ''), raw
 
 
+PLACES_CHUNK = 50     # issues read in one aliased query (each a few nodes)
+MOVE_CHUNK = 100      # cards written in one aliased mutation document (Gene, 11/8/26 9:12 PM PT: "chunk at 100 cards")
+
+
+def _places_query(numbers) -> str:
+    fields = ('id project { id } status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue '
+              '{ name } } light: fieldValueByName(name: "Light") { ... on ProjectV2ItemFieldSingleSelectValue { name } }')
+    body = ' '.join(f'i{n}: issue(number: {int(n)}) {{ projectItems(first: 10) {{ nodes {{ {fields} }} }} }}' for n in numbers)
+    return f'query($o: String!, $r: String!) {{ repository(owner: $o, name: $r) {{ {body} }} }}'
+
+
+def places(numbers, run=None, cfg: dict = None) -> dict:
+    """{number: (item id, column, Light, the column's raw name)} for every ticket on this board, in ONE aliased GraphQL
+    query a PLACES_CHUNK of issues (0.9.0; SMADPickleBot #1197: a 20-card move read each card twice and re-added it to
+    the board each time, about 7 calls a card, and spent the kit's 60-a-minute cap). Read through the issue's own project
+    items, so no card is added to the board to read it; a ticket not on this board is left out, and a chunk GitHub does
+    not answer leaves its tickets out (the caller reads that as not placed)."""
+    run, cfg = _run(run), _cfg(cfg)
+    owner, name = cfg['repo'].split('/', 1)
+    out, numbers = {}, [int(n) for n in dict.fromkeys(numbers)]
+    for i in range(0, len(numbers), PLACES_CHUNK):
+        chunk = numbers[i:i + PLACES_CHUNK]
+        try:
+            data = run.graphql(_places_query(chunk), {'o': owner, 'r': name})
+        except Exception:   # noqa: BLE001 - a client that raises is a GitHub that did not answer: not placed
+            data = None
+        repo = (data or {}).get('repository') if isinstance(data, dict) else None
+        if not isinstance(repo, dict):
+            continue
+        for n in chunk:
+            for node in (((repo.get(f'i{n}') or {}).get('projectItems') or {}).get('nodes') or []):
+                if ((node or {}).get('project') or {}).get('id') != cfg['id']:
+                    continue
+                raw = (node.get('status') or {}).get('name') or ''
+                out[n] = (node['id'], column(raw, cfg), (node.get('light') or {}).get('name') or '', raw)
+    return out
+
+
+def _option(field: str, value: str, cfg: dict):
+    """(field id, option id or None to clear) for a single-select by its name, with no read and no mark; False for an
+    option the board lacks (the light_fallback read as _field_value does)."""
+    spec = cfg['fields'][field]
+    if value == '':
+        return spec['id'], None
+    if value not in spec['options']:
+        value = cfg.get('light_fallback', {}).get(value, value)
+    return (spec['id'], spec['options'][value]) if value in spec['options'] else (spec['id'], False)
+
+
+def _write_many(writes, top, run, cfg) -> set:
+    """The items GitHub took from ONE aliased mutation document: `writes` [(item, {field id: option id or None})],
+    `top` the items put at the top of their column; a document refused is split in half and sent again once, so one bad
+    card never sinks the other ninety-nine."""
+    if not writes:
+        return set()
+    decl, body, variables = ['$p: ID!'], [], {'p': cfg['id']}
+    for j, (item, fields) in enumerate(writes):
+        variables[f'i{j}'] = item
+        decl.append(f'$i{j}: ID!')
+        for k, (fid, opt) in enumerate(fields.items()):
+            variables[f'f{j}_{k}'] = fid
+            decl.append(f'$f{j}_{k}: ID!')
+            if opt is None:
+                body.append(f'c{j}_{k}: clearProjectV2ItemFieldValue(input: {{projectId: $p, itemId: $i{j}, fieldId: $f{j}_{k}}}) '
+                            '{ projectV2Item { id } }')
+            else:
+                variables[f'v{j}_{k}'] = opt if isinstance(opt, dict) else {'singleSelectOptionId': str(opt)}
+                decl.append(f'$v{j}_{k}: ProjectV2FieldValue!')
+                body.append(f'c{j}_{k}: updateProjectV2ItemFieldValue(input: {{projectId: $p, itemId: $i{j}, '
+                            f'fieldId: $f{j}_{k}, value: $v{j}_{k}}}) {{ projectV2Item {{ id }} }}')
+        if item in top:
+            body.append(f't{j}: updateProjectV2ItemPosition(input: {{projectId: $p, itemId: $i{j}}}) {{ items(first: 1) {{ nodes {{ id }} }} }}')
+    try:
+        data = run.graphql('mutation(' + ', '.join(decl) + ') { ' + ' '.join(body) + ' }', variables)
+    except Exception:   # noqa: BLE001 - a client that raises is a refusal: halved and sent again as one is
+        data = None
+    if isinstance(data, dict):
+        return {item for j, (item, fields) in enumerate(writes)
+                if all(((data.get(f'c{j}_{k}') or {}).get('projectV2Item') or {}).get('id') for k in range(len(fields)))}
+    if len(writes) == 1:
+        return set()
+    half = len(writes) // 2
+    return _write_many(writes[:half], top, run, cfg) | _write_many(writes[half:], top, run, cfg)
+
+
+def move_many(numbers, status: str, run=None, cfg: dict = None) -> list:
+    """move() for many tickets in a few requests (0.9.0, SMADPickleBot #1197; Gene, 11/8/26 9:11 PM PT: "cant we batch
+    graphql calls for all tickets in dock that need to be moved to ship and light tag changed??"): every card's place in
+    one aliased read (places), the same forward-only rule as move() (a card already at `status` or past it said as
+    moved, never stepped back), the host's before_ship_move once for every card going into the ship column, then every
+    card's Status and Light, and its top position for TOP_ROLES, in one aliased mutation document a MOVE_CHUNK of cards.
+    [(number, ok)] in the order given; a card not on the board, or one GitHub refused, is (n, False). A 20-card ship
+    costs about 2 to 4 GraphQL calls where move() spent about 140."""
+    run, cfg = _run(run), _cfg(cfg)
+    roles = cfg['flow']
+    role = status if status in cfg['stages'] else next((r for r in roles if stage(r, cfg) == column(status, cfg)), status)
+    target = roles.index(role) if role in roles else None
+    numbers = [int(n) for n in numbers]
+    got = places(numbers, run, cfg)
+    status_f = _option('Status', column(role, cfg), cfg)
+    light_f = (_option('Light', cfg['lights'][role], cfg) if 'Light' in cfg['fields'] and role in cfg.get('lights', {})
+               else None)
+    if status_f[1] is False or (light_f is not None and light_f[1] is False):
+        return [(n, False) for n in numbers]
+    fields = dict([status_f] + ([light_f] if light_f else []))
+    done, todo = {}, []
+    for n in numbers:
+        if n not in got:
+            done[n] = False
+            continue
+        item, now, light, raw = got[n]
+        at = rank(now, light, raw, cfg)
+        if target is not None and at is not None and at >= target:
+            done[n] = True
+            continue
+        todo.append((n, item))
+    if (todo and cfg['stages'].get(role, column(role, cfg)) == stage('shipping', cfg)
+            and _HOST['before_ship_move'] is not None and is_host_runner(run)):   # as move(): the host's own runner only
+        _HOST['before_ship_move']([n for n, _i in todo], run)
+    top = {item for _n, item in todo} if role in TOP_ROLES else set()
+    for i in range(0, len(todo), MOVE_CHUNK):
+        chunk = todo[i:i + MOVE_CHUNK]
+        took = _write_many([(item, fields) for _n, item in chunk], top, run, cfg)
+        for n, item in chunk:
+            done[n] = item in took
+    return [(n, done.get(n, False)) for n in numbers]
+
+
 def ticket_column(number: int, run=None, cfg: dict = None):
     """(item id, column) of one ticket (ticket_place's first two); None when GitHub does not answer."""
     got = ticket_place(number, run, cfg)
@@ -1663,8 +1791,20 @@ def live_numbers(numbers, release: str = '', run=None, cfg: dict = None, work: d
     if pr is None and release:
         pr = ship_pr.find(release, run, cfg)
     done, unlinked, closed = [], [], []
+    numbers = [int(n) for n in numbers]
+    # 0.9.0 (#1197): every card's column, Light and Release in one aliased read and one aliased write a MOVE_CHUNK, the
+    # ship mark once; a ticket the read did not find on the board takes the one-card path, which adds it.
+    got = places(numbers, run, cfg)
+    fields = dict([_option('Status', stage('shipped', cfg), cfg)]
+                  + ([_option('Light', cfg['lights']['shipped'], cfg)] if 'Light' in cfg['fields'] and 'shipped' in cfg.get('lights', {}) else [])
+                  + ([(cfg['fields']['Release']['id'], {'text': release_text(release, co)})] if release and 'Release' in cfg['fields'] else []))
+    batched = [n for n in numbers if n in got] if all(v is not False for v in fields.values()) else []
+    if batched and _HOST['before_ship_move'] is not None and is_host_runner(run):
+        _HOST['before_ship_move'](batched, run)
+    for i in range(0, len(batched), MOVE_CHUNK):
+        _write_many([(got[n][0], fields) for n in batched[i:i + MOVE_CHUNK]], set(), run, cfg)
     for n in numbers:
-        item = item_id(n, run, cfg)
+        item = None if n in batched else item_id(n, run, cfg)
         if item:
             if _HOST['before_ship_move'] is not None and is_host_runner(run):
                 _HOST['before_ship_move']([n], run)
