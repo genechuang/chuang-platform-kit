@@ -155,6 +155,71 @@ def is_link(path: str) -> bool:
     return bool(attrs & 0x400)   # FILE_ATTRIBUTE_REPARSE_POINT
 
 
+def _read_bytes(path: str):
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def lend_dir(work: str, sources, folder: str = 'app/node_modules', lock: str = 'app/package-lock.json') -> str:
+    """`<work>/<folder>` lent from the first of `sources` (checkouts of the same repo) that has the folder and whose
+    `lock` file matches the work's byte for byte: a junction on Windows, a symbolic link elsewhere. An ignored folder
+    (installed packages) is missing from a fresh worktree, and a test that needs it cannot run there. What happened is
+    the answer, one line for the caller to say: lent from a source, the work's own folder already there, no lock file
+    in the work, or why no source would do. Undo it with unlink_lent before the worktree goes: Git for Windows' `git
+    worktree remove` deletes through a live junction into the checkout that lent it (SMADPickleBot #1094's review)."""
+    dst = os.path.join(work, *folder.split('/'))
+    want = _read_bytes(os.path.join(work, *lock.split('/')))
+    if want is None:
+        return f'no {lock} in {work}, none lent'
+    if os.path.lexists(dst):
+        return f'its own {folder} already there'
+    seen = []
+    for checkout in dict.fromkeys(s for s in sources if s):
+        if os.path.normcase(os.path.abspath(checkout)) == os.path.normcase(os.path.abspath(work)):
+            continue
+        src = os.path.join(checkout, *folder.split('/'))
+        if not os.path.isdir(src):
+            seen.append(f'{checkout} has none')
+            continue
+        if _read_bytes(os.path.join(checkout, *lock.split('/'))) != want:
+            seen.append(f"{checkout}'s {lock} differs")
+            continue
+        try:
+            if os.name == 'nt':
+                import _winapi
+                _winapi.CreateJunction(src, dst)
+            else:
+                os.symlink(src, dst, target_is_directory=True)
+        except OSError as e:
+            seen.append(f'{checkout}: {e}')
+            continue
+        return f'{folder} lent from {checkout}'
+    return f'no {folder} lent (' + ('; '.join(seen) or 'no source') + ')'
+
+
+def unlink_lent(work: str, folder: str = 'app/node_modules') -> str:
+    """'' once `<work>/<folder>` is no link: unlinked here, never there, or the work's own directory (which lends nothing
+    and is never touched); else why the link stayed. Only the link itself goes: os.unlink, then os.rmdir (a Windows
+    junction unlink refuses, a symbolic link off Windows refusing rmdir); neither touches the target, and a real
+    directory is never emptied."""
+    link = os.path.join(work, *folder.split('/'))
+    if not is_link(link):
+        return ''
+    why = 'still there'
+    for drop in (os.unlink, os.rmdir):
+        try:
+            drop(link)
+        except OSError as e:
+            why = f'{type(e).__name__}: {e}'
+            continue
+        if not os.path.lexists(link):
+            return ''
+    return why
+
+
 def kill_tree(p) -> None:
     """The process and every child of it, killed; a failure is ignored (the cap's own TimeoutExpired is the report)."""
     try:

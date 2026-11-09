@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.18.0 - 2026-11-09 PT
+
+- `proc.lend_dir(work, sources, folder='app/node_modules', lock='app/package-lock.json')` and
+  `proc.unlink_lent(work, folder=...)` (SMADPickleBot #1283).
+  - `lend_dir` lends a worktree an ignored folder, such as installed packages, from the first checkout whose lock file
+    matches the worktree's. It makes a junction on Windows and a symbolic link elsewhere, and says what it did.
+  - `unlink_lent` removes only the link, never through it, and never empties a real folder.
+  - Both are lifted from SMADPickleBot's ship.py (#1094), so its dock sync and its dock-push share one copy.
+
 ## 0.17.1 - 2026-11-09 PT
 
 - `proc.SHIMS` holds Node's `npx`, `npm` and `yarn` beside `gh` and `gcloud`. On Windows each is a .cmd file only the

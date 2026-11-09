@@ -220,6 +220,62 @@ def test_is_link_knows_a_junction_or_a_symlink_and_never_a_real_folder():
     shutil.rmtree(d, ignore_errors=True)
 
 
+def _checkout(root, name, lock=b'lock-1', packages=True):
+    """A checkout with an app/package-lock.json and, when asked, an installed app/node_modules holding one file."""
+    c = os.path.join(root, name)
+    os.makedirs(os.path.join(c, 'app'))
+    if lock is not None:
+        with open(os.path.join(c, 'app', 'package-lock.json'), 'wb') as f:
+            f.write(lock)
+    if packages:
+        os.makedirs(os.path.join(c, 'app', 'node_modules', 'jest'))
+        with open(os.path.join(c, 'app', 'node_modules', 'jest', 'index.js'), 'w') as f:
+            f.write('x')
+    return c
+
+
+def test_lend_dir_lends_the_first_matching_checkouts_folder_and_unlink_lent_takes_only_the_link():
+    """SMADPickleBot #1283, the positive case: a worktree with no app/node_modules gets a link to the first source whose package-lock.json matches its own, a source with another lock or none is passed over and named; unlink_lent removes the link and keeps every file it pointed at"""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp()
+    work = _checkout(d, 'work', packages=False)
+    other = _checkout(d, 'other', lock=b'lock-2')
+    bare = _checkout(d, 'bare', packages=False)
+    main = _checkout(d, 'main')
+    said = lib.lend_dir(work, (work, other, bare, main))
+    link = os.path.join(work, 'app', 'node_modules')
+    eq('lent from the matching source', (said, lib.is_link(link), os.path.exists(os.path.join(link, 'jest', 'index.js'))),
+       (f'app/node_modules lent from {main}', True, True))
+    eq('  a second lend leaves it', lib.lend_dir(work, (main,)), 'its own app/node_modules already there')
+    eq('  unlinked: the link gone, the source untouched',
+       (lib.unlink_lent(work), os.path.lexists(link), os.path.exists(os.path.join(main, 'app', 'node_modules', 'jest', 'index.js'))),
+       ('', False, True))
+    eq('  no source would do: each named',
+       lib.lend_dir(work, (other, bare)),
+       f"no app/node_modules lent ({other}'s app/package-lock.json differs; {bare} has none)")
+    eq('  no sources at all', lib.lend_dir(work, ()), 'no app/node_modules lent (no source)')
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def test_lend_dir_never_touches_a_real_folder():
+    """  a work with its own real folder, or with no lock file, is left as it is; unlink_lent never empties a real folder"""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp()
+    own = _checkout(d, 'own')
+    nolock = _checkout(d, 'nolock', lock=None, packages=False)
+    main = _checkout(d, 'main')
+    eq('its own folder kept', (lib.lend_dir(own, (main,)), lib.unlink_lent(own),
+                               os.path.exists(os.path.join(own, 'app', 'node_modules', 'jest', 'index.js'))),
+       ('its own app/node_modules already there', '', True))
+    eq('  no lock file: nothing lent', (lib.lend_dir(nolock, (main,)).startswith('no app/package-lock.json in '),
+                                       os.path.lexists(os.path.join(nolock, 'app', 'node_modules'))), (True, False))
+    eq('  another folder and lock by name', lib.lend_dir(nolock, (main,), folder='web/node_modules', lock='web/yarn.lock'),
+       f'no web/yarn.lock in {nolock}, none lent')
+    shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == '__main__':
     for name, fn in list(globals().items()):
         if name.startswith('test_') and callable(fn):
