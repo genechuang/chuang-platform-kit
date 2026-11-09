@@ -774,6 +774,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `closed_filter(cfg)` | GitHub's own filter for the closed cards outside the shipped and failed columns (and a `shipment` column the board may have): a point a hundred cards, never the whole board. |
 | `closed_plan(card, comments, login, state, told, now, cfg)` | What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a finished one (an old column name read as its new one); `wreck` for a close as not planned or a duplicate; `ship` when its owner's newest `Scrum:` line… |
 | `closed_sweep(cfg, gh, store, now, dry, letters, only=, skip=)` | The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with closed_filter, each settled by closed_plan: to the ship column with its shipped Light, to the failed column, or its question added to its owner's le… |
+| `closed_needs_filter(cfg)` | GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column. |
+| `closed_needs_sweep(cfg, gh, dry=)` | A closed ticket never keeps the needs-the-lead Light (0.8.2; SMADPickleBot #1133: a Needs you set on a shipped card sat there three days, outside every column the other sweeps read): each closed card carrying it, read with closed_needs_filter in any column, h… |
 | `question_key(question)` | A question's short fingerprint ('' for none): a card is asked again only when its question changes. |
 | `letter(owner, items)` | (subject, text) of one owner's letter: every card of theirs with a new question. |
 | `comment_body(when, found, did)` | The card's one scrum master comment, edited in place each sweep: when, what it found and what it did. |

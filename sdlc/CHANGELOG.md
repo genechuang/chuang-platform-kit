@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.8.2 - 2026-11-08 PT
+
+- `scrum.closed_needs_sweep` (and `closed_needs_filter`): the sweep reads the closed cards still carrying the
+  needs-the-lead Light, in any column, with GitHub's own filter, reads each issue once more (a reopened one keeps its
+  Light), clears the Light and unassigns the lead; `sweep` runs it beside `closed_sweep`. A closed card in a finished
+  column was read by no sweep, so a Needs you set after a ticket shipped stayed for days (SMADPickleBot #1133, #953).
+
 ## 0.8.1 - 2026-11-08 PT
 
 - `tickets.sweep`: an alert issue (off the Project, not waiting for triage) whose newest owner's `Triage:` line is

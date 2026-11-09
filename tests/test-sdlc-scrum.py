@@ -169,6 +169,22 @@ check('the closed filter leaves out the finished columns', S.closed_filter(CFG),
 print('the sweep')
 issue = lambda n, comments=(), state='OPEN': {'id': f'G{n}', 'state': state, 'blockedBy': {'nodes': []},  # noqa: E731
                                               'comments': {'nodes': list(comments)}}
+
+print('closed cards with a needs light (#1133)')
+check('the positive case: the filter reads the closed cards carrying the needs Light, in any column',
+      S.closed_needs_filter(CFG), 'is:closed is:issue light:"ask"')
+needs = Board({'light:"ask"': [dict(card(700, light='ask'), status='Done'), dict(card(701, light='ask'), status='Done')]},
+              issues={700: issue(700, state='CLOSED'), 701: issue(701)}, places={700: ('Done', 'ask'), 701: ('Done', 'ask')})
+lines = S.closed_needs_sweep(CFG, S.GitHub(CFG, run=needs))
+check("a closed card's needs Light cleared and the lead unassigned; one reopened since the filter keeps its Light",
+      (lines, [w[0] for w in needs.writes]),
+      (['scrum: closed #700 kept ask: cleared, the lead unassigned'], ['fields', 'unassign']))
+check('the clear is the Light written to nothing, the unassign the lead',
+      (needs.writes[0][-1], needs.writes[1][-1]), ({'F_light': None}, 'acme'))
+dry = Board({'light:"ask"': [dict(card(702, light='ask'), status='Done')]}, issues={702: issue(702, state='CLOSED')},
+            places={702: ('Done', 'ask')})
+check('a dry run says it and writes nothing', (S.closed_needs_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), dry=True), dry.writes),
+      (['scrum: closed #702 kept ask: cleared, the lead unassigned'], []))
 ship_card = {'number': None, 'id': 'SC', 'title': 'SHIP IT old title', 'status': 'Backlog', 'draft': 'DI_sc', 'body': 'b'}
 gh = Board({'status:"Building"': [dict(card(600, light='busy'), status='Building'), dict(card(601), status='Building'),
                                   dict(card(602), status='Building')],

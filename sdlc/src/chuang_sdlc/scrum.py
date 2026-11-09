@@ -616,6 +616,35 @@ def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, 
     return lines
 
 
+def closed_needs_filter(cfg: dict) -> str:
+    """GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column."""
+    return f'is:closed is:issue light:"{cfg["lights"]["needs"]}"'
+
+
+def closed_needs_sweep(cfg: dict, gh, dry: bool = False) -> list:
+    """A closed ticket never keeps the needs-the-lead Light (0.8.2; SMADPickleBot #1133: a Needs you set on a shipped
+    card sat there three days, outside every column the other sweeps read): each closed card carrying it, read with
+    closed_needs_filter in any column, has the Light cleared and the lead unassigned; the issue is read once more first,
+    so a card reopened since GitHub's filter saw it keeps its Light. Lines."""
+    cards = _tickets.board_items(closed_needs_filter(cfg), gh.run, cfg)
+    if cards is None:
+        return ['scrum: closed cards with a needs light: the board did not answer; next sweep']
+    lines = []
+    for c in cards:
+        n = (c.get('content') or {}).get('number')
+        if not n or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg):
+            continue
+        issue = gh.card(n)
+        if not issue or issue.get('state') != 'CLOSED':
+            continue   # unreadable, or reopened since the filter saw it
+        ok = gh.field(n, 'Light', '')
+        if ok:
+            gh.assign(n, on=False)
+        lines.append(f"scrum: closed #{n} kept {cfg['lights']['needs']}: " +
+                     ('cleared, the lead unassigned' if ok else 'the clear was refused; next sweep tries again'))
+    return lines
+
+
 def question_key(question: str) -> str:
     """A question's short fingerprint ('' for none): a card is asked again only when its question changes."""
     return hashlib.sha256(question.encode()).hexdigest()[:16] if question else ''
@@ -883,6 +912,7 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
     if only is None:   # the catch for a close the host's own listener missed
         shipyard = {(c.get('content') or {}).get('number') for c in cards}   # its closed cards were just moved above
         lines += closed_sweep(cfg, gh, store, now, dry, letters, skip=shipyard)
+        lines += closed_needs_sweep(cfg, gh, dry)
         # The sweep's own store reads the ship record too: no second client.
         reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
         lines += ship_card_home(cfg, gh, dry, ship_run=reader)
