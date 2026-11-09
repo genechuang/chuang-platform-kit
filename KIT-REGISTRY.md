@@ -755,6 +755,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 
 | Name | Purpose |
 |---|---|
+| `eta_ask(n)` | How an owner gives a card's ETA, in the sweep's asks: the host's command for the board's ETA field (0.16.0, configure(eta_command=)) and the `Scrum: building \| eta <when>` line, which the sweep copies into it. |
 | `configure(**settings)` | The host's settings: `lead` (a name), `store`, `mail`, `finished`, `unplanned`, `closed_question`, `closed_to`, `closed_told`, `closer`, `ship_run_of` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text} for this module's worded const… |
 | `setting(name)` | One of the host's settings (configure). |
 | `lead()` | The project's lead, by the name the board's Owner field gives them. |
@@ -766,6 +767,9 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `gh_stamp(when)` | A stamp in GitHub's own `2026-10-30T00:49:54Z` form, so it compares as text with a comment's createdAt (the sweep's own stamps are Python's isoformat, `+00:00`). |
 | `localize(naive, tz)` | A wall-clock time in `tz`, standard time where the wall clock is ambiguous or skipped (the hour a clock change repeats or leaves out), as a stored stamp is never: an ETA is a future wall-clock time. |
 | `parse_eta(text, now)` | An ETA's instant in the kit's zone: `10/29/26 5:00 PM`, `10/29 5 PM`, `5:00 PM`, `5 PM` (today, or tomorrow once past), or ISO; None when it cannot be read (asked again after STALE_HOURS like any quiet card). A leading weekday, short or full, and a trailing P… |
+| `field_eta(day)` | The instant a board's ETA field means (0.16.0, SMADPickleBot #1274): its day's end, 11:59 PM in the kit's zone, since a Date field holds no time; None when it holds none. |
+| `eta_day(text, now)` | The day, YYYY-MM-DD, an owner's ETA names for the board's field: a date alone (`11/10/26`, `11/10`, `2026-11-10`, a leading weekday and a trailing PT read past) or any ETA parse_eta reads, its day in the kit's zone; '' when none. |
+| `card_eta(card, line, now, state=)` | (the ETA the sweep decides on, the day to write into the board's field or ''), 0.16.0: the field's, unless the owner's `Scrum: building \| eta` line is newer than the field and readable, which then names it (to the minute when the line gives one) and is copie… |
 | `plan(card, facts, state, now, cfg)` | What the sweep does for one shipyard card: {state (what it found), question (to its owner, '' for none), actions [(kind, value)], change (a line for a new comment, '' for none)}. Pure: `facts` is {line, blockers [(number, state)], last_commit (datetime or Non… |
 | `finished(col, cfg)` | Whether a closed card's column is one it belongs in (configure(finished=), else the shipped and failed columns and a `shipment` column the board may have); an old name is read as its new one. |
 | `unplanned(reason)` | Whether a close was as not planned or a duplicate (configure(unplanned=), else GitHub's two reasons). |

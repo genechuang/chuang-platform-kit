@@ -117,6 +117,68 @@ check("  0.15.0: a signed comment after the ask is never the lead's answer (a se
        S.scrum_line([say('Scrum: next | after #4\n\n— **Snow White** · Claude session')], LOGIN)['kind']),
       ({}, 'Go with B', 'next'))
 
+print("0.16.0: the board's ETA field")
+CFGE = dict(CFG, fields=dict(CFG['fields'], ETA={'id': 'F_eta', 'type': 'date'}))
+busy = lambda **kw: dict(card(light='busy'), **kw)  # noqa: E731
+recent = NOW - timedelta(hours=1)
+at = lambda minutes: (NOW - timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731
+bline = lambda eta, minutes=5: {'kind': 'building', 'eta': eta, 'at': at(minutes), 'ref': None}  # noqa: E731
+ahead = S.plan(busy(eta='2026-10-30', eta_at=at(30)), {'line': {}, 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)
+passed = S.plan(busy(eta='2026-10-28', eta_at=at(30)), {'line': {}, 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)
+check("the positive case: a card's ETA field ahead is the sweep's ETA, its day's end, and nobody is asked; one past is asked about",
+      ((ahead['state'], ahead['question'], ahead['actions']), passed['state'].endswith('has passed'), 'eta <when>' in passed['question']),
+      (('building, ETA 10/30/26 11:59 PM PT', '', []), True, True))
+newer = S.plan(busy(eta='', eta_at=''), {'line': bline('10/31/26 3 PM'), 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)
+older = S.plan(busy(eta='2026-11-05', eta_at=at(1)), {'line': bline('10/31/26 3 PM', 10), 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)
+day_only = S.plan(busy(eta='', eta_at=''), {'line': bline('11/2/26'), 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)
+no_field = S.plan(busy(), {'line': bline('10/31/26 3 PM'), 'blockers': [], 'last_commit': recent}, {}, NOW, CFG)
+check("  an owner's line newer than the field names the ETA and is copied into it (a date alone too); an older one is not; a board with no ETA field writes nothing",
+      ((newer['state'], newer['actions']), (older['state'], older['actions']), (day_only['state'], day_only['actions']),
+       (no_field['state'], no_field['actions'])),
+      (('building, ETA 10/31/26 3:00 PM PT', [('eta', ('2026-10-31', at(5)))]), ('building, ETA 11/5/26 11:59 PM PT', []),
+       ('building, ETA 11/2/26 11:59 PM PT', [('eta', ('2026-11-02', at(5)))]), ('building, ETA 10/31/26 3:00 PM PT', [])))
+copied = {'eta_line_at': at(5)}   # the sweep copied this line into the field (the review of 11/9/26 11:03 AM PT)
+after_copy = S.plan(busy(eta='2026-10-31', eta_at=at(1)), {'line': bline('10/31/26 3 PM'), 'blockers': [], 'last_commit': recent}, copied, NOW, CFGE)
+cleared = S.plan(busy(eta='', eta_at=''), {'line': bline('10/31/26 3 PM'), 'blockers': [], 'last_commit': recent}, copied, NOW, CFGE)
+moved = S.plan(busy(eta='2026-11-04', eta_at=at(1)), {'line': bline('10/31/26 3 PM'), 'blockers': [], 'last_commit': recent}, copied, NOW, CFGE)
+fresh_line = S.plan(busy(eta='2026-11-04', eta_at=at(10)), {'line': bline('11/1/26 9 AM', 2), 'blockers': [], 'last_commit': recent}, copied, NOW, CFGE)
+check("  review: a line the sweep copied keeps its minute after the copy; the owner's clear stays cleared; the owner's new day rules; a newer line still wins",
+      ((after_copy['state'], after_copy['actions']), (cleared['state'], cleared['actions']), (moved['state'], moved['actions']),
+       (fresh_line['state'], fresh_line['actions'])),
+      (('building, ETA 10/31/26 3:00 PM PT', []), ('building, no ETA', []), ('building, ETA 11/4/26 11:59 PM PT', []),
+       ('building, ETA 11/1/26 9:00 AM PT', [('eta', ('2026-11-01', at(2)))])))
+S.configure(eta_command='tickets eta {n} <when>')
+asked = S.plan(busy(eta='2026-10-28', eta_at=at(30)), {'line': {}, 'blockers': [], 'last_commit': recent}, {}, NOW, CFGE)['question']
+S.configure(eta_command='')
+check("  the host's command is named in the ask, the card's number in it", '`tickets eta 600 <when>` or `Scrum: building | eta <when>`' in asked, True)
+check('  eta_day: a date alone, a weekday and PT read past, a month/day already past is next year, a time is its day, a word is none',
+      [S.eta_day(t, NOW) for t in ('11/10', 'Tue 11/10/26 PT', '10/1', '5 PM', '2026-11-12', 'when it is done')],
+      ['2026-11-10', '2026-11-10', '2027-10-01', '2026-10-29', '2026-11-12', ''])
+check('  review: a year-less 2/29 reads in a leap year, and is the next leap day otherwise',
+      (S.eta_day('2/29', datetime(2028, 2, 1, 20, tzinfo=timezone.utc)), S.eta_day('2/29', NOW)), ('2028-02-29', '2028-02-29'))  # utc-ok: a fixed instant
+check("  the ticket tools write a date field: a day, '' empties it, anything else refused",
+      [T._field_value('i', 'ETA', v, None, CFGE)[1] for v in ('2026-11-10', '', '11/10/26')],
+      [{'date': '2026-11-10'}, None, False])
+
+
+class _Writes:
+    def __init__(self):
+        self.calls = []
+
+    def item_fields(self, item, fields):
+        self.calls.append(('fields', item, fields))
+        return True
+
+    def item_field(self, item, fid, **kw):
+        self.calls.append(('field', item, fid, kw))
+        return True
+
+
+w = _Writes()
+check("  review: set_field writes a date in the one batched write, and clears it, never as text",
+      (T.set_field('I1', 'ETA', '2026-11-10', w, CFGE), T.set_field('I1', 'ETA', '', w, CFGE), w.calls),
+      (True, True, [('fields', 'I1', {'F_eta': {'date': '2026-11-10'}}), ('field', 'I1', 'F_eta', {'clear': True})]))
+
 print('the ETA, in the kit zone')
 check('the positive case: a bare time later today', S.pt(S.parse_eta('5 PM', NOW)), '10/29/26 5:00 PM PT')
 check('a bare time already past is tomorrow', S.pt(S.parse_eta('9 AM', NOW)), '10/30/26 9:00 AM PT')

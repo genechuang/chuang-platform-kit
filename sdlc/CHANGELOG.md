@@ -3,6 +3,24 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.16.0 - 2026-11-09 PT
+
+- A card's ETA is the board's **ETA** Date field (SMADPickleBot #1274; Gene, 11/9/26: "scrum ETA should be a field in
+  GHI, not plain text in comment"):
+  - `board_items` reads it, the card's `eta` (YYYY-MM-DD) and `eta_at` (when it was set), and a board with no such field
+    reads ''. `_field_value` writes a field of type `date`.
+  - The scrum master's sweep decides on the field, its day's end in the kit's zone (`field_eta`, `card_eta`).
+  - An owner's `Scrum: building | eta <when>` line newer than the field names the ETA and is copied into it (the
+    action `eta`), so a line and a command both set it.
+  - A line the sweep copied is remembered in the card's record (`eta_line_at`): it keeps its minute while the field holds
+    its day, and the owner's later change or clear of the field rules. A refused write is said, never claimed.
+  - `set_field` writes a date through the one batched write (`set_fields`).
+  - `webhooks.project_item` carries a date edit of a field the host names, as it carries a single select.
+- `eta_day(text, now)`: the day an owner names, a date alone or any ETA `parse_eta` reads. A year-less date is the next
+  one not yet past, and 2/29 is the next leap day.
+- `configure(eta_command=)`: the host's command that sets the field, named in every ETA ask (`eta_ask`).
+- No signature changes; a board without an ETA field works as before.
+
 ## 0.15.0 - 2026-11-09 PT
 
 - `chuang_sdlc.signature` (SMADPickleBot #1279): every session and the pipeline write GitHub comments with one person's

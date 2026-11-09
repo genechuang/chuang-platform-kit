@@ -103,13 +103,13 @@ def dock_landed(payload: dict, numbers_of=None) -> dict:
 def project_item(payload: dict, event_fields) -> tuple:
     """(data, line) for a Projects (v2) item delivery: the `ticket.moved` data before the item's read, {item, field,
     field_name, by, from}, and '' when it is a move to read; (None, the line) when it is ignored: any action but an
-    edit, a field that is no single select, a single select outside `event_fields`, no node id."""
+    edit, a field that is no single select or date (0.16.0: a card's ETA), one outside `event_fields`, no node id."""
     action = payload.get('action') or 'event'
     item = payload.get('projects_v2_item') or {}
     change = ((payload.get('changes') or {}).get('field_value') or {})
     if action != 'edited':
         return None, f'ignored: a projects_v2_item {action}'
-    if change.get('field_type') != 'single_select':
+    if change.get('field_type') not in ('single_select', 'date'):
         return None, f'ignored: a projects_v2_item edited of a {change.get("field_type") or "non-field"} field'
     if change.get('field_name') and change.get('field_name') not in event_fields:
         return None, f'ignored: a projects_v2_item edited of its {change.get("field_name")}'

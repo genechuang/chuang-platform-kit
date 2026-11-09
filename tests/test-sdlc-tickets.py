@@ -618,6 +618,12 @@ gh = fresh(drafts=[{'id': 'IT_9', 'content': {'__typename': 'Issue', 'number': 9
 cards = T.board_items('is:open', gh)
 check("board_items reads the host's card fields", (cards[0]['status'], cards[0]['light'], cards[0]['needs'], cards[0]['labels'],
                                                     cards[0]['content']['number']), ('Ready', 'ok', 'a decision', ['bug'], 9))
+gh = fresh(drafts=[{'id': 'IT_9', 'content': {'__typename': 'Issue', 'number': 9, 'title': 'Nine', 'url': 'u', 'labels': {'nodes': []}},
+                    'status': {'name': 'Ready'}, 'eta': {'date': '2026-11-10', 'updatedAt': '2026-11-09T18:00:00Z'}}])
+eta_card = T.board_items('is:open', gh)[0]
+check("  0.16.0: the ETA Date field is read, its day and when it was set; a card without one reads ''",
+      (eta_card['eta'], eta_card['eta_at'], cards[0]['eta'], 'ProjectV2ItemFieldDateValue { date updatedAt }' in gh.last_items_query),
+      ('2026-11-10', '2026-11-09T18:00:00Z', '', True))
 user_cfg = dict(CFG, owner_type='user')
 T.board_items('is:open', gh, user_cfg)
 check("a user's Project is read under user(login:)", 'user(login: $owner)' in gh.last_items_query, True)

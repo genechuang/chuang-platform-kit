@@ -85,7 +85,15 @@ _SET = {
     'closer': None,         # (title, newest comment) -> whether an alert closer closed it (to the ship column, no question)
     'ship_run_of': None,    # (store) -> a reader of the host's ship record, for the ship card's keeper; None: the host's
     'tz': None,             # the zone an ETA is read in and a stamp written; None: chuang_platform_kit.clock's
+    'eta_command': '',      # 0.16.0: the host's command that sets a card's ETA field, `{n}` its number; '' says none
 }
+
+
+def eta_ask(n) -> str:
+    """How an owner gives a card's ETA, in the sweep's asks: the host's command for the board's ETA field (0.16.0,
+    configure(eta_command=)) and the `Scrum: building | eta <when>` line, which the sweep copies into it."""
+    command = (_SET['eta_command'] or '').format(n=n)
+    return (f'`{command}` or ' if command else '') + '`Scrum: building | eta <when>`'
 
 
 def _line_re(lead: str):
@@ -270,6 +278,68 @@ def parse_eta(text: str, now: datetime):
     return None
 
 
+ETA_DATES = ('%m/%d/%y', '%m/%d/%Y', '%m/%d', '%Y-%m-%d')
+
+
+def field_eta(day: str):
+    """The instant a board's ETA field means (0.16.0, SMADPickleBot #1274): its day's end, 11:59 PM in the kit's zone,
+    since a Date field holds no time; None when it holds none."""
+    try:
+        d = datetime.strptime((day or '').strip(), '%Y-%m-%d')
+    except ValueError:
+        return None
+    return localize(d.replace(hour=23, minute=59), _zone())
+
+
+def eta_day(text: str, now: datetime) -> str:
+    """The day, YYYY-MM-DD, an owner's ETA names for the board's field: a date alone (`11/10/26`, `11/10`, `2026-11-10`,
+    a leading weekday and a trailing PT read past) or any ETA parse_eta reads, its day in the kit's zone; '' when none."""
+    tz = _zone()
+    t = ETA_ZONE.sub('', (text or '').strip().upper()).strip()
+    m = ETA_DAY.match(t)
+    if m and any(w.startswith(m.group(1)) for w in WEEKDAYS):
+        t = m.group(2).strip()
+    local = now.astimezone(tz)
+    for fmt in ETA_DATES:
+        if '%y' in fmt.lower():
+            try:
+                return datetime.strptime(t, fmt).strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        # A month/day is the next one not yet past: this year's, else a later one's (parsed with its year, so 2/29 reads
+        # in a leap year, the next one up to four years on; strptime's own default year is 1900, no leap year).
+        for year in range(local.year, local.year + 5):
+            try:
+                got = datetime.strptime(f'{t}/{year}', fmt + '/%Y')
+            except ValueError:
+                continue
+            if localize(got.replace(hour=23, minute=59), tz) >= now:
+                return got.strftime('%Y-%m-%d')
+    when = parse_eta(text, now)
+    return when.astimezone(tz).strftime('%Y-%m-%d') if when else ''
+
+
+def card_eta(card: dict, line: dict, now: datetime, state: dict = None):
+    """(the ETA the sweep decides on, the day to write into the board's field or ''), 0.16.0: the field's, unless the
+    owner's `Scrum: building | eta` line is newer than the field and readable, which then names it (to the minute when
+    the line gives one) and is copied into the field when its day differs. A line already copied (the card's record's
+    `eta_line_at`, its `at`) is never newer than the field the copy wrote: it keeps its minute while the field holds its
+    day, and the field rules once the owner has changed or cleared it since (`tickets eta N none` stays cleared)."""
+    day = (card.get('eta') or '').strip()
+    field = field_eta(day)
+    building = line.get('kind') == 'building'
+    said = parse_eta(line.get('eta'), now) if building else None
+    said_day = eta_day(line.get('eta'), now) if building else ''
+    if not said_day:
+        return field, ''
+    said = said or field_eta(said_day)   # a date alone: the field takes it, its end the ETA
+    if line.get('at') and line.get('at') == (state or {}).get('eta_line_at'):
+        return (said, '') if said_day == day else (field, '')
+    if not field or (line.get('at') or '') > (card.get('eta_at') or ''):
+        return said, (said_day if said_day != day else '')
+    return field, ''
+
+
 def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict:
     """What the sweep does for one shipyard card: {state (what it found), question (to its owner, '' for none),
     actions [(kind, value)], change (a line for a new comment, '' for none)}. Pure: `facts` is {line, blockers
@@ -391,14 +461,16 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
             out['state'] = f"its owner says next{after}: {lights['queued']}"
             out['change'] = f"Switched to {lights['queued']}: its owner says it is next{after}, not being built yet."
             return out
-        eta = parse_eta(line.get('eta'), now) if line.get('kind') == 'building' else None
+        eta, write = card_eta(card, line, now, state)   # 0.16.0: the board's ETA field, a newer line copied into it
+        if write and 'ETA' in (cfg.get('fields') or {}):
+            out['actions'].append(('eta', (write, line.get('at') or '')))
         if building and not (eta and eta > now):
             # An owner may build several cards at once, so a card with its own live ETA is handled as a lone one below,
             # and one without is asked about itself.
             others = ', '.join(f'#{b}' for b in building)
             out['state'] = f'building with no ETA it can read, beside {others}'
-            out['question'] = (f"#{n} is {working}, as are {others} of yours: what's its ETA? `Scrum: building | eta "
-                               f"<when>`, or `Scrum: next | after #N` if it is only waiting its turn ({lights['queued']}, "
+            out['question'] = (f"#{n} is {working}, as are {others} of yours: what's its ETA? {eta_ask(n)}, or "
+                               f"`Scrum: next | after #N` if it is only waiting its turn ({lights['queued']}, "
                                f"in the {_tickets.stage('shipyard', cfg)}).")
             return out
         last = facts.get('last_commit')
@@ -408,23 +480,22 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
             if quiet:
                 out['state'] += f'; no commit in {STALE_HOURS} h'
                 out['question'] = (f"#{n} is {working} with an ETA of {pt(eta)}, but no commit has named it in "
-                                   f"{STALE_HOURS} hours: still on it? `Scrum: building | eta <when>` or `Scrum: next | after #N`.")
+                                   f"{STALE_HOURS} hours: still on it? {eta_ask(n)} or `Scrum: next | after #N`.")
             return out
         if eta:
             out['state'] = f'building, its ETA {pt(eta)} has passed'
-            out['question'] = (f"#{n} is {working} and its ETA ({pt(eta)}) has passed: what's the new one? "
-                               "`Scrum: building | eta <when>`")
+            out['question'] = f"#{n} is {working} and its ETA ({pt(eta)}) has passed: what's the new one? {eta_ask(n)}"
             return out
-        if line.get('kind') == 'building' and not quiet:
+        if line.get('kind') == 'building' and not quiet and not eta_day(line.get('eta'), now):   # unreadable, not cleared
             # An ETA the sweep cannot read is asked about once, as a missing one is: a word in its place usually means
             # the card is not being built, and `paused` is the word for that.
             out['state'] = 'building, no ETA it can read: ' + (line.get('eta') or 'none given')
             out['question'] = (f"#{n} is {working}, but its ETA (“{line.get('eta') or 'none given'}”) is not a time the "
-                               "sweep can read: say it as a date and time, `Scrum: building | eta <when>`, or, if it waits on "
+                               f"sweep can read: say it as a date and time, {eta_ask(n)}, or, if it waits on "
                                f"something, `Scrum: paused | <why>`, and it goes back to {back} until you pick it up again.")
             return out
         out['state'] = 'building, no ETA'
-        out['question'] = f"#{n} is {working}: what's its ETA? Answer on the ticket: `Scrum: building | eta <when>`."
+        out['question'] = f"#{n} is {working}: what's its ETA? {eta_ask(n)}."
         return out
 
     if lights.get('queued') and light == lights['queued']:
@@ -979,6 +1050,13 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
             elif kind == 'light':
                 gh.field(n, 'Light', cfg['lights'][value])
                 did.append(f"{cfg['lights'][value]} set")
+            elif kind == 'eta':   # 0.16.0: an owner's `eta` line copied into the board's ETA field, the line remembered
+                day, line_at = value
+                if gh.field(n, 'ETA', day):
+                    state['eta_line_at'] = line_at
+                    did.append(f"ETA {day} set from its owner's line")
+                else:
+                    did.append(f"ETA {day} not set (GitHub refused it)")
             elif kind == 'remember':   # the Queued clock, kept in the card's record
                 state[value[0]] = value[1]
             elif kind == 'forget':

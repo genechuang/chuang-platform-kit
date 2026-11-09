@@ -601,6 +601,11 @@ def _field_value(item: str, field: str, value: str, run, cfg: dict):
     field of set_field / set_fields; a Status write into the ship column marked first (the host's before_ship_move,
     for its own runner only); False for an option the board lacks or a number that is none."""
     spec = cfg['fields'][field]
+    if spec.get('type') == 'date':   # 0.16.0: a day, YYYY-MM-DD; '' empties it
+        day = str(value).strip()
+        if day == '':
+            return spec['id'], None
+        return (spec['id'], {'date': day}) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', day) else (spec['id'], False)
     if spec.get('type') == 'number':   # hours; '' empties it
         if str(value).strip() == '':
             return spec['id'], None
@@ -634,7 +639,7 @@ def set_field(item: str, field: str, value: str, run=None, cfg: dict = None) -> 
         return False
     if got is None:
         return run.item_field(item, fid, clear=True)
-    if isinstance(got, dict) and 'number' in got:
+    if isinstance(got, dict) and ('number' in got or 'date' in got):   # 0.16.0: a date as a number goes, in one write
         return set_fields(item, {field: value}, run, cfg)
     if isinstance(got, dict):
         return run.item_field(item, fid, text=got['text'])
@@ -658,7 +663,7 @@ def set_fields(item: str, values: dict, run=None, cfg: dict = None) -> bool:
         ok = True
         for fid, got in fields.items():
             ok = (run.item_field(item, fid, clear=True) if got is None
-                  else run.item_field(item, fid, text=str(got.get('text', got.get('number'))))
+                  else run.item_field(item, fid, text=str(next(got[k] for k in ('text', 'number', 'date') if k in got)))
                   if isinstance(got, dict) else run.item_field(item, fid, option_id=got)) and ok
         return bool(ok)
     return bool(run.item_fields(item, fields))
@@ -826,8 +831,12 @@ def _sync_options(run, cfg: dict, merge: bool = False) -> str:
 
 
 # A single select's `updatedAt` too (0.13.0): when a card's Status or Light was last set, board_items' `<key>_at`.
-_TEXT = '... on ProjectV2ItemFieldTextValue { text } ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }'
-CARD_FIELDS = (('status', 'Status'), ('light', 'Light'), ('owner', 'Owner'), ('priority', 'Priority'), ('area', 'Area'))
+# A Date value too (0.16.0): a card's ETA, its day as YYYY-MM-DD and when it was set; a board with no ETA field answers
+# null for it, read as ''.
+_TEXT = ('... on ProjectV2ItemFieldTextValue { text } ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt } '
+         '... on ProjectV2ItemFieldDateValue { date updatedAt }')
+CARD_FIELDS = (('status', 'Status'), ('light', 'Light'), ('owner', 'Owner'), ('priority', 'Priority'), ('area', 'Area'),
+               ('eta', 'ETA'))
 
 
 def _items_query(cfg: dict) -> str:
@@ -880,11 +889,11 @@ def board_items(query: str, run=None, cfg: dict = None):
 
             def val(k):
                 v = node.get(_alias(k)) or {}
-                return v.get('name') or v.get('text') or ''
+                return v.get('name') or v.get('text') or v.get('date') or ''
             card = {'id': node.get('id'), 'title': content.get('title') or ''}
             card.update({k: val(k) for k in keys})
-            # 0.13.0: when the Status and the Light were last set (ISO UTC, '' when unset or not read)
-            card.update({f'{k}_at': (node.get(_alias(k)) or {}).get('updatedAt') or '' for k in ('status', 'light')})
+            # 0.13.0: when the Status and the Light were last set (ISO UTC, '' when unset or not read); 0.16.0 the ETA's
+            card.update({f'{k}_at': (node.get(_alias(k)) or {}).get('updatedAt') or '' for k in ('status', 'light', 'eta')})
             card['labels'] = [n['name'] for n in (content.get('labels') or {}).get('nodes') or []]
             card['content'] = {'type': content.get('__typename') or 'DraftIssue', 'number': content.get('number'),
                                'url': content.get('url') or '',

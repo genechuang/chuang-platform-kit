@@ -134,6 +134,11 @@ check('  the ignored edits', [W.project_item(p, FIELDS)[1] for p in (item('creat
                                                                      item(node=''))],
       ['ignored: a projects_v2_item created', 'ignored: a projects_v2_item edited of a text field',
        'ignored: a projects_v2_item edited of its Iteration', 'ignored: a projects_v2_item with no node id'])
+check("  0.16.0: a date field the host names (a card's ETA) is carried; one it does not name is ignored",
+      (W.project_item(item(ftype='date', name='ETA', frm='2026-11-01'), FIELDS + ('ETA',)),
+       W.project_item(item(ftype='date', name='Due'), FIELDS + ('ETA',))[1]),
+      (({'item': 'PVTI_1', 'field': 'F1', 'field_name': 'ETA', 'by': 'lead', 'from': ''}, ''),
+       'ignored: a projects_v2_item edited of its Due'))
 moves = Moves()
 card = lambda n=None, title='t', col='Building': {'id': 'I', 'content': {'number': n, 'title': title}, 'status': {'name': col}}  # noqa: E731
 check('after the read: a move, a placeholder, an app status draft, the ship card there, a draft\'s and an unread Light',
