@@ -61,10 +61,11 @@ LIGHT_CLEAR = 'light {n} clear'   # the host's command that clears a card's Ligh
 WORDS = ('MARKER', 'SENDER', 'BLOCKED_LABEL', 'PRIORITY_ASK', 'LIGHT_CLEAR')
 
 
+CARD_FIELDS = ('id state stateReason closedAt blockedBy(first: 20) { nodes { id number state } } '
+               'comments(last: 60) { nodes { databaseId body createdAt author { login } } }')
 CARD_QUERY = ('query($owner: String!, $repo: String!, $n: Int!) { repository(owner: $owner, name: $repo) { '
-              'issue(number: $n) { id state stateReason closedAt '
-              'blockedBy(first: 20) { nodes { id number state } } '
-              'comments(last: 60) { nodes { databaseId body createdAt author { login } } } } } }')
+              f'issue(number: $n) {{ {CARD_FIELDS} }} }} }}')
+PREFETCH_CHUNK = 50   # issues a prefetch reads in one aliased query (#1207)
 
 
 LINK_MUTATION = 'mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }'
@@ -574,6 +575,9 @@ def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, 
     if cards is None:
         return ['scrum: closed cards: the board did not answer; next sweep']
     cards = [c for c in cards if not _tickets.is_draft(c) and not _tickets.is_placeholder(c.get('title'), cfg)]
+    gh.remember(cards)   # #1207: the items kept and the issues read in one aliased query
+    gh.prefetch([(c.get('content') or {}).get('number') for c in cards
+                 if (c.get('content') or {}).get('number') not in skip and (only is None or (c.get('content') or {}).get('number') == only)])
     login = cfg['repo'].split('/')[0]
     lines = []
     for c in cards:
@@ -629,6 +633,8 @@ def closed_needs_sweep(cfg: dict, gh, dry: bool = False) -> list:
     cards = _tickets.board_items(closed_needs_filter(cfg), gh.run, cfg)
     if cards is None:
         return ['scrum: closed cards with a needs light: the board did not answer; next sweep']
+    gh.remember(cards)   # #1207
+    gh.prefetch([(c.get('content') or {}).get('number') for c in cards if (c.get('light') or '') == cfg['lights']['needs']])
     lines = []
     for c in cards:
         n = (c.get('content') or {}).get('number')
@@ -673,14 +679,69 @@ class GitHub:
     def __init__(self, cfg: dict, run=None, dry: bool = False):
         self.cfg, self.run, self.dry = cfg, run or _tickets._run(None), dry
         self.owner, self.repo = cfg['repo'].split('/')
+        # 0.10.0 (SMADPickleBot #1207; Gene, 11/8/26 9:27 PM PT: "scrum master should be batching graphql calls as much
+        # as possible, so we don't get throttled by github"): the cards a sweep reads come from one aliased query
+        # (prefetch), their items from the board listing it already holds (remember), and its field writes are queued
+        # while `batch` is on and sent in one aliased mutation at its end (flush).
+        self._cards, self._items, self._queued, self.batch = {}, {}, [], False
+
+    def remember(self, cards) -> None:
+        """The Project items of a board listing's cards, kept so a field write needs no item read of its own."""
+        for c in cards or []:
+            n = (c.get('content') or {}).get('number')
+            if n and c.get('id'):
+                self._items[int(n)] = c['id']
+
+    def prefetch(self, numbers) -> int:
+        """Every issue's CARD_QUERY fields in ONE aliased query a PREFETCH_CHUNK of issues, kept for card(); the count
+        read. A chunk GitHub does not answer leaves its cards to card()'s own read."""
+        numbers = [int(n) for n in dict.fromkeys(numbers or []) if n and int(n) not in self._cards]
+        got = 0
+        for i in range(0, len(numbers), PREFETCH_CHUNK):
+            chunk = numbers[i:i + PREFETCH_CHUNK]
+            body = ' '.join(f'i{n}: issue(number: {n}) {{ {CARD_FIELDS} }}' for n in chunk)
+            try:
+                data = self.run.graphql(f'query($owner: String!, $repo: String!) {{ repository(owner: $owner, name: $repo) '
+                                        f'{{ {body} }} }}', {'owner': self.owner, 'repo': self.repo})
+            except Exception:   # noqa: BLE001 - a client that raises: card() reads each one itself
+                data = None
+            repo = (data or {}).get('repository') if isinstance(data, dict) else None
+            if not isinstance(repo, dict):
+                continue
+            for n in chunk:
+                if isinstance(repo.get(f'i{n}'), dict):
+                    self._cards[n] = repo[f'i{n}']
+                    got += 1
+        return got
 
     def card(self, n: int) -> dict:
-        """One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY); {} when GitHub does not answer."""
+        """One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY), from prefetch's read when it
+        has it; {} when GitHub does not answer."""
+        if int(n) in self._cards:
+            return self._cards[int(n)]
         data = self.run.graphql(CARD_QUERY, {'owner': self.owner, 'repo': self.repo, 'n': int(n)})
         try:
             return (data['repository']['issue'] or {}) if data else {}
         except (KeyError, TypeError):
             return {}
+
+    def flush(self) -> list:
+        """The queued field writes in ONE aliased mutation a tickets.MOVE_CHUNK of cards, a card's writes merged (the
+        later wins); a WARNING line a card GitHub refused. Nothing queued is nothing sent."""
+        merged = {}
+        for item, fields in self._queued:
+            merged.setdefault(item, {}).update(fields)
+        self._queued = []
+        writes = list(merged.items())
+        took = set()
+        for i in range(0, len(writes), _tickets.MOVE_CHUNK):
+            took |= _tickets._write_many(writes[i:i + _tickets.MOVE_CHUNK], set(), self.run, self.cfg)
+        for item, fields in writes:   # a card the batch did not take, written by itself as before 0.10.0
+            if item not in took and getattr(self.run, 'item_fields', None) and self.run.item_fields(item, fields):
+                took.add(item)
+        number = {item: n for n, item in self._items.items()}
+        return [f"WARNING: scrum: #{number.get(item, item)}'s field write was refused; the next sweep tries again"
+                for item, _f in writes if item not in took]
 
     def assign(self, n, on=True):
         """The repository's owner (the lead's login) assigned to the card or not."""
@@ -707,11 +768,21 @@ class GitHub:
         return True if self.dry else self.run.edit_comment(cid, body)
 
     def field(self, n: int, field: str, value: str) -> bool:
-        """One Project field of the card (tickets.set_field)."""
+        """One Project field of the card (tickets.set_field); its item from the listing when remember() kept it; queued
+        for flush() while `batch` is on, a single-select only (anything else is written at once). True when queued."""
         if self.dry:
             return True
-        item = _tickets.item_id(n, self.run, self.cfg)
-        return bool(item) and _tickets.set_field(item, field, value, self.run, self.cfg)
+        item = self._items.get(int(n)) or _tickets.item_id(n, self.run, self.cfg)
+        if not item:
+            return False
+        spec = self.cfg['fields'].get(field) or {}
+        if self.batch and 'options' in spec:
+            fid, opt = _tickets._option(field, _tickets.column(value, self.cfg) if field == 'Status' else value, self.cfg)
+            if opt is False:
+                return False
+            self._queued.append((item, {fid: opt}))
+            return True
+        return _tickets.set_field(item, field, value, self.run, self.cfg)
 
     def move(self, n: int, role: str) -> bool:
         """A card back to `role` (the scrum master only ever moves back: a queued or dependent card to the next column);
@@ -765,6 +836,12 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
     # leaves drafts out, and this holds when it does not (a placeholder converted to an issue keeps its title).
     cards = [c for c in cards if not _tickets.is_draft(c) and not _tickets.is_placeholder(c.get('title'), cfg)]
     every = cards   # the whole column, so a one-card run still sees what else its owner is building
+    # #1207: the column's items kept, the cards this run reads in one aliased query, and its field writes in one
+    # aliased mutation at its end (flush), so a sweep is a few GraphQL calls, never one a card a field.
+    gh.remember(cards)
+    gh.batch = not dry
+    gh.prefetch([(c.get('content') or {}).get('number') for c in cards
+                 if only is None or (c.get('content') or {}).get('number') == int(only)])
     if store is None:
         store = _store()
     who_leads = lead()
@@ -773,6 +850,8 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         cards = [c for c in cards if (c.get('content') or {}).get('number') == int(only)]
         if not cards:
             lines = closed_sweep(cfg, gh, store, now, dry, letters, only=int(only))
+            lines += gh.flush()
+            gh.batch = False
             return (lines + _send(letters, mail, dry)) or [f'scrum: #{only} is not in the {_tickets.stage("shipyard", cfg)}; nothing to do']
     for c in cards:
         n = (c.get('content') or {}).get('number')
@@ -918,6 +997,8 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         # The sweep's own store reads the ship record too: no second client.
         reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
         lines += ship_card_home(cfg, gh, dry, ship_run=reader)
+    lines += gh.flush()   # #1207: every field write this sweep decided, in one aliased mutation
+    gh.batch = False
     lines += _send(letters, mail, dry)
     return lines or [f'scrum: the {_tickets.stage("shipyard", cfg)} is empty']
 

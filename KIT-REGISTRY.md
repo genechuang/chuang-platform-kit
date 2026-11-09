@@ -780,14 +780,17 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `letter(owner, items)` | (subject, text) of one owner's letter: every card of theirs with a new question. |
 | `comment_body(when, found, did)` | The card's one scrum master comment, edited in place each sweep: when, what it found and what it did. |
 | `class GitHub` | The sweep's GitHub reads and writes, through the ticket tools' runner (chuang_sdlc.tickets' configure(runner=) unless one is given) and the board helpers. A dry run writes nothing and answers every write True. |
-| `GitHub.card(n)` | One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY); {} when GitHub does not answer. |
+| `GitHub.remember(cards)` | The Project items of a board listing's cards, kept so a field write needs no item read of its own. |
+| `GitHub.prefetch(numbers)` | Every issue's CARD_QUERY fields in ONE aliased query a PREFETCH_CHUNK of issues, kept for card(); the count read. A chunk GitHub does not answer leaves its cards to card()'s own read. |
+| `GitHub.card(n)` | One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY), from prefetch's read when it has it; {} when GitHub does not answer. |
+| `GitHub.flush()` | The queued field writes in ONE aliased mutation a tickets.MOVE_CHUNK of cards, a card's writes merged (the later wins); a WARNING line a card GitHub refused. Nothing queued is nothing sent. |
 | `GitHub.assign(n, on=)` | The repository's owner (the lead's login) assigned to the card or not. |
 | `GitHub.label(n, name, add=)` | A label added to the card, or taken off. |
 | `GitHub.link(issue_id, blocker_id)` | A native blocked-by link (LINK_MUTATION), by both issues' node ids. |
 | `GitHub.issue_id(n)` | An issue's node id ('' when it cannot be read). |
 | `GitHub.comment(n, body)` | A comment on the card. |
 | `GitHub.edit_comment(cid, body)` | A comment's body replaced. |
-| `GitHub.field(n, field, value)` | One Project field of the card (tickets.set_field). |
+| `GitHub.field(n, field, value)` | One Project field of the card (tickets.set_field); its item from the listing when remember() kept it; queued for flush() while `batch` is on, a single-select only (anything else is written at once). True when queued. |
 | `GitHub.move(n, role)` | A card back to `role` (the scrum master only ever moves back: a queued or dependent card to the next column); True only once the board took it. |
 | `GitHub.ship(n)` | A closed card to the ship column with its shipped Light: tickets.move, forward only, the move marked first (tickets.mark_ship_move) whatever runner this sweep holds, so the host never takes it for the lead's drag; True only once the board took it. |
 | `GitHub.wreck(n)` | A card closed as not planned or a duplicate to the failed column with its Light cleared: the pipeline's own move, marked first, the column and the Light in one request; True once the board took it. |

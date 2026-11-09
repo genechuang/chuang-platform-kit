@@ -223,5 +223,41 @@ try:
 except T.NotConfigured:
     check('no store wired is NotConfigured', True, True)
 
+print('batched (#1207)')
+
+
+class Batched(Board):
+    """A board that answers the sweep's one aliased card read and its one aliased field write, counting every call."""
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.queries = []
+
+    def graphql(self, query, variables=None):
+        import re as _re
+        self.queries.append('card' if query == S.CARD_QUERY else 'prefetch' if _re.search(r'\bi\d+: issue\(number: \d+\)', query)
+                            else query.split('(', 1)[0])
+        if _re.search(r'\bi\d+: issue\(number: \d+\)', query):
+            return {'repository': {f'i{n}': self.issues_[int(n)] for n in _re.findall(r'\bi(\d+): issue\(number: (?:\d+)\)', query)
+                                   if int(n) in self.issues_}}
+        if ' c0_0: ' in query:
+            out = {}
+            for k in variables:
+                m = _re.fullmatch(r'f(\d+)_(\d+)', k)
+                if m:
+                    out[f'c{m.group(1)}_{m.group(2)}'] = {'projectV2Item': {'id': variables[f'i{m.group(1)}']}}
+                    self.writes.append(('batch', variables[f'i{m.group(1)}']))
+            return out
+        return super().graphql(query, variables)
+
+
+many = [dict(card(800 + i, prio=''), status='Building', id=f'IT_{800 + i}') for i in range(8)]
+big = Batched({'status:"Building"': many, 'is:closed': [], 'is:draft': []}, issues={800 + i: issue(800 + i) for i in range(8)})
+letters.clear()
+S.sweep(CFG, S.GitHub(CFG, run=big), Records(), now=NOW)
+check('the positive case: eight Shipyard cards read in one aliased query, never one a card',
+      (big.queries.count('prefetch'), big.queries.count('card')), (1, 0))
+check('their eight Needs you writes in one aliased mutation',
+      (sum(1 for q in big.queries if q.startswith('mutation')), len([w for w in big.writes if w[0] == 'batch'])), (1, 8))
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

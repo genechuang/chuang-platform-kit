@@ -3,6 +3,16 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.10.0 - 2026-11-08 PT
+
+- `scrum`: a sweep's GitHub reads and writes batched (SMADPickleBot #1207; Gene, 11/8/26 9:27 PM PT: "scrum master
+  should be batching graphql calls as much as possible, so we don't get throttled by github"). `GitHub.prefetch` reads
+  every card the sweep will read (the shipyard's, the closed cards', the stale Needs you cards') in ONE aliased query a
+  PREFETCH_CHUNK (50), `GitHub.remember` keeps the listing's items so a field write needs no item read, and while
+  `batch` is on `GitHub.field` queues its single-select writes for `GitHub.flush`, ONE aliased mutation a
+  tickets.MOVE_CHUNK (100) at the sweep's end, a card the batch did not take written by itself. `CARD_FIELDS` is the
+  card read's field list, shared by CARD_QUERY and the prefetch.
+
 ## 0.9.0 - 2026-11-08 PT
 
 - `tickets.places(numbers)`: every card's (item, column, Light, raw column) in ONE aliased GraphQL query a
