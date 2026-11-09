@@ -69,15 +69,45 @@ def response_text(resp) -> str:
     return str(resp or '')
 
 
+# The fields a background start's result may name its task by (1.22.1: the hook's event carries the result's fields,
+# never the sentence the session is shown, so 1.22.0 recorded no run in any session on 11/9/26).
+ID_KEYS = ('backgroundTaskId', 'background_task_id', 'taskId', 'task_id', 'bash_id', 'shellId', 'shell_id')
+
+
+def output_for(task: str, session: str = '', roots=None) -> str:
+    """The task's output file, `<tmp>/claude/<project>/<session>/tasks/<task>.output`, by one glob under each root
+    (NANNY_TASKS_ROOT, else the temp folder), this session's own folder first; '' when none is there."""
+    import glob
+    import tempfile
+    for root in roots or [os.environ.get('NANNY_TASKS_ROOT') or tempfile.gettempdir()]:
+        for pattern in ([os.path.join(root, 'claude', '*', session, 'tasks', f'{task}.output')] if session else []) + \
+                       [os.path.join(root, 'claude', '*', '*', 'tasks', f'{task}.output')]:
+            hits = glob.glob(pattern)
+            if hits:
+                return hits[0]
+    return ''
+
+
 def record(event: dict, state: dict, now: float) -> bool:
-    """A background Bash start, from the call's result; True when one was recorded."""
+    """A background Bash start, from the call's result; True when the state changed. The task and its output file are
+    read from the result's sentence when it has one, else the task from its fields (ID_KEYS) and the file found by
+    output_for; a start neither gives is kept as `unmatched` (the result's field names and its first words), so the
+    next miss shows its real shape."""
     if event.get('tool_name') != 'Bash' or not (event.get('tool_input') or {}).get('run_in_background'):
         return False
-    m = STARTED.search(response_text(event.get('tool_response')))
-    if not m:
-        return False
-    state.setdefault('runs', {})[m.group(1)] = {'command': str(event['tool_input'].get('command') or '')[:300],
-                                                'path': m.group(2).strip(), 'started': now}
+    resp = event.get('tool_response')
+    m = STARTED.search(response_text(resp))
+    task, path = (m.group(1), m.group(2).strip()) if m else ('', '')
+    if not task and isinstance(resp, dict):
+        task = next((str(resp[k]) for k in ID_KEYS if resp.get(k)), '')
+        path = output_for(task, str(event.get('session_id') or '')) if task else ''
+    if not (task and path):
+        state['unmatched'] = {'at': now, 'task': task,
+                              'shape': sorted(resp) if isinstance(resp, dict) else type(resp).__name__,
+                              'text': response_text(resp)[:200]}
+        return True
+    state.setdefault('runs', {})[task] = {'command': str(event['tool_input'].get('command') or '')[:300],
+                                          'path': path, 'started': now}
     return True
 
 

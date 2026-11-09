@@ -101,6 +101,29 @@ def main():
                             capture_output=True, text=True, timeout=30, env=dict(os.environ, NANNY_DIR=os.path.join(d, 'state2')))
     check('  the event names the hook: a Stop with nothing flagged prints nothing; one with a flagged run prints the block',
           (r.returncode, r.stdout.strip(), json.loads(held_r.stdout or '{}').get('decision')), (0, '', 'block'))
+
+    # 1.22.1: the hook's event carries the result's fields, not the sentence the session is shown: the task from its
+    # id field, its output found under the temp folder's claude/<project>/<session>/tasks/, this session's first
+    roots = os.path.join(d, 'tmp')
+    mine = os.path.join(roots, 'claude', 'D--code-app', 's7', 'tasks')
+    os.makedirs(mine)
+    with open(os.path.join(mine, 'bq1.output'), 'w', encoding='utf-8') as f:
+        f.write('waiting for the lock\n')
+    os.environ['NANNY_TASKS_ROOT'] = roots
+    os.environ['NANNY_DIR'] = os.path.join(d, 'state3')
+    ev = {'session_id': 's7', 'tool_name': 'Bash', 'tool_input': {'command': 'python ship.py', 'run_in_background': True},
+          'tool_response': {'stdout': '', 'stderr': '', 'interrupted': False, 'backgroundTaskId': 'bq1'}}
+    told = N.post(ev, t0)
+    check('  a start whose result names its task by a field is recorded, its output found, and its wait told',
+          ('background run bq1 (python ship.py)' in told, 'waiting for the lock' in told), (True, True))
+    odd = {'session_id': 's7', 'tool_name': 'Bash', 'tool_input': {'command': 'x', 'run_in_background': True},
+           'tool_response': {'stdout': 'started', 'somethingElse': 1}}
+    N.post(odd, t0)
+    kept = N.load(N.state_path('s7')).get('unmatched') or {}
+    check('  a start neither way names keeps its shape for the next miss to read, and is not a run',
+          (kept.get('shape'), kept.get('text', '').strip(), 'x' in str(N.load(N.state_path('s7')).get('runs'))),
+          (['somethingElse', 'stdout'], 'started', False))
+    os.environ.pop('NANNY_TASKS_ROOT', None)
     print(f'{len(failures)} failure(s)')
     return 1 if failures else 0
 
