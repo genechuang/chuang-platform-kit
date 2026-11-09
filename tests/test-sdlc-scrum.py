@@ -181,6 +181,10 @@ check("a closed card's needs Light cleared and the lead unassigned; one reopened
       (['scrum: closed #700 kept ask: cleared, the lead unassigned'], ['fields', 'unassign']))
 check('the clear is the Light written to nothing, the unassign the lead',
       (needs.writes[0][-1], needs.writes[1][-1]), ({'F_light': None}, 'acme'))
+lagged = Board({'light:"ask"': [dict(card(703, light=''), status='Done')]}, issues={703: issue(703, state='CLOSED')},
+               places={703: ('Done', '')})
+check("a card the filter still answers whose own Light was cleared this sweep is left", (S.closed_needs_sweep(CFG, S.GitHub(CFG, run=lagged)),
+                                                                                       lagged.writes), ([], []))
 dry = Board({'light:"ask"': [dict(card(702, light='ask'), status='Done')]}, issues={702: issue(702, state='CLOSED')},
             places={702: ('Done', 'ask')})
 check('a dry run says it and writes nothing', (S.closed_needs_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), dry=True), dry.writes),

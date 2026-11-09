@@ -634,6 +634,8 @@ def closed_needs_sweep(cfg: dict, gh, dry: bool = False) -> list:
         n = (c.get('content') or {}).get('number')
         if not n or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg):
             continue
+        if (c.get('light') or '') != cfg['lights']['needs']:
+            continue   # the card's own Light, not the filter alone: GitHub's index can lag a clear made this sweep
         issue = gh.card(n)
         if not issue or issue.get('state') != 'CLOSED':
             continue   # unreadable, or reopened since the filter saw it
