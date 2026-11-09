@@ -631,6 +631,27 @@ check('in the ship column with its ship ended: home, and why', T.ship_card_keep(
 check("no ship record wired: left, said as a WARNING naming the record", T.ship_card_keep(fresh(drafts=[draft('Done', 'SHIP IT: drag me to Done')])),
       ["WARNING: the SHIP IT card is in Done and its ship record could not be read (NotConfigured: no ship record: "
        "configure(ship_run=)), so it was left there"])
+# 0.13.0 (SMADPickleBot #1237): the app status column is a door too; the card waits there as in the ship column
+APP_CFG = dict(SHIP_CFG, stages=dict(SHIP_CFG['stages'], app_status='Apps'))
+T.configure(board=lambda: APP_CFG)
+gh = fresh(drafts=[draft('Apps', 'SHIP IT: drag me to Done')])
+waiting = T.ship_card_keep(gh, ship_run=lambda: {'state': 'shipping', 'at': '2026-10-29T19:36:00Z'}, now=1793302800.0)
+written = list(gh.writes)
+check('in the app status column while its chain runs: left; once it ended: home, and why',
+      (waiting, written, T.ship_card_keep(gh, ship_run=lambda: {'state': 'done'})),
+      ([], [], ['the SHIP IT card was in Apps with no ship under way (the last ship is done); moved back to Ready']))
+dropped = lambda at: dict(draft('Apps', 'SHIP IT: drag me to Done'), status={'name': 'Apps', 'updatedAt': at})  # noqa: E731
+check('just dropped in a door: left whatever the record says, the grace once past: home (the 11/9/26 12:55 AM PT race)',
+      (T.ship_card_keep(fresh(drafts=[dropped('2026-10-29T19:39:00Z')]), ship_run=lambda: {'state': 'done'}, now=1793302800.0),
+       T.ship_card_keep(fresh(drafts=[dropped('2026-10-29T19:35:00Z')]), ship_run=lambda: {'state': 'done'}, now=1793302800.0),
+       T.board_items('is:draft', fresh(drafts=[dropped('2026-10-29T19:39:00Z')]))[0]['status_at']),
+      ([], ['the SHIP IT card was in Apps with no ship under way (the last ship is done); moved back to Ready'],
+       '2026-10-29T19:39:00Z'))
+check("a board with no app status column: the ship column alone waits",
+      T.ship_card_keep(fresh(drafts=[draft('Apps', 'SHIP IT: drag me to Done')]), SHIP_CFG,
+                       ship_run=lambda: {'state': 'shipping', 'at': '2026-10-29T19:36:00Z'}, now=1793302800.0),
+      ['the SHIP IT card was in Apps; moved back to Ready'])
+T.configure(board=lambda: SHIP_CFG)
 check('ship_ended: a recent under-way record is none; a stale one, a zoneless one read as UTC, no record',
       (T.ship_ended({'state': 'requested', 'at': '2026-10-29T19:36:00Z'}, 1793302800.0),
        T.ship_ended({'state': 'shipping', 'at': '2026-10-29T18:00:00'}, 1793302800.0), T.ship_ended(None)),

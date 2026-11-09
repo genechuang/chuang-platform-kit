@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.13.0 - 2026-11-09 PT
+
+- `tickets.ship_card_keep`: every door the ship card is dragged to is a column it waits in while a ship is under way,
+  the config's `ship_card` `doors` by role (default the ship column and the app status column when the board has
+  one), as the ship column alone was before. SMADPickleBot #1237; Gene, 11/9/26 12:59 AM PT: "ship it should stay in
+  App Status column until shipping is done - same behavior when I drag it to Ship column". A host whose app status
+  drag starts a chain writes its ship record as under way for the chain's length. A card dropped in a door less than
+  DOOR_GRACE_S (120 s) ago is left whatever the record says, since its handler writes the record seconds after the
+  drop (the 11/9/26 12:55 AM PT race: a keeper read the last ship's `done` and took the card out the second it landed).
+- `tickets.board_items`: each card carries `status_at` and `light_at`, when its Status and Light were last set (the
+  single selects' `updatedAt`, now read).
+
 ## 0.12.1 - 2026-11-09 PT
 
 - `tickets.places`: a ticket the per-issue read (`issue.projectItems`) leaves out is looked up once more through the

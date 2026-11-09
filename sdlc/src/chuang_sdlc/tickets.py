@@ -814,7 +814,8 @@ def _sync_options(run, cfg: dict, merge: bool = False) -> str:
     return "tickets: the board's columns " + '; '.join(parts)
 
 
-_TEXT = '... on ProjectV2ItemFieldTextValue { text } ... on ProjectV2ItemFieldSingleSelectValue { name }'
+# A single select's `updatedAt` too (0.13.0): when a card's Status or Light was last set, board_items' `<key>_at`.
+_TEXT = '... on ProjectV2ItemFieldTextValue { text } ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }'
 CARD_FIELDS = (('status', 'Status'), ('light', 'Light'), ('owner', 'Owner'), ('priority', 'Priority'), ('area', 'Area'))
 
 
@@ -871,6 +872,8 @@ def board_items(query: str, run=None, cfg: dict = None):
                 return v.get('name') or v.get('text') or ''
             card = {'id': node.get('id'), 'title': content.get('title') or ''}
             card.update({k: val(k) for k in keys})
+            # 0.13.0: when the Status and the Light were last set (ISO UTC, '' when unset or not read)
+            card.update({f'{k}_at': (node.get(_alias(k)) or {}).get('updatedAt') or '' for k in ('status', 'light')})
             card['labels'] = [n['name'] for n in (content.get('labels') or {}).get('nodes') or []]
             card['content'] = {'type': content.get('__typename') or 'DraftIssue', 'number': content.get('number'),
                                'url': content.get('url') or '',
@@ -986,6 +989,26 @@ def _ship_run_reader():
     return _HOST['ship_run']()
 
 
+# How long a ship card just dropped in a door is left alone whatever the ship record says (0.13.0, SMADPickleBot
+# #1237): its drag's handler writes the record seconds later, and until then the record still holds the last ship's
+# end; on 11/9/26 12:55 AM PT a keeper read that `done` and took the card out of App Status the second it was dropped.
+DOOR_GRACE_S = 120
+
+
+def _just_moved(at: str, now: float = None) -> bool:
+    """Whether a card's Status was set less than DOOR_GRACE_S ago (`at` ISO UTC, `now` epoch seconds, else the clock);
+    False when `at` is missing or unreadable."""
+    import time as _time
+    from datetime import datetime
+    if not at:
+        return False
+    try:
+        when = datetime.fromisoformat(str(at).replace('Z', '+00:00')).timestamp()
+    except ValueError:
+        return False
+    return ((_time.time() if now is None else now) - when) < DOOR_GRACE_S
+
+
 def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, ship_run=None, now: float = None) -> list:
     """The ship card kept as the board config's `ship_card` says: found among the board's drafts (`drafts`, the
     caller's `is:draft` read, else one here; is_ship_card), its title made the config's when it differs (DRAFT_EDIT on
@@ -1002,6 +1025,12 @@ def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, s
     if drafts is None:
         drafts = board_items('is:draft', run, cfg) or []
     home, ship = stage(spec['home'], cfg), stage('shipping', cfg)
+    # 0.13.0 (SMADPickleBot #1237; Gene, 11/9/26 12:59 AM PT: "ship it should stay in App Status column until shipping is
+    # done - same behavior when I drag it to Ship column"): every door the card is dragged to ships something, and the
+    # card waits in it as in the ship column, the config's `ship_card` `doors` by role (the ship column and the app
+    # status column when the board has one). On 11/9/26 a warm's keeper sent it home from App Status the second Gene
+    # dropped it there, and nothing shipped.
+    doors = {stage(r, cfg) for r in (spec.get('doors') or ('shipping', 'app_status')) if r in cfg.get('stages', {})} | {ship}
     name = f"the {spec['word']} card"
     out, read = [], []   # read: the one ship record answer, ('ok', record) or ('error', why), kept for every card
 
@@ -1031,10 +1060,12 @@ def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, s
         if where == home:
             continue
         why = ''
-        if where == ship:
+        if where in doors and _just_moved(c.get('status_at'), now):
+            continue   # dropped in a door moments ago: its handler has not written the ship record yet (#1237)
+        if where in doors:
             how, got = ended()
             if how == 'error':
-                out.append(f"WARNING: {name} is in {ship} and {_HOST['ship_run_name']} could not be read ({got}), "
+                out.append(f"WARNING: {name} is in {where} and {_HOST['ship_run_name']} could not be read ({got}), "
                            'so it was left there')
                 continue
             why = ship_ended(got, now)
