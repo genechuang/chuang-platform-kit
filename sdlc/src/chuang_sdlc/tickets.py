@@ -1109,6 +1109,21 @@ def places(numbers, run=None, cfg: dict = None) -> dict:
                     continue
                 raw = (node.get('status') or {}).get('name') or ''
                 out[n] = (node['id'], column(raw, cfg), (node.get('light') or {}).get('name') or '', raw)
+    missing = set(numbers) - set(out)
+    if missing:
+        # 0.12.1 (SMADPickleBot #1231; Gene, 11/9/26 12:30 AM PT: "you're hitting graphql throttling dude"): under
+        # GitHub's throttle an issue's projectItems answered 200 with no nodes for cards that were on the board, so a
+        # passed warm moved none of eight Dock cards to Ready. The board's own read still answered, so the cards the
+        # per-issue read left out are looked up once there (GitHub's filter, a point a hundred open issues).
+        try:
+            cards = board_items('is:open is:issue', run, cfg) or []
+        except Exception:   # noqa: BLE001 - as the per-issue read: a GitHub that did not answer places nothing
+            cards = []
+        for card in cards:
+            n = (card.get('content') or {}).get('number')
+            if n in missing and card.get('id'):
+                raw = card.get('status') or ''
+                out[n] = (card['id'], column(raw, cfg), card.get('light') or '', raw)
     return out
 
 

@@ -182,7 +182,7 @@ class FakeGH:
             repo = {}
             for m in _re.finditer(r'i(\d+): issue\(number: \d+\)', query):
                 n = int(m.group(1))
-                repo[f'i{n}'] = {'projectItems': {'nodes': [
+                repo[f'i{n}'] = {'projectItems': {'nodes': [] if getattr(self, 'empty_places', False) else [
                     {'id': it, 'project': {'id': CFG['id']}, 'status': {'name': c['status']}, 'light': {'name': c['light']}}
                     for it, c in self.cards.items() if c.get('number') == n]}}
             return {'repository': repo}
@@ -376,6 +376,15 @@ T.move_many(list(range(50, 55)), 'shipping', gh)
 T.MOVE_CHUNK = saved
 check('chunked: five cards at a chunk of two are three writes', len(gh.batch_writes), 3)
 check('the chunk is 100 cards (Gene, 11/8/26 9:12 PM PT)', T.MOVE_CHUNK, 100)
+# 0.12.1 (SMADPickleBot #1231): GitHub's throttle answered every issue's projectItems with no nodes for cards that were
+# on the board; the board's own filtered read finds them, and a card neither read finds is still not moved.
+gh = fresh({60: {}, 61: {}}, {'IT_60': {'number': 60, 'status': 'Ready', 'light': 'ok'}},
+           drafts=[{'id': 'IT_60', 'content': {'__typename': 'Issue', 'number': 60, 'title': 'Sixty', 'url': 'u',
+                                               'labels': {'nodes': []}}, 'status': {'name': 'Ready'}, 'light': {'name': 'ok'}}])
+gh.empty_places = True
+check('a throttled per-issue read falls back to the board read: the card is found and moved, one off the board is not',
+      (T.move_many([60, 61], 'shipping', gh), gh.cards['IT_60']['status'], gh.item_reads), ([(60, True), (61, False)], 'Done',
+                                                                                       ['is:open is:issue']))
 
 print('filing')
 gh = fresh()

@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.12.1 - 2026-11-09 PT
+
+- `tickets.places`: a ticket the per-issue read (`issue.projectItems`) leaves out is looked up once more through the
+  board's own read, `board_items('is:open is:issue')`. Under GitHub's throttle the per-issue read answered 200 with no
+  nodes for cards that were on the board, so `move_many` moved none and a passed warm left eight Dock cards on
+  Warming. SMADPickleBot #1231; Gene, 11/9/26 12:30 AM PT: "you're hitting graphql throttling dude".
+
 ## 0.12.0 - 2026-11-09 PT
 
 - `tickets.triage_many(numbers, priority, owner, area, feature)`: triage() for many tickets in a few GitHub requests,
