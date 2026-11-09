@@ -17,7 +17,8 @@ no process list, and flagged when it:
 - has not grown for STALL_S (120 s).
 
 Each flag is told once as the tool result's context: the run's id, command, age and last line. A run whose command is
-quiet by design (NANNY_QUIET, a regex; by default a `wait --for` mail pull) is never flagged for being quiet. At Stop,
+quiet by design (NANNY_QUIET, a regex; by default a `wait --for` mail pull, and since 1.22.2 a run piped through tail or
+redirected to a file) is never flagged for being quiet. At Stop,
 a flagged run still running that no Stop has shown yet holds the turn once (the release-profile gate's way), so the
 session explains it or stops it. No model call; a missing or unreadable file is no flag. Standard library only.
 """
@@ -33,7 +34,9 @@ TAIL_BYTES = 4096
 WAIT = re.compile(r'waiting for|still holds|\bqueued\b|\bblocked\b|\block\b', re.I)
 STARTED = re.compile(r'running in background with ID: (\S+?)\.? Output is being written to: (.+?\.output)')
 EXITED = '[exited with code'
-QUIET_OK = re.compile(os.environ.get('NANNY_QUIET') or r'\bwait\s+--for\b')
+# Quiet by design (1.22.2, SMADPickleBot #1277): a mail pull, and a run whose output reaches the task file only at its end,
+# piped through tail or redirected to a file (11/9/26: a dock-push `| tail -5` and an app build `> build.log` flagged)
+QUIET_OK = re.compile(os.environ.get('NANNY_QUIET') or r'\bwait\s+--for\b|\|\s*tail\b|(?<![<>&\d])>\s*[^\s&|>]')
 
 
 def state_path(session: str) -> str:

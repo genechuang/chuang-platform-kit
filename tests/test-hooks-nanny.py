@@ -83,6 +83,17 @@ def main():
            'b3 (python steps.py), 121 s old: its output has not grown for 120 s' in stalled, 'b4' in done_line, 'b5' in mail),
           (0, True, True, False, False))
 
+    # 1.22.2 (#1277): a run piped through tail or redirected to a file writes its task file only at its end; a run
+    # that redirects only stderr (2>&1) is still watched
+    _o7, ev7 = start(d, 'b7', 'python pipeline/desktop/dock-push.py --session "Snow White" 2>&1 | tail -4', '')
+    _o8, ev8 = start(d, 'b8', 'python pipeline/shared/app/artifact.py build --full > /d/tmp/build.log 2>&1', '')
+    _o9, ev9 = start(d, 'b9', 'python slow.py 2>&1', '')
+    for ev in (ev7, ev8, ev9):
+        N.post(ev, t0)
+    quiet = N.post(other(), t0 + 600)
+    check('  a run through tail or into a log file is never "printed nothing"; one that only joins stderr still is',
+          ('b7' in quiet, 'b8' in quiet, 'b9 (python slow.py 2>&1)' in quiet), (False, False, True))
+
     # a foreground call is nothing
     fg = {'session_id': 's2', 'tool_name': 'Bash', 'tool_input': {'command': 'ls'}, 'tool_response': 'a b'}
     check('  a foreground call is nothing', (N.post(fg, t0), N.record(fg, {}, t0)), ('', False))
