@@ -132,7 +132,10 @@ def main():
     N.post(odd, t0)
     kept = N.load(N.state_path('s7')).get('unmatched') or {}
     check('  a start neither way names keeps its shape for the next miss to read, and is not a run',
-          (kept.get('shape'), kept.get('text', '').strip(), 'x' in str(N.load(N.state_path('s7')).get('runs'))),
+          (kept.get('shape'), kept.get('text', '').strip(),
+           # by the run's command, never a letter in the dict's text: the other run's path is under a random mkdtemp
+           # folder, and an `x` in its name failed this case at random (11/9/26 9:55 AM and 12:05 PM PT)
+           any(r.get('command') == 'x' for r in (N.load(N.state_path('s7')).get('runs') or {}).values())),
           (['somethingElse', 'stdout'], 'started', False))
     os.environ.pop('NANNY_TASKS_ROOT', None)
     print(f'{len(failures)} failure(s)')

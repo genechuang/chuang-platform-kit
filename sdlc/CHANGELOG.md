@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.17.0 - 2026-11-09 PT
+
+- `chuang_sdlc.cicd.jest` (SMADPickleBot #1188, phase 2 of #235): the app's Jest suites a pipeline change reaches, and
+  jest on them. It was SMADPickleBot's pipeline/shared/pipeline_jest.py, now that file's shim.
+  - `configure(root=, app=, prefix=, command=, install_hint=, temp_prefix=)`.
+  - `changed_files` runs git in the configured repo.
+  - `run_suites` runs the host's jest command through `proc.run`, which picks the shell.
+- No signature changes elsewhere.
+
 ## 0.16.0 - 2026-11-09 PT
 
 - A card's ETA is the board's **ETA** Date field (SMADPickleBot #1274; Gene, 11/9/26: "scrum ETA should be a field in

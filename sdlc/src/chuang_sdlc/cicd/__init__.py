@@ -11,4 +11,6 @@ own names in).
   smoke_rest      a backend smoke's reads in one process over REST (Cloud Functions, Cloud Run, Pub/Sub, a token)
   migration_kind  whether a push's Alembic migrations only add (`expand`), so they may climb a shared database's
                   lower rung, or change what a live revision still reads (`contract`)
+  jest            the app's Jest suites a pipeline change reaches, read from the suites' own text, and jest on them by
+                  path, passed on its own JSON's word; the host's repo, app folder, prefix and command configured (#1188)
 """

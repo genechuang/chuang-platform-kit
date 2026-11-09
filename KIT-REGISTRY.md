@@ -1091,6 +1091,21 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `cmd_zip(a)` | (no docstring) |
 | `main(argv=)` | (no docstring) |
 
+## `chuang_sdlc.cicd.jest`: The app's Jest suites that test a pipeline script, run when a push changes that script (SMADPickleB…
+
+| Name | Purpose |
+|---|---|
+| `configure(**settings)` | The host's places and words: `root`, `app`, `prefix` (a folder name ending in `/`), `command` (jest's argv before the module's own flags), `install_hint`, `temp_prefix`. Unknown names are refused. |
+| `repo_root()` | The repo the paths are relative to. |
+| `app_folder()` | The app folder the suites live in and jest runs from. |
+| `named_paths(text)` | The repo paths under the prefix that a suite's text names, as written (`pipeline/shared/app/store-ready`). |
+| `reach(named, root=)` | Every repo path a suite reaches from the prefix paths it names: each as written (so a removed script still matches), the file it resolves to, and on through each script's own relative requires inside the prefix. |
+| `suite_map(app=, root=)` | {suite (its path from the app, as jest takes it): frozenset of the prefix paths it reaches} for every app suite that names a path under the prefix; the suites that name none are left out. |
+| `select(changed, suites=, app=, root=)` | The suites (paths from the app) a change can break: each one that reaches a changed file, by its path or by its path without the extension (a removed script it still requires). `changed` None (no diff to read) is every suite on a pipeline script; a change wit… |
+| `changed_files(before, after=, run=)` | The paths that differ between `before` and `after` (git's two-dot name-only diff, run in the repo), or None when there is no diff to read: no `before`, an all-zero one, or git refused. |
+| `run_suites(suites, app=, run=, timeout=)` | Jest on `suites` (paths from the app), from the app, by path (--runTestsByPath; each jest project takes the suites its testMatch holds). (passed, summary, details). Passed is read from jest's own JSON (success, no failed suite, every selected suite run), neve… |
+| `main(argv=)` | `select` (the suites a push can break, written one a line) or `run` (jest on a selection); exit 1 on a failure. |
+
 ## `chuang_sdlc.cicd.migration_kind`: Whether a push's API migrations only add (Gene, 10/24/26 10:57 PM PT: "Yes add migrations climb").
 
 | Name | Purpose |
