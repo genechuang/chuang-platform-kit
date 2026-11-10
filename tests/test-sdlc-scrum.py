@@ -210,6 +210,10 @@ check('Needs you with no ask: the owner asked to write it, the host\'s clear com
 p = plan(card(prio=''))
 check('no Light and no Priority: Needs you for the lead', (p['actions'], p['state']),
       ([('needs', 600)], f'no Light and no Priority: ask, Lee: {S.PRIORITY_ASK}'))
+pcfg = dict(CFG, lights=dict(CFG['lights'], pushing='push'))
+pushed = S.plan(card(light='push'), {'line': {}, 'blockers': [], 'owner_building': []}, {}, NOW, pcfg)
+check('0.21.0: a card whose dock push is running is asked nothing and moved nowhere',
+      (pushed['state'], pushed['actions'], pushed.get('question', '')), ('push: its dock push is running', [], ''))
 p = plan(card(), {'kind': 'next', 'ref': 12})
 check('next: Queued', (p['actions'], p['change']), ([('light', 'queued')], 'Switched to later: its owner says it is next, after #12.'))
 since = (NOW - timedelta(minutes=S.QUEUED_IDLE_MINUTES + 1)).isoformat()

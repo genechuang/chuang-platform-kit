@@ -450,6 +450,12 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         out['state'] = f"no Light and no Priority: {lights['needs']}, {who_leads}: {PRIORITY_ASK}"
         return out
 
+    if lights.get('pushing') and light == lights['pushing']:
+        # 0.21.0 (SMADPickleBot #1344): its work is committed and its dock push is running; the push's landing moves it
+        # on, and a failed push puts the working light back. Nothing to ask.
+        out['state'] = f"{lights['pushing']}: its dock push is running"
+        return out
+
     building = [b for b in facts.get('owner_building') or () if b != n]
     working = lights['working']
     if light == working:

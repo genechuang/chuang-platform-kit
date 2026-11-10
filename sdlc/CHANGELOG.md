@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.21.0 - 2026-11-10 PT
+
+- `scrum.plan` reads a board's `pushing` Light (SMADPickleBot #1344; Gene, 11/10/26 10:37 AM PT: "create a Pushing
+  light tag to represent this stage in Shipyard"). A card whose work is committed and whose dock push is running is
+  asked nothing and moved nowhere. The push's landing moves it on, and a push that does not land puts the working
+  Light back (the host's dock push sets both).
+- A board with no `pushing` Light is unchanged. No host call site changes.
+
 ## 0.20.0 - 2026-11-10 PT
 
 SMADPickleBot #1337. Gene, 11/10/26 10:10 AM PT: "We now have 21 items in Shipwreck, and nobody is sweeping these
