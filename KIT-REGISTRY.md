@@ -838,6 +838,15 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `sign(body, who=, kind=, env=, home=)` | The body with its signature line added at the end, once: `who`/`kind` when given, else signer()'s. A body that already ends signed, or no signer at all, is answered as given. |
 | `is_persons(body)` | Whether a comment can be its author's own words: True unless it carries a signature (a session's or the pipeline's, written with the person's token). |
 
+## `chuang_sdlc.status_cards`: Status cards: draft cards in one board column that say where something stands outside the board (an…
+
+| Name | Purpose |
+|---|---|
+| `since(old, facts, now, sig, waiting_since=)` | When each card's state began: {key: {sig, at}}. `sig(key, facts)` is what counts as a change; while `waiting_since(facts)` gives an instant (a store's own submission time for a review it holds), that is the mark; otherwise the old mark is kept while the signa… |
+| `waited(at_iso, now)` | '2d 4h', '5h 12m', '7m': how long since `at_iso`; '' for none or an unreadable one. |
+| `when(iso, zone)` | An instant in people's words in `zone` with its year and zone word ('11/10/26 3:12 PM PT'); '' for none. |
+| `sync(call, cfg, role, keys, facts, marks, render, kept)` | The cards made what `facts` says, in `keys`' order. `call(document, variables)` is one GraphQL call answering its `data` (None writes nothing); `cfg` the board's config (its `id`, `stages` by role and the Status field's `id` and `options`); `render(key, facts… |
+
 ## `chuang_sdlc.testing`: A fake GitHub for a host's suites of the ship's pull request (chuang_sdlc.ship_pr) and the shipped…
 
 | Name | Purpose |

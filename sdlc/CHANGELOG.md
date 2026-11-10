@@ -3,6 +3,20 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.23.0 - 2026-11-10 PT
+
+SMADPickleBot #1120, phase 10 of the SDLC move (Gene, 11/7/26 2:02 PM PT: anything sdlc-related is not picklebot
+specific).
+- **`chuang_sdlc.status_cards`**, new: draft cards in one board column that say where something stands outside the
+  board, each rewritten only when its words change.
+  - `sync(call, cfg, role, keys, facts, marks, render, kept)` keeps one draft card per key in the column of `role`.
+    It creates a missing card, edits one whose words changed and leaves the rest. A refused card leaves the others.
+  - `since(old, facts, now, sig, waiting_since=None)` gives each card's mark: kept while `sig` holds, `now` on a
+    change, or the outside instant `waiting_since` gives.
+  - `waited` ('2d 4h') and `when` (the instant in people's words with its year), plus the ADD, EDIT and COLUMN
+    documents.
+  - The caller owns every word on a card; the module names no store, app or project.
+
 ## 0.22.0 - 2026-11-10 PT
 
 SMADPickleBot #1336. Gene, 11/10/26 10:04 AM PT: "whats going on with 1021 and 1308 stuck as building in shipyard - why
