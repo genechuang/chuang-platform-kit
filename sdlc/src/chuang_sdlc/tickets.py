@@ -750,7 +750,10 @@ def start(numbers, run=None, cfg: dict = None) -> list:
             continue
         item = item or item_id(n, run, cfg)
         values = {} if at == target else {'Status': 'shipyard'}
-        if 'Light' in cfg['fields'] and light not in (lights.get('working'), lights.get('needs')):
+        # 0.22.0: a card its owner says is blocked keeps that light through a commit naming it (the owner's own
+        # `Scrum: building` line, read by the scrum master, ends the block), so a commit never flips it back and forth
+        keep = (lights.get('working'), lights.get('needs')) + ((lights['blocked'],) if lights.get('blocked') and at == target else ())
+        if 'Light' in cfg['fields'] and light not in keep:
             values['Light'] = lights['working']
         ok = bool(item) and set_fields(item, values, run, cfg)
         out.append((n, ok))

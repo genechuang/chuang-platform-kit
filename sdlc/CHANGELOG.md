@@ -3,6 +3,34 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.22.0 - 2026-11-10 PT
+
+SMADPickleBot #1336. Gene, 11/10/26 10:04 AM PT: "whats going on with 1021 and 1308 stuck as building in shipyard - why
+isn't scrum master reminding you of these tickets, and I am??"; 10:07 AM PT: "I think Blocked is a better and standard
+description?"
+- **A new owner's line**, `Scrum: blocked on <what> | eta <when>`, for a wait outside the board: an email, a daily
+  cycle, Apple's review.
+  - The card stays in the shipyard with the board's `blocked` Light (when the board has one) and the `blocked`
+    label.
+  - Its ETA is the end of the wait: `card_eta` reads a `blocked on` line as it reads `building`, and copies it into
+    the ETA field.
+  - Once the ETA passes, its owner is asked whether the wait is over. A `blocked on` line with no ETA asks for one.
+- **`Scrum: blocked by #N`** now sets the blocked Light too.
+  - An open linked blocker on its own keeps only the label: the owner's line says whether the card is building
+    beside it.
+  - When every blocker closes, the light comes off with the label.
+  - A blocked card whose owner then says `building` gets the working light back. Any other line takes the blocked
+    light off and asks what is next, in the unblock's own words, so the card is asked once.
+- **What the review of #1336 settled:**
+  - The blocked light never replaces Needs you (the lead's ask and assignment) or a host's `pushing` light.
+  - `tickets.start` keeps a shipyard card's blocked light through a commit naming it.
+  - A `blocked` label that no line or link backs comes off.
+  - A `blocked on` line's "ETA" or "#N" inside its wait is part of the wait. Its ETA is read only after the bar, and a
+    wait with no ETA never borrows the field's old build date.
+  - A `light` action for a role the board gives no light clears it, never raising KeyError.
+- **No host call site changes.** A board with no `blocked` Light keeps 0.21.0's behaviour. SCRUM_RE reads the new
+  kind, so a host's listener nudges on it.
+
 ## 0.21.0 - 2026-11-10 PT
 
 - `scrum.plan` reads a board's `pushing` Light (SMADPickleBot #1344; Gene, 11/10/26 10:37 AM PT: "create a Pushing

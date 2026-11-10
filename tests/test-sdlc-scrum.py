@@ -214,6 +214,62 @@ pcfg = dict(CFG, lights=dict(CFG['lights'], pushing='push'))
 pushed = S.plan(card(light='push'), {'line': {}, 'blockers': [], 'owner_building': []}, {}, NOW, pcfg)
 check('0.21.0: a card whose dock push is running is asked nothing and moved nowhere',
       (pushed['state'], pushed['actions'], pushed.get('question', '')), ('push: its dock push is running', [], ''))
+# 0.22.0 (SMADPickleBot #1336): the blocked Light, for a wait on another ticket or on something outside the board
+bcfg = dict(CFG, lights=dict(CFG['lights'], blocked='stop'))
+bplan = lambda c, line=None, state=None, **facts: S.plan(c, dict({'line': line or {}, 'blockers': []}, **facts), state or {}, NOW, bcfg)  # noqa: E731
+line = S.scrum_line([say('Scrum: blocked on the Monday police email | eta 11/11/26 6 PM')], LOGIN)
+p = bplan(card(light='busy'), line)
+check('0.22.0, the positive case: `blocked on <what> | eta <when>` reads its wait, sets the blocked light and label, '
+      'copies the ETA, and asks nothing before the ETA',
+      (line['kind'], line['ask'], [a[0] for a in p['actions']], p['actions'][0], p['question'], p['state'].startswith('blocked on the Monday police email, ETA')),
+      ('blocked on', 'the Monday police email', ['light', 'label'], ('light', 'blocked'), '', True))
+ecfg = dict(bcfg, fields=dict(bcfg['fields'], ETA={'id': 'F_eta', 'type': 'date'}))
+check('  a board with an ETA field gets the wait\'s end copied into it',
+      S.plan(card(light='busy'), {'line': line, 'blockers': []}, {}, NOW, ecfg)['actions'][-1][0], 'eta')
+late = S.scrum_line([say('Scrum: blocked on the dry run | eta 10/28/26 9 AM')], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), late)
+check('  past its ETA its owner is asked whether the wait is over, its light and label left as they are',
+      ([a for a in p['actions'] if a[0] in ('light', 'label')], 'is the wait over?' in p['question']), ([], True))
+p = bplan(card(light='stop', labels=('blocked',)), S.scrum_line([say('Scrum: blocked on the club')], LOGIN))
+check('  with no ETA its owner is asked for one', 'with no ETA: when should the wait be over?' in p['question'], True)
+p = bplan(card(light='stop', labels=('blocked',)), {'kind': 'building', 'eta': '5 PM', 'at': NOW.isoformat()})
+check('  `building` after the wait: the working light back, the label off',
+      (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), p['change'].endswith('the wait is over.')),
+      ([('light', 'working'), ('unlabel', 'blocked')], True))
+p = bplan(card(), {'kind': 'blocked by', 'ref': 9, 'who': 'Lee'})
+check('  `blocked by #N` sets the blocked light beside its label and link',
+      [a for a in p['actions'] if a[0] in ('light', 'label', 'link')], [('light', 'blocked'), ('label', 'blocked'), ('link', 9)])
+p = bplan(card(light='stop', labels=('blocked',)), {'kind': 'blocked by', 'ref': 9}, blockers=[(9, 'CLOSED')])
+check('  every blocker closed: the label and the blocked light off, its owner asked',
+      (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question']),
+      ([('light', 'shipyard'), ('unlabel', 'blocked')], True))
+check('  a board with no blocked light is unchanged: no light action for `blocked on`',
+      [a[0] for a in plan(card(light='busy'), line)['actions']], ['label'])
+# the review of #1336, a case each
+check('  review: Needs you and a running push are never relit to Blocked',
+      [[a for a in bplan(card(light=l), line)['actions'] if a[0] == 'light'] for l in ('ask',)]
+      + [[a for a in S.plan(card(light='push'), {'line': line, 'blockers': []}, {}, NOW,
+                            dict(bcfg, lights=dict(bcfg['lights'], pushing='push')))['actions'] if a[0] == 'light']],
+      [[], []])
+p = bplan(card(light='busy'), {'kind': 'building', 'eta': '5 PM', 'at': NOW.isoformat()}, blockers=[(49, 'OPEN')])
+check('  review: an open linked blocker alone keeps the label but never the light: the owner says building',
+      [a for a in p['actions'] if a[0] in ('light', 'label')], [('label', 'blocked')])
+p = plan(card(light='busy', labels=('blocked',)), {'kind': 'building', 'eta': '5 PM', 'at': NOW.isoformat()})
+check('  review: a `blocked` label no line or link backs comes off, on a board with or without the blocked light',
+      ([a for a in p['actions'] if a[0] == 'unlabel'],
+       [a for a in bplan(card(light='busy', labels=('blocked',)), {'kind': 'building', 'eta': '5 PM', 'at': NOW.isoformat()})['actions'] if a[0] == 'unlabel']),
+      ([('unlabel', 'blocked')], [('unlabel', 'blocked')]))
+odd = S.scrum_line([say('Scrum: blocked on ETA from #12 support | eta 11/12/26 5 PM')], LOGIN)
+check('  review: "ETA" and "#N" inside the wait are part of it, the ETA read from after the bar',
+      (odd['ask'], odd['eta'], odd['ref']), ('ETA from #12 support', '11/12/26 5 PM', None))
+p = bplan(dict(card(light='stop', labels=('blocked',)), eta='2026-10-01'), S.scrum_line([say('Scrum: blocked on the club')], LOGIN))
+check("  review: a wait with no ETA never borrows the field's old build date: it is asked for one",
+      ('with no ETA' in p['question'], p['state'].endswith('no ETA')), (True, True))
+started_on = Board(places={970: ('Building', 'stop'), 971: ('Backlog', 'stop')})
+T.start([970, 971], started_on, bcfg)
+check("  review: a commit's start keeps a Shipyard card's Blocked light, and turns one elsewhere to working",
+      [w for w in started_on.writes if w[0] == 'fields'],
+      [('fields', 'IT_971', {'F_status': 'o_y', 'F_light': 'l_busy'})])
 p = plan(card(), {'kind': 'next', 'ref': 12})
 check('next: Queued', (p['actions'], p['change']), ([('light', 'queued')], 'Switched to later: its owner says it is next, after #12.'))
 since = (NOW - timedelta(minutes=S.QUEUED_IDLE_MINUTES + 1)).isoformat()

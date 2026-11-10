@@ -7,6 +7,8 @@ An owner answers on the ticket with one line, the newest one by the repository's
   Scrum: building | eta <when>        the card is being built and lands about then (parse_eta, in the kit's zone)
   Scrum: next | after #N              it is the owner's next, after #N
   Scrum: blocked by #N | <who>        #N blocks it; <who> (a session, or the lead) can unblock it
+  Scrum: blocked on <what> | eta <when>  it waits on something outside the board until about then (0.22.0); the
+                                      board's blocked Light, if it has one, shows either block
   Scrum: depends on #N                it cannot be finished until #N is: back to the next column
   Scrum: needs <lead> | <the ask>     it waits on the lead's decision, written in full
   Scrum: paused | <why>               its owner set it down: back to the next column, its light off
@@ -105,7 +107,7 @@ def eta_ask(n) -> str:
 
 def _line_re(lead: str):
     """An owner's `Scrum:` line and its kind, the lead's own `needs <lead>` among the kinds."""
-    return re.compile(r'^\s*Scrum:\s*(building|next|blocked by|depends on|needs ' + re.escape(lead.lower())
+    return re.compile(r'^\s*Scrum:\s*(building|next|blocked by|blocked on|depends on|needs ' + re.escape(lead.lower())
                       + r'|paused|done)\b(.*)$', re.I | re.M)
 
 
@@ -180,6 +182,11 @@ def scrum_line(comments, login: str, skip=()) -> dict:
         eta = next((p[3:].strip() for p in parts if p.lower().startswith('eta')), '')
         who = parts[1] if kind == 'blocked by' and len(parts) > 1 else ''
         ask = rest.split('|', 1)[1].strip() if kind in (NEEDS_KIND, 'paused') and '|' in rest else ''
+        if kind == 'blocked on':
+            # 0.22.0: what it waits on is the text before its first `|` (an "ETA" or a "#N" inside it is part of the
+            # wait, never the line's ETA or ref); the ETA only from a later part.
+            ask, ref = parts[0], None
+            eta = next((p[3:].strip() for p in parts[1:] if p.lower().startswith('eta')), '')
         return {'kind': kind, 'ref': int(ref.group(1)) if ref else None, 'who': who, 'eta': eta, 'ask': ask,
                 'at': c.get('createdAt')}
     return {}
@@ -334,7 +341,7 @@ def card_eta(card: dict, line: dict, now: datetime, state: dict = None):
     day, and the field rules once the owner has changed or cleared it since (`tickets eta N none` stays cleared)."""
     day = (card.get('eta') or '').strip()
     field = field_eta(day)
-    building = line.get('kind') == 'building'
+    building = line.get('kind') in ('building', 'blocked on')   # 0.22.0: a blocked card's ETA is its wait's end
     said = parse_eta(line.get('eta'), now) if building else None
     said_day = eta_day(line.get('eta'), now) if building else ''
     if not said_day:
@@ -384,10 +391,41 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         out['change'] = f'Moved back to {back}: its owner paused it ({why}); the {_tickets.stage("shipyard", cfg)} holds what is being built.'
         return out
 
+    blocked = lights.get('blocked') or ''   # 0.22.0 (SMADPickleBot #1336): a board with no blocked Light is unchanged
+    # The blocked light comes from the owner's own line alone, and never replaces Needs you (the lead's ask and
+    # assignment are its) or the host's pushing light (a push under way): the review of #1336.
+    relight = blocked and light != blocked and light not in (lights.get('needs'), lights.get('pushing'))
+    unblocked_q = f"#{n} is unblocked: pick it back up (`Scrum: building | eta <when>`), or say `Scrum: next | after #N`."
+    if line.get('kind') == 'blocked on':
+        # 0.22.0: a wait outside the board (an email, a daily cycle, Apple's review), its ETA when the wait should end;
+        # the card stays in the shipyard, its light the blocked one and its label on, and once the ETA passes its owner
+        # is asked whether the wait is over (again ASK_AGAIN_HOURS later while it is not answered).
+        what = line.get('ask') or 'something outside the board'
+        if relight:
+            out['actions'].append(('light', 'blocked'))
+            out['change'] = f'Switched to {blocked}: its owner says it waits on {what}.'
+        if BLOCKED_LABEL not in labels:
+            out['actions'].append(('label', BLOCKED_LABEL))
+        # The wait's own ETA only: a line with none never borrows the field's, which may still hold a build's date.
+        eta, write = card_eta(card, line, now, state) if line.get('eta') else (None, '')
+        if write and 'ETA' in (cfg.get('fields') or {}):
+            out['actions'].append(('eta', (write, line.get('at') or '')))
+        out['state'] = f'blocked on {what}' + (f', ETA {pt(eta)}' if eta else ', no ETA')
+        if eta and eta <= now:
+            out['question'] = (f"#{n} is blocked on {what}, and its ETA ({pt(eta)}) has passed: is the wait over? "
+                               f"`Scrum: building | eta <when>` to pick it up, or `Scrum: blocked on {what} | eta <when>` "
+                               "with the new end of the wait.")
+        elif not eta:
+            out['question'] = (f"#{n} is blocked on {what} with no ETA: when should the wait be over? "
+                               f"`Scrum: blocked on {what} | eta <when>`.")
+        return out
+
     linked = [b for b, _s in blockers]
     ref = line.get('ref') if line.get('kind') == 'blocked by' else None
     if ref and not (ref in linked and not open_blockers):   # a named blocker closed with no other open: the rule below
         who = line.get('who') or ''
+        if relight:
+            out['actions'].append(('light', 'blocked'))
         if BLOCKED_LABEL not in labels:
             out['actions'].append(('label', BLOCKED_LABEL))
             out['change'] = f"Blocked by #{ref}" + (f"; {who} can unblock it." if who else '.')
@@ -403,14 +441,37 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
     if BLOCKED_LABEL in labels and blockers and not open_blockers:
         out['state'] = 'every blocker closed'
         out['actions'].append(('unlabel', BLOCKED_LABEL))
+        if blocked and light == blocked:   # the blocked light off in the same pass, and the one question below
+            out['actions'].append(('light', 'shipyard'))
         out['change'] = 'Unblocked: every ticket blocking it is closed.'
-        out['question'] = f"#{n} is unblocked (every blocker closed): pick it back up, or say `Scrum: next | after #N`."
+        out['question'] = unblocked_q
         return out
     if open_blockers:
+        # A linked blocker alone keeps the label (as before 0.22.0) but never the light: the owner's own line says
+        # whether it is building beside it.
         out['state'] = 'blocked by ' + ', '.join(f'#{b}' for b in open_blockers)
         if BLOCKED_LABEL not in labels:
             out['actions'].append(('label', BLOCKED_LABEL))
         return out
+
+    stale_label = BLOCKED_LABEL in labels and not blockers   # a `blocked on` label its line no longer backs
+    if blocked and light == blocked:
+        # 0.22.0: blocked no more (its owner's newest line is no block, and no linked ticket blocks it): `building` turns
+        # it to the working light; anything else takes the blocked light off and asks what is next, in the words of the
+        # unblock above, so a card asked there is not asked again.
+        if BLOCKED_LABEL in labels:
+            out['actions'].append(('unlabel', BLOCKED_LABEL))
+        if line.get('kind') == 'building':
+            out['actions'].append(('light', 'working'))
+            out['state'] = f"the owner says building: {lights['working']} set"
+            out['change'] = f"Switched to {lights['working']}, as its owner said: the wait is over."
+            return out
+        out['actions'].append(('light', 'shipyard'))
+        out['state'] = 'no block on record: the blocked light off'
+        out['question'] = unblocked_q
+        return out
+    if stale_label:
+        out['actions'].append(('unlabel', BLOCKED_LABEL))   # and the card goes on to its other rules below
 
     if light == lights['needs']:
         # A Needs-you card always says what it needs. A card the sweep itself flagged (needs_at) before asks were kept
@@ -1060,8 +1121,9 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                 gh.field(ref, 'Owner', who)
                 did.append(f'#{ref} handed to {who} to unblock')
             elif kind == 'light':
-                gh.field(n, 'Light', cfg['lights'][value])
-                did.append(f"{cfg['lights'][value]} set")
+                to = cfg['lights'].get(value, '')   # 0.22.0: a role the board gives no light clears it, never a KeyError
+                gh.field(n, 'Light', to)
+                did.append(f'{to} set' if to else 'its light cleared')
             elif kind == 'eta':   # 0.16.0: an owner's `eta` line copied into the board's ETA field, the line remembered
                 day, line_at = value
                 if gh.field(n, 'ETA', day):
