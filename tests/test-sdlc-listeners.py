@@ -106,7 +106,8 @@ print('a closed ticket')
 cards = {20: {'number': 20, 'title': 'Alert: x down', 'comment': '', 'column': 'Building', 'item': 'IT_20', 'closed_at': 'A'},
          21: {'number': 21, 'title': 'work', 'comment': '', 'column': 'Ready', 'item': 'IT_21', 'closed_at': 'B', 'owner': 'Bo'},
          22: {'number': 22, 'title': 'work', 'column': 'Backlog', 'item': 'IT_22', 'closed_at': 'C', 'reason': 'not_planned'},
-         23: {'number': 23, 'title': 'work', 'column': 'Shipped', 'item': 'IT_23'}}
+         23: {'number': 23, 'title': 'work', 'column': 'Shipped', 'item': 'IT_23'},
+         26: {'number': 26, 'title': 'wrecked', 'column': 'Wrecked', 'item': 'IT_26', 'closed_at': 'D'}}
 moves, store, sent = Moves(cards=cards), Records(), []
 wire(moves, closer=lambda title, comment: title.startswith('Alert: '))
 closed = lambda n, reason='completed': L.ticket_closed({'number': n, 'state_reason': reason}, store, 'tok', NOW, mail=mail)  # noqa: E731
@@ -116,9 +117,13 @@ check("an alert closer's close goes to the ship column, its move marked first", 
 check('  any other close asks its owner once', (closed(21), closed(21), sent[-1][:3]),
       ('events: closed #21 while in Ready; Bo asked to confirm it done or reopen it', 'events: closed #21 in Ready was already told',
        ('Bo', 'Scrum master', 'Closed')))
-check('  a close as not planned: the failed column, no Light, told once', (closed(22, ''), closed(22, ''), moves.writes[-1]),
-      ('events: closed #22 (not_planned): moved from Backlog to Shipwreck, no Light; Captain told',
+check('  a close as not planned: archived off the board, told once', (closed(22, ''), closed(22, ''), moves.writes[-1]),
+      ('events: closed #22 (not_planned): archived off the board from Backlog; Captain told',
        'events: closed #22 (not_planned) in Backlog was already settled', ('unplanned', 'IT_22')))
+check('  a card in the failed column dropped as not planned is archived too; closed as completed there it stays',
+      (closed(26), closed(26, 'not_planned'), moves.writes[-1]),
+      ('events: closed #26 is in Wrecked already; nothing to do',
+       'events: closed #26 (not_planned): archived off the board from Wrecked; Captain told', ('unplanned', 'IT_26')))
 check('  a finished card, a card off the board and no number say so',
       (closed(23), closed(24), L.ticket_closed({}, store, 'tok', NOW, mail=mail)),
       ('events: closed #23 is in Shipped already; nothing to do', 'events: closed #24 is not on the board; nothing to do',
@@ -128,7 +133,7 @@ check("  the host's own word is added", L.ticket_closed({'number': 23}, store, '
       'events: closed #23 is in Shipped already; nothing to do; #23 noted')
 wire(Moves(cards=cards, refuse={'unplanned'}))
 check('  a refused move frees the claim and the mark',
-      (L.ticket_closed({'number': 22}, Records(), 'tok', NOW, mail=mail).startswith('WARNING: events: closed #22 (not_planned) was not moved'),),
+      (L.ticket_closed({'number': 22}, Records(), 'tok', NOW, mail=mail).startswith('WARNING: events: closed #22 (not_planned) was not archived'),),
       (True,))
 wire(Moves(refuse={'read'}))
 check('  an unreadable card is a WARNING', closed(25), "WARNING: events: closed #25 could not be read (HTTP 502); the scrum master's sweep catches it")

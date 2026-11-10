@@ -53,6 +53,12 @@ QUEUED_IDLE_MINUTES = 30
 CLOSED_EVERY_HOURS = 24   # a closed card outside the finished columns is asked about at most once a day
 
 
+# 0.20.0 (SMADPickleBot #1337; Gene, 11/10/26 10:10 AM PT: "nobody is sweeping these tickets and figuring out if these
+# are tickets that need to be re-shipped, or closed as won't-fix"): an open card in the failed column is asked about
+# once it has sat there this long, and again each this long after, until its owner re-ships or drops it.
+WRECKED_HOURS = 24
+
+
 PRIORITY_ASK = 'set its Priority on the board (P1 now, P2 a bug, P3 a feature, P4 someday)'
 
 
@@ -86,6 +92,7 @@ _SET = {
     'ship_run_of': None,    # (store) -> a reader of the host's ship record, for the ship card's keeper; None: the host's
     'tz': None,             # the zone an ETA is read in and a stamp written; None: chuang_platform_kit.clock's
     'eta_command': '',      # 0.16.0: the host's command that sets a card's ETA field, `{n}` its number; '' says none
+    'start_command': '',    # 0.20.0: the host's command that picks a ticket up (tickets.start), `{n}` its number
 }
 
 
@@ -613,7 +620,8 @@ def closed_filter(cfg: dict) -> str:
 
 def closed_plan(card: dict, comments, login: str, state: dict, told: bool, now: datetime, cfg: dict) -> dict:
     """What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a
-    finished one (an old column name read as its new one); `wreck` for a close as not planned or a duplicate; `ship`
+    finished one (an old column name read as its new one); `archive` for a close as not planned or a duplicate (0.20.0,
+    SMADPickleBot #1337: off the board, never into the failed column a release's failures keep); `ship`
     when its owner's newest `Scrum:` line is `done`, or an alert closer closed it (configure(closer=): the newest
     comment and the title); otherwise `ask`, at most once every CLOSED_EVERY_HOURS (`told`, the host's own listener's
     letter for this close, counting as the day's; `wait` until then)."""
@@ -621,7 +629,7 @@ def closed_plan(card: dict, comments, login: str, state: dict, told: bool, now: 
     if not col or finished(col, cfg):
         return {'action': '', 'why': f'in {col or "no column"}'}
     if unplanned(card.get('reason')):
-        return {'action': 'wreck', 'why': f"closed as {'a duplicate' if card.get('reason') == 'duplicate' else 'not planned'}"}
+        return {'action': 'archive', 'why': f"closed as {'a duplicate' if card.get('reason') == 'duplicate' else 'not planned'}"}
     if scrum_line(comments, login).get('kind') == 'done':
         return {'action': 'ship', 'why': 'its owner answered `Scrum: done`'}
     newest = sorted(comments or [], key=lambda c: c.get('createdAt') or '')
@@ -642,7 +650,7 @@ def _told(n, closed_at, store) -> bool:
 
 def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, only=None, skip=()) -> list:
     """The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with
-    closed_filter, each settled by closed_plan: to the ship column with its shipped Light, to the failed column, or its
+    closed_filter, each settled by closed_plan: to the ship column with its shipped Light, archived off the board, or its
     question added to its owner's letter (closed_to). A card asked within the day is not read again; `only` is one card
     (an event named it: its owner's `Scrum: done`), read whatever its record says; `skip` the shipyard's own closed
     cards, which the column's sweep has just moved. Lines."""
@@ -669,10 +677,10 @@ def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, 
         comments = (issue.get('comments') or {}).get('nodes') or []
         told = _told(n, issue.get('closedAt'), store)
         p = closed_plan(dict(c, number=n, reason=str(issue.get('stateReason') or '').lower()), comments, login, state, told, now, cfg)
-        if p['action'] == 'wreck':
-            ok = gh.wreck(n)
-            lines.append(f"scrum: closed #{n}: {p['why']}: " + (f"moved to {_tickets.stage('failed', cfg)}, no Light" if ok
-                                                                 else f"the move to {_tickets.stage('failed', cfg)} was refused; next sweep tries again"))
+        if p['action'] == 'archive':
+            ok = gh.archive(n)
+            lines.append(f"scrum: closed #{n}: {p['why']}: " + ('archived off the board' if ok
+                                                                 else 'the archive was refused; next sweep tries again'))
             continue
         if p['action'] == 'ship':
             ok = gh.ship(n)
@@ -908,16 +916,14 @@ class GitHub:
         _tickets.mark_ship_move([n], self.run)
         return all(ok for _n, ok in _tickets.move([n], 'shipped', self.run, self.cfg))
 
-    def wreck(self, n: int) -> bool:
-        """A card closed as not planned or a duplicate to the failed column with its Light cleared: the pipeline's own
-        move, marked first, the column and the Light in one request; True once the board took it."""
+    def archive(self, n: int) -> bool:
+        """A card closed as not planned or a duplicate archived off the board (0.20.0; SMADPickleBot #1337: it went to the
+        failed column until then, where twenty such cards hid the release failures the column is for): the pipeline's
+        own edit, marked first as a move is, then tickets.archive; True once the board took it."""
         if self.dry:
             return True
-        got = _tickets.ticket_place(n, self.run, self.cfg)
-        if not got:
-            return False
         _tickets.mark_ship_move([n], self.run)
-        return bool(_tickets.set_fields(got[0], {'Status': 'failed', 'Light': ''}, self.run, self.cfg))
+        return _tickets.archive(n, self.run, self.cfg)
 
     def place(self, n: int):
         """(column, light) of a card, or None when the board does not answer."""
@@ -1118,14 +1124,16 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         # 0.14.0 (#1234): each column's placeholder first, the ship card second in its home, after the keeper's move
         lines += [('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
                   for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
-        warming = {}
+        warming, wrecked = {}, {}
         lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
+        lines += wrecked_sweep(cfg, gh, store, now, wrecked, dry)   # 0.20.0: the failed column kept for failures
     else:
-        warming = {}
+        warming, wrecked = {}, {}
     lines += gh.flush()   # #1207: every field write this sweep decided, in one aliased mutation
     gh.batch = False
     lines += _send(letters, mail, dry)
     lines += _send(warming, mail, dry, compose=warming_letter)
+    lines += _send(wrecked, mail, dry, compose=wrecked_letter)
     return lines or [f'scrum: the {_tickets.stage("shipyard", cfg)} is empty']
 
 
@@ -1194,6 +1202,79 @@ def warming_letter(owner: str, items) -> tuple:
              "line, its dev Deploy run and the board move's line, then put each right (Ready, or the stage that failed):"]
     for n, title, minutes, url in items:
         lines.append(f'- #{n} {title}: Warming {minutes} minutes\n  {url}')
+    return subject, '\n'.join(lines)
+
+
+def wrecked_question(n, col: str, hours: int) -> str:
+    """What the owner of a card left in the failed column is asked (0.20.0): re-ship it or drop it, each by the act
+    that moves it (the host's start command, else a move to the shipyard; a close as not planned archives it)."""
+    command = (_SET['start_command'] or '').format(n=n)
+    pick = f'`{command}`' if command else 'move it to the shipyard'
+    return (f'#{n} failed its release and has sat in {col} {hours} hours. Re-ship it ({pick}, then fix and dock it as '
+            'usual), or drop it (close it as not planned, which archives its card).')
+
+
+def wrecked_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool = False) -> list:
+    """The failed column kept for what it is for (0.20.0; SMADPickleBot #1337): a closed card there whose close was as
+    not planned or a duplicate is archived off the board, and an open card that has sat there WRECKED_HOURS (its
+    `status_at`, the board's updatedAt of its Status) goes into its owner's wrecked letter (the captain's for none or
+    the lead), again each WRECKED_HOURS after (the card's scrum record keeps `wrecked_asked_at`; a card that leaves the
+    column and fails again starts the clock over, since its `status_at` moves). Two reads of the column with GitHub's
+    own filter, open and closed. Lines."""
+    failed = _tickets.stage('failed', cfg)
+    if not failed:
+        return []
+    col = _tickets.filter_columns([failed]) + ' is:issue'
+    lines = []
+    closed = _tickets.board_items(col + ' is:closed', gh.run, cfg)
+    if closed is None:
+        lines.append(f'scrum: the {failed} column did not answer (closed); next sweep')
+        closed = []
+    closed = [c for c in closed if not _tickets.is_draft(c) and not _tickets.is_placeholder(c.get('title'), cfg)]
+    gh.prefetch([(c.get('content') or {}).get('number') for c in closed])
+    for c in closed:
+        n = (c.get('content') or {}).get('number')
+        issue = gh.card(n) if n else None
+        if not issue or issue.get('state') != 'CLOSED' or not unplanned(str(issue.get('stateReason') or '').lower()):
+            continue
+        ok = gh.archive(n)
+        lines.append(f'scrum: #{n} in {failed} was closed as not planned: '
+                     + ('archived off the board' if ok else 'the archive was refused; next sweep tries again'))
+    cards = _tickets.board_items(col + ' is:open', gh.run, cfg)
+    if cards is None:
+        return lines + [f'scrum: the {failed} column did not answer (open); next sweep']
+    for c in cards:
+        n = (c.get('content') or {}).get('number')
+        if not n or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg):
+            continue
+        try:
+            since = datetime.fromisoformat((c.get('status_at') or '').replace('Z', '+00:00'))
+        except ValueError:
+            continue   # no time read: never a guess at its age
+        hours = int((now - since).total_seconds() // 3600)
+        if hours < WRECKED_HOURS:
+            continue
+        state = store.get(_SET['state'], str(n)) or {}
+        asked = state.get('wrecked_asked_at')
+        if asked and asked >= since.isoformat() and (now - datetime.fromisoformat(asked)).total_seconds() < WRECKED_HOURS * 3600:
+            continue
+        to = c.get('owner') or captain()
+        to = captain() if to == lead() else to
+        letters.setdefault(to, []).append((n, c.get('title') or '', wrecked_question(n, failed, hours),
+                                           (c.get('content') or {}).get('url') or ''))
+        state['wrecked_asked_at'] = now.isoformat()
+        if not dry:
+            store.set(_SET['state'], str(n), state)
+        lines.append(f'scrum: #{n} has sat in {failed} {hours} hours: {to} asked to re-ship or drop it')
+    return lines
+
+
+def wrecked_letter(owner: str, items) -> tuple:
+    """(subject, text) of one owner's wrecked letter: every card of theirs left in the failed column past the limit."""
+    subject = f"Scrum master: {len(items)} card{'s' if len(items) != 1 else ''} left in the failed column"
+    lines = [f'{owner}, each of these failed its release and nothing has moved it since. Re-ship or drop each one:']
+    for n, title, q, url in items:
+        lines.append(f'- #{n} {title}: {q}\n  {url}')
     return subject, '\n'.join(lines)
 
 

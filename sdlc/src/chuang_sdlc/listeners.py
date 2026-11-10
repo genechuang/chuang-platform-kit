@@ -6,8 +6,8 @@ commit's tickets), so no listener reads the whole board.
   board_wake         the owner of a card newly in the shipyard column told by one letter, once per move
   board_light        a dragged card's Light made its column's (cosmetic: a refusal is a line, never a retry)
   dock_landed        a push's tickets to the dock column (forward only), the moment it lands
-  ticket_closed      a closed ticket ends in the ship or the failed column: an alert closer's close to the ship
-                     column, a close as not planned to the failed one with no Light, any other close asked about
+  ticket_closed      a closed ticket ends in the ship column or off the board: an alert closer's close to the ship
+                     column, a close as not planned archived (0.20.0), any other close asked about
   scrum_nudge        the scrum master run on one card the moment an event names it (never its own echo), or its job
   triage_sweep       a `Triage:` line the receiver could not sweep at once: swept here, or its job started
 
@@ -202,7 +202,8 @@ def dock_landed(data: dict, token: str, mover=None) -> str:
 def ticket_closed(data: dict, store, token: str, now=None, read=None, ship=None, mail=None, also=None) -> str:
     """A closed ticket ends in the ship or the failed column: the event {number, state_reason, by}, and this reads that
     one card (`read`, else moves.closed_card). Off the board, or in a finished column already: nothing. Closed as not
-    planned or a duplicate (moves.is_unplanned): the failed column with no Light, the move marked first in the host's
+    planned or a duplicate (moves.is_unplanned): archived off the board (moves.to_unplanned), from any column but the
+    ship one, the failed column included (0.20.0; the failed column with no Light until then), the edit marked first in the host's
     moves.BOARD_MOVES record, its owner told in one line once. Closed by an alert closer (configure's `closer`, else
     chuang_sdlc.alerts.closed_by_closer): the ship column (`ship`, else moves.to_shipped), marked first. Any other
     close: one letter (moves.closed_letter) asking its owner, once per close (moves.closed_key). `also(n, card,
@@ -223,12 +224,15 @@ def ticket_closed(data: dict, store, token: str, now=None, read=None, ship=None,
     if not card or not card.get('column'):
         return f'{_h()}: closed #{n} is not on the board; nothing to do' + extra
     col = card['column']
-    if M.is_finished(col):
-        return f'{_h()}: closed #{n} is in {col} already; nothing to do' + extra
     reason = str((data or {}).get('state_reason') or card.get('reason') or '').lower()
-    if M.is_unplanned(reason):
-        # Closed as not planned or a duplicate: nothing shipped and nothing to confirm, so the failed column with no
-        # Light, the move marked first, and the owner told once in one line (the same claim a close's letter takes).
+    unplanned = M.is_unplanned(reason)
+    # 0.20.0 (SMADPickleBot #1337): a card a release wrecked and its owner then dropped leaves the failed column too
+    if M.is_finished(col) and not (unplanned and col == M.stage('failed')):
+        return f'{_h()}: closed #{n} is in {col} already; nothing to do' + extra
+    if unplanned:
+        # Closed as not planned or a duplicate: nothing shipped and nothing to confirm, so the card is archived off the
+        # board (moves.to_unplanned; the failed column until 0.20.0, where such cards hid the release failures it is
+        # for), the edit marked first, and the owner told once in one line (the same claim a close's letter takes).
         key = M.closed_key(n, card.get('closed_at'))
         if not store.create(claims(), key, {'number': n, **_claim(now)}):
             return f'{_h()}: closed #{n} ({reason}) in {col} was already settled'
@@ -238,13 +242,13 @@ def ticket_closed(data: dict, store, token: str, now=None, read=None, ship=None,
         except Exception as e:   # noqa: BLE001 - GitHub or the store refused: the claim and the mark freed, the sweep catches it
             store.delete(claims(), key)
             store.delete(M.BOARD_MOVES, str(n))   # a mark left behind would read a later hand drag as the pipeline's
-            return f'WARNING: {_h()}: closed #{n} ({reason}) was not moved to Shipwreck ({str(e)[:160]}); the scrum master\'s sweep catches it'
+            return f'WARNING: {_h()}: closed #{n} ({reason}) was not archived ({str(e)[:160]}); the scrum master\'s sweep catches it'
         to, text, subject = M.unplanned_line(card, reason)
         try:
             mail(to, text, M.SCRUM_SENDER, subject=subject)
         except Exception as e:   # noqa: BLE001 - the card is placed; the word to the owner is best effort
-            return f'{_h()}: closed #{n} ({reason}): moved from {col} to Shipwreck, no Light; {to} not told ({str(e)[:120]})'
-        return f'{_h()}: closed #{n} ({reason}): moved from {col} to Shipwreck, no Light; {to} told' + extra
+            return f'{_h()}: closed #{n} ({reason}): archived off the board from {col}; {to} not told ({str(e)[:120]})'
+        return f'{_h()}: closed #{n} ({reason}): archived off the board from {col}; {to} told' + extra
     closer = _SET['closer']
     if closer is None:
         from . import alerts

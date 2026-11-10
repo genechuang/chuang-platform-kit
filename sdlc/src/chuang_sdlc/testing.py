@@ -269,6 +269,7 @@ class Board:
     def __init__(self, columns=None, issues=None, places=None, refuse=()):
         self.columns, self.issues_, self.places = dict(columns or {}), dict(issues or {}), dict(places or {})
         self.refuse, self.writes, self.queries, self.error = set(refuse), [], [], ''
+        self.archived = set()   # 0.20.0: the items archived off the board, which ticket_place's read says
 
     def node_id(self, number):
         """An issue's node id, `I_<n>`."""
@@ -290,6 +291,20 @@ class Board:
     def item_top(self, item):
         """A card to the top of its column, recorded."""
         self.writes.append(('top', item))
+        return True
+
+    def item_archive(self, item):
+        """A card archived off the board, recorded as ('archive', item); False when 'archive' is refused (0.20.0)."""
+        self.writes.append(('archive', item))
+        self.archived.add(item)
+        return 'archive' not in self.refuse
+
+    def item_unarchive(self, item):
+        """A card restored from the archive, recorded as ('unarchive', item); False when 'unarchive' is refused."""
+        self.writes.append(('unarchive', item))
+        if 'unarchive' in self.refuse:
+            return False
+        self.archived.discard(item)
         return True
 
     def comment(self, number, body):
@@ -333,7 +348,7 @@ class Board:
         if 'fieldValueByName(name: "Status")' in query and 'node(id:' in query:
             n = int(v['id'].split('_', 1)[1])
             col, light = self.places.get(n, ('', ''))
-            return {'node': {'id': v['id'], 'status': {'name': col}, 'light': {'name': light}}}
+            return {'node': {'id': v['id'], 'isArchived': v['id'] in self.archived, 'status': {'name': col}, 'light': {'name': light}}}
         if query == S.LINK_MUTATION:
             self.writes.append(('link', v['i'], v['b']))
             return {'addBlockedBy': {'issue': {'number': 0}}}
@@ -420,7 +435,7 @@ class Moves:
         return f'ticket-closed-{number}-{closed_at or "now"}'
 
     def to_unplanned(self, item, token):
-        """The card to the failed column, no Light."""
+        """The card archived off the board (the failed column, no Light, until 0.20.0)."""
         self._write('unplanned', item)
 
     def to_shipped(self, item, token):

@@ -371,6 +371,21 @@ class Client:
         """A Project item put at the top of its column."""
         return bool(self._project('project_item_to_top', item))
 
+    def item_archive(self, item: str) -> bool:
+        """A Project item archived off the board (archiveProjectV2Item; 0.20.0): it leaves every view and column read,
+        and the board's Archived items list can restore it; True once GitHub answered the item. Written here through
+        graphql, not as a chuang-platform-kit verb, so this release reaches only the hosts that run the ticket tools
+        rather than every service the kit's pin is in."""
+        data = self.graphql(ARCHIVE_MUTATION, {'p': self.cfg['id'], 'i': item})
+        return bool((((data or {}).get('archiveProjectV2Item') or {}).get('item') or {}).get('id'))
+
+    def item_unarchive(self, item: str) -> bool:
+        """A Project item restored from the board's archive (unarchiveProjectV2Item; 0.20.0). GitHub answers an item
+        that was never archived the same way and changes nothing (measured 11/10/26 10:28 AM PT on SMADPickleBot's
+        board), so a caller restores without reading first; True once GitHub answered the item."""
+        data = self.graphql(UNARCHIVE_MUTATION, {'p': self.cfg['id'], 'i': item})
+        return bool((((data or {}).get('unarchiveProjectV2Item') or {}).get('item') or {}).get('id'))
+
 
 def _run(run):
     return run if run is not None else _runner()
@@ -714,6 +729,7 @@ def is_placeholder(title: str, cfg: dict = None) -> bool:
 def start(numbers, run=None, cfg: dict = None) -> list:
     """A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while
     it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`.
+    A card archived off the board (a ticket closed as not planned, then reopened) is restored first (0.20.0).
     [(number, ok)]."""
     run, cfg = _run(run), _cfg(cfg)
     lights = cfg.get('lights', {})
@@ -722,6 +738,9 @@ def start(numbers, run=None, cfg: dict = None) -> list:
     for n in numbers:
         got = ticket_place(n, run, cfg)
         if got is None:
+            out.append((n, False))
+            continue
+        if getattr(got, 'archived', False) and not run.item_unarchive(got[0]):
             out.append((n, False))
             continue
         item, now, light, raw = got
@@ -1159,15 +1178,26 @@ def card_order_keep(run=None, cfg: dict = None, dry: bool = False) -> list:
     return out
 
 
-ITEM_STATUS_QUERY = ('query($id: ID!) { node(id: $id) { ... on ProjectV2Item { id '
+ARCHIVE_MUTATION = 'mutation($p: ID!, $i: ID!) { archiveProjectV2Item(input: {projectId: $p, itemId: $i}) { item { id } } }'
+UNARCHIVE_MUTATION = 'mutation($p: ID!, $i: ID!) { unarchiveProjectV2Item(input: {projectId: $p, itemId: $i}) { item { id } } }'
+
+
+ITEM_STATUS_QUERY = ('query($id: ID!) { node(id: $id) { ... on ProjectV2Item { id isArchived '
                      'status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
                      'light: fieldValueByName(name: "Light") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }')
 
 
+class Place(tuple):
+    """ticket_place's answer, a 4-tuple as before, with `archived` beside it (0.20.0): whether the card is archived
+    off the board, read in the same query."""
+    archived = False
+
+
 def ticket_place(number: int, run=None, cfg: dict = None):
     """(item id, column, Light, the column's raw name) of one ticket on the Project ('' for a card with no Status or no
-    Light); None when GitHub does not answer. Its item by item_id and the item's own Status, a few GraphQL points a
-    ticket: a move reads only the tickets it moves, never the board."""
+    Light), a Place whose `archived` says whether the card is archived (0.20.0); None when GitHub does not answer. Its
+    item by item_id and the item's own Status, a few GraphQL points a ticket: a move reads only the tickets it moves,
+    never the board."""
     run, cfg = _run(run), _cfg(cfg)
     item = item_id(number, run, cfg)
     if not item:
@@ -1179,10 +1209,34 @@ def ticket_place(number: int, run=None, cfg: dict = None):
     if not isinstance(node, dict) or node.get('id') != item:
         return None
     raw = (node.get('status') or {}).get('name') or ''
-    return item, column(raw, cfg), ((node.get('light') or {}).get('name') or ''), raw
+    place = Place((item, column(raw, cfg), ((node.get('light') or {}).get('name') or ''), raw))
+    place.archived = bool(node.get('isArchived'))
+    return place
 
 
-PLACES_CHUNK = 50     # issues read in one aliased query (each a few nodes)
+def unarchive(number: int, run=None, cfg: dict = None) -> bool:
+    """A ticket's card restored from the board's archive when it is archived (0.20.0; SMADPickleBot #1337's review: a
+    ticket closed as not planned and reopened, or picked up again, must come back on the board, since GitHub's add
+    answers the archived item and every write would land on a card no view shows). True when the card is on the board
+    (it was not archived, or the restore was taken); False when it could not be read or the restore was refused."""
+    run, cfg = _run(run), _cfg(cfg)
+    got = ticket_place(number, run, cfg)
+    if not got:
+        return False
+    return (not getattr(got, 'archived', False)) or bool(run.item_unarchive(got[0]))
+
+
+def archive(number: int, run=None, cfg: dict = None) -> bool:
+    """A ticket's card archived off the board (0.20.0; SMADPickleBot #1337, Gene 11/10/26: twenty cards closed as not
+    planned had piled up in the failed column, which a release's failures share): its item read as ticket_place reads
+    it, then the runner's item_archive. True once GitHub took it; False when the card could not be read or the archive
+    was refused."""
+    run, cfg = _run(run), _cfg(cfg)
+    got = ticket_place(number, run, cfg)
+    return bool(got and got[0] and run.item_archive(got[0]))
+
+
+PLACES_CHUNK = 50    # issues read in one aliased query (each a few nodes)
 MOVE_CHUNK = 100      # cards written in one aliased mutation document (Gene, 11/8/26 9:12 PM PT: "chunk at 100 cards")
 
 

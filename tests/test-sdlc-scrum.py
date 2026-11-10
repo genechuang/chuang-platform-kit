@@ -223,9 +223,11 @@ check('the positive case: `Scrum: done` ships it', S.closed_plan(closed, [say('S
 S.configure(closer=lambda title, comment: comment.startswith('Closed by the watcher:'))
 check("the host's alert closer ships it", S.closed_plan(closed, [say('Closed by the watcher: fixed', 1)], LOGIN, {}, False, NOW, CFG)['action'],
       'ship')
-check('not planned wrecks it; a finished column is left', (S.closed_plan(dict(closed, reason='not_planned'), [], LOGIN, {}, False, NOW, CFG)['action'],
-                                                          S.closed_plan(dict(closed, status='Done'), [], LOGIN, {}, False, NOW, CFG)['action']),
-      ('wreck', ''))
+check('not planned archives it (0.20.0); a finished column is left',
+      (S.closed_plan(dict(closed, reason='not_planned'), [], LOGIN, {}, False, NOW, CFG)['action'],
+       S.closed_plan(dict(closed, reason='duplicate'), [], LOGIN, {}, False, NOW, CFG)['action'],
+       S.closed_plan(dict(closed, status='Done'), [], LOGIN, {}, False, NOW, CFG)['action']),
+      ('archive', 'archive', ''))
 p = S.closed_plan(closed, [say('closing', 1)], LOGIN, {}, False, NOW, CFG)
 check("a person's close asks its owner", (p['action'], p['question']),
       ('ask', '#70 was closed while in Ready: if it is done, verified and closed, answer `Scrum: done`; otherwise reopen it.'))
@@ -306,6 +308,62 @@ fell = {}
 S.warming_sweep(dict(CFG, light_fallback={'warm': 'hot'}), S.GitHub(CFG, run=shown), Records(), NOW, fell)
 check("  the board's warming_minutes, and the fallback option the board shows for the Warming light",
       ({k: [i[0] for i in v] for k, v in longer.items()}, [i[0] for i in fell.get('Ann', [])]), ({}, [904]))
+# 0.20.0 (SMADPickleBot #1337): the failed column holds a release's failures alone; its owner asked about each daily
+hours = lambda h: (NOW - timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731
+broken = Board({'is:closed': [dict(card(950), status='Broken'), dict(card(951), status='Broken')],
+                'is:open': [dict(card(952, light='red'), status='Broken', status_at=hours(30)),
+                            dict(card(953, light='red', owner='Lee'), status='Broken', status_at=hours(25)),
+                            dict(card(954, light='red'), status='Broken', status_at=hours(3)),
+                            {'number': None, 'title': '— Broken: a card here failed —', 'status': 'Broken'}]},
+               issues={950: dict(issue(950, state='CLOSED'), stateReason='NOT_PLANNED'),
+                       951: dict(issue(951, state='CLOSED'), stateReason='COMPLETED')},
+               places={950: ('Broken', 'red'), 951: ('Broken', 'red')})
+S.configure(start_command='tickets start {n}')
+store, wrecked = Records(), {}
+marks.clear()
+first = S.wrecked_sweep(CFG, S.GitHub(CFG, run=broken), store, NOW, wrecked)
+subject, text = S.wrecked_letter('Ann', wrecked['Ann'])
+check('the positive case: a closed-as-not-planned card in the failed column is archived (marked first), one closed as '
+      'completed is left; an open card past a day asks its owner (the captain for the lead), a newer one and the '
+      'placeholder never',
+      (first, [w for w in broken.writes if w[0] == 'archive'], marks, {k: [i[0] for i in v] for k, v in wrecked.items()}),
+      (['scrum: #950 in Broken was closed as not planned: archived off the board',
+        'scrum: #952 has sat in Broken 30 hours: Ann asked to re-ship or drop it',
+        'scrum: #953 has sat in Broken 25 hours: Cap asked to re-ship or drop it'],
+       [('archive', 'IT_950')], [[950]], {'Ann': [952], 'Cap': [953]}))
+check("  the letter names the re-ship command and the drop, under its own subject",
+      (subject, '`tickets start 952`' in text, 'close it as not planned, which archives its card' in text),
+      ('Scrum master: 1 card left in the failed column', True, True))
+again, later = {}, {}
+S.wrecked_sweep(CFG, S.GitHub(CFG, run=broken), store, NOW + timedelta(hours=2), again)
+S.wrecked_sweep(CFG, S.GitHub(CFG, run=broken), store, NOW + timedelta(hours=25), later)
+check('  asked once a day: not again two hours on, again a day on',
+      ({k: [i[0] for i in v] for k, v in again.items()}, sorted(i[0] for v in later.values() for i in v)), ({}, [952, 953, 954]))
+refused = Board({'is:closed': [dict(card(950), status='Broken')], 'is:open': []},
+                issues={950: dict(issue(950, state='CLOSED'), stateReason='NOT_PLANNED')}, places={950: ('Broken', 'red')},
+                refuse={'archive'})
+check('  a refused archive says so for the next sweep',
+      S.wrecked_sweep(CFG, S.GitHub(CFG, run=refused), Records(), NOW, {}),
+      ['scrum: #950 in Broken was closed as not planned: the archive was refused; next sweep tries again'])
+dry = Board({'is:closed': [dict(card(950), status='Broken')], 'is:open': [dict(card(952), status='Broken', status_at=hours(30))]},
+            issues={950: dict(issue(950, state='CLOSED'), stateReason='NOT_PLANNED')}, places={950: ('Broken', 'red')})
+dry_store = Records()
+S.wrecked_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), dry_store, NOW, {}, dry=True)
+check('  a dry run writes nothing and keeps no record', (dry.writes, dry_store.get('scrum', '952')), ([], None))
+S.configure(start_command='')
+check("  with no start command the question says to move it to the shipyard",
+      'move it to the shipyard' in S.wrecked_question(9, 'Broken', 30), True)
+back = Board(places={960: ('Backlog', ''), 961: ('Backlog', '')})
+back.archived.add('IT_960')
+started = T.start([960, 961], back, CFG)
+check('0.20.0: a pick-up restores an archived card before it moves it, and restores nothing on a card on the board',
+      (started, [w[:2] for w in back.writes if w[0] in ('unarchive', 'fields')], T.unarchive(961, back, CFG)),
+      ([(960, True), (961, True)], [('unarchive', 'IT_960'), ('fields', 'IT_960'), ('fields', 'IT_961')], True))
+refuse_back = Board(places={962: ('Backlog', '')}, refuse={'unarchive'})
+refuse_back.archived.add('IT_962')
+check('  a refused restore is a failed pick-up, nothing moved, and unarchive says False',
+      (T.start([962], refuse_back, CFG), [w[0] for w in refuse_back.writes], T.unarchive(962, refuse_back, CFG)),
+      ([(962, False)], ['unarchive'], False))
 marks.clear()
 moved = Board(places={604: ('Ready', '')})
 ok = S.GitHub(CFG, run=moved).ship(604)

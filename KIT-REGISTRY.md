@@ -776,8 +776,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `closed_question(number, col)` | The question a closed card's owner is asked (configure(closed_question=), else these words). |
 | `closed_to(who)` | Who is asked about a closed card (configure(closed_to=), else its Owner, the captain for none or the lead). |
 | `closed_filter(cfg)` | GitHub's own filter for the closed cards outside the shipped and failed columns (and a `shipment` column the board may have): a point a hundred cards, never the whole board. |
-| `closed_plan(card, comments, login, state, told, now, cfg)` | What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a finished one (an old column name read as its new one); `wreck` for a close as not planned or a duplicate; `ship` when its owner's newest `Scrum:` line… |
-| `closed_sweep(cfg, gh, store, now, dry, letters, only=, skip=)` | The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with closed_filter, each settled by closed_plan: to the ship column with its shipped Light, to the failed column, or its question added to its owner's le… |
+| `closed_plan(card, comments, login, state, told, now, cfg)` | What the sweep does for one closed card: {action, why}. Pure. Nothing ('') for a card with no column or in a finished one (an old column name read as its new one); `archive` for a close as not planned or a duplicate (0.20.0, SMADPickleBot #1337: off the board… |
+| `closed_sweep(cfg, gh, store, now, dry, letters, only=, skip=)` | The catch for a close the host's own listener missed: the closed cards outside the finished columns, read with closed_filter, each settled by closed_plan: to the ship column with its shipped Light, archived off the board, or its question added to its owner's… |
 | `dock_catch(cfg, gh, dry=)` | The catch for a dock landing nothing told (0.11.0; SMADPickleBot #1203, split from #1202: GitHub never delivered a dock push, so no card moved): the tickets the dock branch's commits since the main branch name in their `Ticket:` trailers (one compare through… |
 | `closed_needs_filter(cfg)` | GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column. |
 | `closed_needs_sweep(cfg, gh, dry=)` | A closed ticket never keeps the needs-the-lead Light (0.8.2; SMADPickleBot #1133: a Needs you set on a shipped card sat there three days, outside every column the other sweeps read): each closed card carrying it, read with closed_needs_filter in any column, h… |
@@ -798,12 +798,15 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `GitHub.field(n, field, value)` | One Project field of the card (tickets.set_field); its item from the listing when remember() kept it; queued for flush() while `batch` is on, a single-select only (anything else is written at once). True when queued. |
 | `GitHub.move(n, role)` | A card back to `role` (the scrum master only ever moves back: a queued or dependent card to the next column); True only once the board took it. |
 | `GitHub.ship(n)` | A closed card to the ship column with its shipped Light: tickets.move, forward only, the move marked first (tickets.mark_ship_move) whatever runner this sweep holds, so the host never takes it for the lead's drag; True only once the board took it. |
-| `GitHub.wreck(n)` | A card closed as not planned or a duplicate to the failed column with its Light cleared: the pipeline's own move, marked first, the column and the Light in one request; True once the board took it. |
+| `GitHub.archive(n)` | A card closed as not planned or a duplicate archived off the board (0.20.0; SMADPickleBot #1337: it went to the failed column until then, where twenty such cards hid the release failures the column is for): the pipeline's own edit, marked first as a move is,… |
 | `GitHub.place(n)` | (column, light) of a card, or None when the board does not answer. |
 | `sweep(cfg=, gh=, store=, mail=, now=, dry=, out=, only=)` | One pass over the shipyard: every card's plan applied, its comment kept, the owners' letters sent. Lines. `only`, a ticket number, runs that one card (an event named it: its Status, Priority, Light or Owner changed, or a `Scrum:` line was written); a card not… |
 | `ship_card_home(cfg, gh, dry=, ship_run=, now=)` | The ship card back in its home column when it sits anywhere but there or the ship column, or in the ship column with no ship under way, and its title made the board config's `ship_card` title: the board's drafts read with its own filter (a dozen cards), kept… |
 | `warming_sweep(cfg, gh, store, now, letters, dry=)` | Each Dock card whose Light is the dock's Warming light and was set more than WARMING_MINUTES ago (its `light_at`, the board's updatedAt) goes into its owner's warming letter (the captain's for none or the lead), once per Warming episode: the card's scrum reco… |
 | `warming_letter(owner, items)` | (subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit. |
+| `wrecked_question(n, col, hours)` | What the owner of a card left in the failed column is asked (0.20.0): re-ship it or drop it, each by the act that moves it (the host's start command, else a move to the shipyard; a close as not planned archives it). |
+| `wrecked_sweep(cfg, gh, store, now, letters, dry=)` | The failed column kept for what it is for (0.20.0; SMADPickleBot #1337): a closed card there whose close was as not planned or a duplicate is archived off the board, and an open card that has sat there WRECKED_HOURS (its `status_at`, the board's updatedAt of… |
+| `wrecked_letter(owner, items)` | (subject, text) of one owner's wrecked letter: every card of theirs left in the failed column past the limit. |
 
 ## `chuang_sdlc.ship_pr`: One pull request a ship, so each shipped ticket's Development shows the release that shipped it.
 
@@ -868,6 +871,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Board.item_fields(item, fields)` | Fields written in one request, recorded as ('fields', item, {field id: value}). |
 | `Board.item_field(item, field_id, option_id=, text=, clear=)` | One field, recorded as item_fields records it. |
 | `Board.item_top(item)` | A card to the top of its column, recorded. |
+| `Board.item_archive(item)` | A card archived off the board, recorded as ('archive', item); False when 'archive' is refused (0.20.0). |
+| `Board.item_unarchive(item)` | A card restored from the archive, recorded as ('unarchive', item); False when 'unarchive' is refused. |
 | `Board.comment(number, body)` | A comment, recorded. |
 | `Board.edit_comment(comment_id, body)` | A comment's body replaced, recorded. |
 | `Board.assign(number, login, on=)` | An assignee added or taken off, recorded. |
@@ -888,7 +893,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Moves.is_finished(col)` | The ship or the failed column. |
 | `Moves.is_unplanned(reason)` | Closed as not planned or a duplicate. |
 | `Moves.closed_key(number, closed_at)` | One close's claim id. |
-| `Moves.to_unplanned(item, token)` | The card to the failed column, no Light. |
+| `Moves.to_unplanned(item, token)` | The card archived off the board (the failed column, no Light, until 0.20.0). |
 | `Moves.to_shipped(item, token)` | The card to the ship column. |
 | `Moves.unplanned_line(card, reason)` | (to, text, subject) of the one line about a close as not planned. |
 | `Moves.closed_letter(card)` | (to, text, subject) of the letter about any other close. |
@@ -936,6 +941,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Client.item_fields(item, fields)` | Several fields of one Project item in ONE request (the kit's project_set_fields): {field_id: an option's id, {'text': …}, {'number': …}, or None to clear}. |
 | `Client.draft_add(title, body)` | A draft card on the Project; its item id, or None. |
 | `Client.item_top(item)` | A Project item put at the top of its column. |
+| `Client.item_archive(item)` | A Project item archived off the board (archiveProjectV2Item; 0.20.0): it leaves every view and column read, and the board's Archived items list can restore it; True once GitHub answered the item. Written here through graphql, not as a chuang-platform-kit verb… |
+| `Client.item_unarchive(item)` | A Project item restored from the board's archive (unarchiveProjectV2Item; 0.20.0). GitHub answers an item that was never archived the same way and changes nothing (measured 11/10/26 10:28 AM PT on SMADPickleBot's board), so a caller restores without reading f… |
 | `issue(number, run=, repo=)` | {state ('open' or 'closed'), title, url, pr} of #number, or None when GitHub does not answer (or there is no such issue). `repo` is kept for older callers: the runner's repository is the board's. |
 | `repo_owner(cfg=)` | The repository's owner, lowercased: the one account whose Triage lines count. Never the board's `owner`, which names the Project's organization or user. |
 | `estimate_hours(minutes)` | Minutes as a board field's hours: 30 -> '0.5', 120 -> '2', 100 -> '1.67' (loe.hours). |
@@ -960,7 +967,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `rank(col, light=, raw=, cfg=)` | A card's place along the flow as a role's index (board.rank); None off the flow. |
 | `light_for(col, cfg=)` | The Light a card moved into this column should show (board.light_for). |
 | `is_placeholder(title, cfg=)` | Whether a card's title is a column's placeholder (board.is_placeholder). |
-| `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. [(number, ok)]. |
+| `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. A card archived off the board (a t… |
 | `sync_columns(run=, cfg=, tmp=, merge=, ship_run=)` | The board made what its config says, at every ship: its column labels (_sync_options), then its placeholder cards (placeholders: a deleted one re-made, a strayed one put back) and the ship card (ship_card_keep: its title and its home, left in the ship column… |
 | `filter_columns(names)` | A board filter's Status term for these columns, each name quoted for the ones with spaces. |
 | `board_items(query, run=, cfg=)` | The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content {type, number, url, and a draft… |
@@ -971,7 +978,10 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `ship_ended(record, now=)` | Why no ship is under way by the host's ship `record`, or '' while one is: the record says done or failed (any state but configure(ship_under_way=)'s), there is no record, or an under-way record's `at` (ISO UTC; one with no zone read as UTC, never the box's ow… |
 | `ship_card_keep(run=, cfg=, drafts=, dry=, ship_run=, now=)` | The ship card kept as the board config's `ship_card` says: found among the board's drafts (`drafts`, the caller's `is:draft` read, else one here; is_ship_card), its title made the config's when it differs (DRAFT_EDIT on the draft's own id, its body as read se… |
 | `card_order_keep(run=, cfg=, dry=)` | The board's order kept (0.14.0): each ORDER_ROLES column read once with GitHub's own filter (it answers in the board's order), its placeholder put first when it is not, and in the ship card's home column the ship card put right after that placeholder when it… |
-| `ticket_place(number, run=, cfg=)` | (item id, column, Light, the column's raw name) of one ticket on the Project ('' for a card with no Status or no Light); None when GitHub does not answer. Its item by item_id and the item's own Status, a few GraphQL points a ticket: a move reads only the tick… |
+| `class Place` | ticket_place's answer, a 4-tuple as before, with `archived` beside it (0.20.0): whether the card is archived off the board, read in the same query. |
+| `ticket_place(number, run=, cfg=)` | (item id, column, Light, the column's raw name) of one ticket on the Project ('' for a card with no Status or no Light), a Place whose `archived` says whether the card is archived (0.20.0); None when GitHub does not answer. Its item by item_id and the item's… |
+| `unarchive(number, run=, cfg=)` | A ticket's card restored from the board's archive when it is archived (0.20.0; SMADPickleBot #1337's review: a ticket closed as not planned and reopened, or picked up again, must come back on the board, since GitHub's add answers the archived item and every w… |
+| `archive(number, run=, cfg=)` | A ticket's card archived off the board (0.20.0; SMADPickleBot #1337, Gene 11/10/26: twenty cards closed as not planned had piled up in the failed column, which a release's failures share): its item read as ticket_place reads it, then the runner's item_archive… |
 | `places(numbers, run=, cfg=)` | {number: (item id, column, Light, the column's raw name)} for every ticket on this board, in ONE aliased GraphQL query a PLACES_CHUNK of issues (0.9.0; SMADPickleBot #1197: a 20-card move read each card twice and re-added it to the board each time, about 7 ca… |
 | `move_many(numbers, status, run=, cfg=)` | move() for many tickets in a few requests (0.9.0, SMADPickleBot #1197; Gene, 11/8/26 9:11 PM PT: "cant we batch graphql calls for all tickets in dock that need to be moved to ship and light tag changed??"): every card's place in one aliased read (places), the… |
 | `ticket_column(number, run=, cfg=)` | (item id, column) of one ticket (ticket_place's first two); None when GitHub does not answer. |

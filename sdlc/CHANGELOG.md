@@ -3,6 +3,39 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.20.0 - 2026-11-10 PT
+
+SMADPickleBot #1337. Gene, 11/10/26 10:10 AM PT: "We now have 21 items in Shipwreck, and nobody is sweeping these
+tickets". All twenty of them had been closed as not planned; none was a failed release. The failed column is now kept for
+release failures alone.
+- **A close as not planned or a duplicate archives the card** instead of moving it to the failed column:
+  - `listeners.ticket_closed` does it through the host's `moves.to_unplanned`, whose contract is now "archive". A card
+    already in the failed column is archived too. One closed as completed there stays.
+  - `scrum.closed_plan`'s action is `archive` (was `wreck`), and `GitHub.archive` replaces `GitHub.wreck`.
+  - `tickets.archive(number)`, and the runner's `Client.item_archive(item)`, which sends archiveProjectV2Item
+    (`ARCHIVE_MUTATION`) through its own `graphql`. It is deliberately not a chuang-platform-kit verb, so this release
+    redeploys only the hosts that run the ticket tools, never every service the kit's pin is in.
+- **`scrum.wrecked_sweep`** reads the failed column, open and closed, each with GitHub's own filter:
+  - a closed card whose close was as not planned is archived;
+  - an open card that has sat there `WRECKED_HOURS` (24, by its `status_at`) is asked about in its owner's
+    `wrecked_letter`, again each day: re-ship it (`configure(start_command=)`, else a move to the shipyard), or drop
+    it by closing it as not planned.
+  - The sweep runs it after the warming sweep.
+- **An archived card comes back when its ticket does** (found in the change's review: GitHub's add answers the
+  archived item, so every write would land on a card no view shows):
+  - `ticket_place` answers a `Place`, the same 4-tuple with `.archived` read in the same query (`isArchived`).
+  - `tickets.start` restores an archived card before it moves it.
+  - `tickets.unarchive(number)` and `Client.item_unarchive(item)` send `UNARCHIVE_MUTATION`. GitHub answers an item
+    that was never archived the same way and changes nothing (measured 11/10/26 10:28 AM PT), so a host may restore
+    without reading first, as SMADPickleBot's reopened-issue handler does.
+- Measured on 11/10/26: the board's `items(query:)` leaves archived items out, so `is:archived` matches nothing. A swept
+  card is never read again once it is archived.
+- **Host call sites:**
+  - the host's `moves.to_unplanned` should archive (SMADPickleBot's `ticket_moves.to_unplanned`);
+  - `configure(start_command=)` names its start command;
+  - a fake with a `wreck` method needs `archive`;
+  - `testing.Board.item_archive` is the in-memory one.
+
 ## 0.19.0 - 2026-11-09 PT
 
 - `chuang_sdlc.cicd.gh_deploy` (SMADPickleBot #1285, phase 2 of #235) records a release's rung as a GitHub

@@ -771,6 +771,17 @@ finally:
     _gh.close_issue = _keep
 check("0.14.2: a close GitHub answered with nothing is done, a refusal is not and keeps its reason",
       (done, refused, T.Client(tok=None, cfg=CFG).close_issue(5)), (True, (False, 'GitHub /issues/5: HTTP 403 (Forbidden)'), False))
+_keep, sent = _gh.graphql, []
+try:
+    _gh.graphql = lambda tok, q, v, opener=None: sent.append((q, v)) or {'archiveProjectV2Item': {'item': {'id': v['i']}}}
+    archived = c.item_archive('PVTI_9')
+    _gh.graphql = lambda tok, q, v, opener=None: {'archiveProjectV2Item': None}
+    unanswered = c.item_archive('PVTI_9')
+finally:
+    _gh.graphql = _keep
+check('0.20.0: item_archive sends archiveProjectV2Item on the board by its id; True once GitHub answers the item',
+      (archived, unanswered, sent[0][0] == T.ARCHIVE_MUTATION, sent[0][1], T.Client(tok=None, cfg=CFG).item_archive('PVTI_9')),
+      (True, False, True, {'p': CFG['id'], 'i': 'PVTI_9'}, False))
 
 print('the command line helpers')
 check('a body that is a path is said', T.body_is_path(['new', '--body', 'plan.md']), 'plan.md')
