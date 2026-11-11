@@ -652,10 +652,10 @@ only where they run (its own tags, `sdlc-v<version>`).
 
 | Name | Purpose |
 |---|---|
-| `configure(**settings)` | The host's settings: `states`, `label_states`, `moving` (roles), `tail`, `id_field`, `needs_field` (the module's _SET says what each is). Unknown names are refused. |
+| `configure(**settings)` | The host's settings: `states`, `label_states`, `moving` (roles), `column_states` ({role: state}), `default_state`, `tail`, `id_field`, `needs_field` (the module's _SET says what each is). Unknown names are refused. |
 | `setting(name)` | One of the host's settings (configure). |
 | `moving(cfg=)` | The columns whose cards are in progress: the `moving` roles' columns on the board. |
-| `state_of(status, labels, cfg=)` | A ticket's backlog state from its Status and labels: a moving column is in progress; otherwise the state its first label in `label_states` names, else next. |
+| `state_of(status, labels, cfg=)` | A ticket's backlog state from its Status and labels: a moving column is in progress; otherwise the state its column's role has in `column_states`, else the state its first label in `label_states` names, else `default_state` (next unless the host says otherwis… |
 | `board_filter(cfg=)` | GitHub's own filter for the open backlog: open issues, the shipped column left out (and with it the closed tickets and the drafts). |
 | `read_open(run=, cfg=)` | The board's open tickets, each {id (`#213`, then the id_field's value), item (the title without its tail), priority, owner, state, needs, where (its url)}, sorted P1 first and an unset priority last (the order within each state); None when GitHub cannot answe… |
 | `short(text, width=)` | Text cut to `width` with an ellipsis. |
@@ -1027,6 +1027,19 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `open_bug_for(component, run=, cfg=)` | The open bug a component's failed smoke already has (its title starts SMOKE_BUG), or None: a failure that repeats is a comment on it, never a second issue. |
 | `refused_as_duplicate(title, argv, run=, out=)` | The command line's sweep before `new` or `bug` files anything: open issues like this title (similar()) are listed and nothing is filed, unless `--new` says it is none of them. True when refused. |
 | `body_is_path(argv)` | --body's text when it is only a file's path, else '': one line naming a file that exists, or one line ending in .md or .txt (the plan belongs in the ticket, never a link to a temp file). --body-file reads the file. |
+| `strip_loe(body)` | The body with its `LOE estimate:` line(s) taken out (the estimate lives in the board's Estimate field). |
+| `filed_loe(argv)` | Whether a filing's estimate reads as one above 0: --loe, else the body's `LOE estimate:` line; a 0, a word or a line that does not read is refused as no --loe is (LOE_RULE). |
+| `calibrated_body(argv, factor_of=, calibrate=, say=)` | (the body, the estimate for the board's Estimate field, the raw minutes) of a filing: the raw is --loe, else the body's own `LOE estimate:` line. With `calibrate` (a host that keeps LOE records) the line is lifted out of the body and the estimate is calibrate… |
+| `area_rule(cfg=)` | The line that refuses a filing with no Area: the host's own (configure(words={'AREA_RULE': ...})), else each of the board's Areas with what its `areas` says of it. |
+| `file_new(argv, cfg=, file=, refused=, body_of=, keep_raw=, default_owner=, failed=, out=, err=)` | The command `new <kind> "<title>" --area A --priority P1..P4 --body\|--body-file ... --loe E --reuse R`: its guards (_refused_filing), then the filing. Exit 0 filed (its `#N` on `out`), 1 not filed or a duplicate, 2 refused. The host passes what it wraps or i… |
+| `file_bug(argv, cfg=, file=, refused=, body_of=, keep_raw=, default_owner=, failed=, out=, err=)` | The command `bug <feature> "<title>" [--priority P1..P4] --body\|--body-file ... --loe E`: a bug under a feature, P2 unless told, with new's guards but the Area (its feature's) and the reuse line. The exits and the host's callables are file_new's (`file` is b… |
+| `session_unread(message)` | '' when the message's `Session:` line (if any) is a trailer git reads, else the refusal (SESSION_UNREAD): git reads trailers from the last paragraph only, so a `Session:` line anywhere else is one `git log` cannot attribute. Git's rule, without git: the last… |
+| `owners_of(numbers, run=, cfg=)` | {number: the board's Owner} of each ticket on this board, in ONE aliased GraphQL query through the issue's own project items (no card added to read it); '' for a card with no Owner. None when GitHub did not answer, so the caller lets the message through with… |
+| `foreign_tickets(message, numbers, run=, cfg=)` | (refusal, warning) for the tickets a message's `Ticket:` trailer names: a ticket whose board Owner is a session other than the message's `Session:` is a refusal naming the split (a commit that builds one step of another owner's ticket and names the whole tick… |
+| `check(message, run=, cfg=, owner_rule=, session_rule=)` | (ok, line) for a commit message: it must name at least one open issue (not a pull request) in a `Ticket:` trailer, or say `Ticket: none (why)`. A merge, fixup!, squash! or amend! commit passes. Without a signed-in runner, the form alone, said. `session_rule`… |
+| `unticketed(revrange, git=, mapped=, skip_subjects=, cwd=)` | [(short sha, subject)] of the commits in `revrange` that name no ticket: no `Ticket:` trailer (a number or `none (why)`), not in `mapped` (a host's {sha prefix: tickets} for commits from before its rule), and not a merge (two parents), a fixup or a commit who… |
+| `foreign_in(revrange, log=, run=, cfg=, cwd=)` | The range read of foreign_tickets' rule, for a checkout with no commit-msg hook: each commit in `revrange` whose `Ticket:` trailer names a ticket another session owns, one line each (FOREIGN_IN_RANGE), every ticket's Owner in ONE aliased read (owners_of); a b… |
+| `range_check(revrange, unnamed=, foreign=, err=)` | The command `range <revrange>`, a push gate's check: every commit named with no ticket (`unnamed`: revrange -> [(sha, subject)]; unticketed) and every line of the owner rule (`foreign`: revrange -> lines; foreign_in, or None for a host without the rule) on `e… |
 
 ## `chuang_sdlc.titles`: What shipped, in its tickets' own words: the tickets a range of commits names, read from GitHub, ea…
 

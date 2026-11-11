@@ -3,6 +3,29 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.25.0 - 2026-11-11 PT
+
+SMADPickleBot #1434 (11/11/26: a second project's board found that the check a commit-msg hook runs and the guards
+of `new` lived in the first host's scripts, and carried its own copy of each meanwhile). The code moved; nothing was
+rewritten.
+- **`tickets.check(message, run, cfg, owner_rule=True, session_rule=True)`**, new, with `session_unread`,
+  `owners_of` and `foreign_tickets`: a commit message names an open issue or `Ticket: none (why)`; a `Session:` line
+  must be a trailer git reads; a ticket another session owns is named in the body. A host without the Session or
+  Owner conventions turns those rules off.
+- **`tickets.unticketed`, `foreign_in`, `range_check`**, new: a push gate's read of a commit range (`mapped` for
+  commits from before a host's rule, `skip_subjects` for a pipeline's own commits).
+- **`tickets.file_new(argv, ...)` and `file_bug(argv, ...)`**, new: the two filing commands with their guards in one
+  order (Area, Priority, unknown flags, a body that is a path, the open-issue sweep, the estimate, the reuse line),
+  and `strip_loe`, `filed_loe`, `calibrated_body(argv, factor_of, calibrate=True)`, `area_rule`. The host passes what
+  it wraps (`file`, `refused`, `body_of`, `keep_raw`, `default_owner`, `failed`). `calibrate=False` keeps the raw
+  estimate in the body for a host with no LOE records.
+- **`configure(words=)`** takes eight more: NO_TICKET, NOT_CHECKED, CLOSED_TICKET, SESSION_UNREAD, FOREIGN_TICKET,
+  FOREIGN_IN_RANGE, AREA_RULE, BODY_PATH_RULE (the braces are filled by str.format).
+- **`backlog.configure(column_states={role: state}, default_state='next')`**, new: a state for a card by its
+  column's role, after the moving columns and before the labels, and the state of a card nothing else names. Both
+  default to today's behaviour.
+- No signature changes. A host with its own copy of the check or the filing guards replaces it with these.
+
 ## 0.24.0 - 2026-11-11 PT
 
 SMADPickleBot #1423 (11/11/26: a change put on the release branch and reverted there before the ship was still named

@@ -84,6 +84,12 @@ check('render: the states in order with their counts, P1 first in a state, the d
                           '  P1 #11  Bob: Wait for it — Monday', 'done and closed (1)', '  D1   Old thing — shipped 10/1/26'])
 check('an owner filter', B.render({'open': got, 'done': []}, owner='bob').splitlines()[0], 'waiting (1)')
 check('short cuts with an ellipsis', B.short('x' * 10, 5), 'xxxx…')
+B.configure(column_states={'next': 'next', 'absent-role': 'never'}, default_state='backlog', label_states={})
+check('column_states: a moving column still in progress, the next column next, any other the default state (0.25.0)',
+      (B.state_of('Ready', []), B.state_of('Up Next', []), B.state_of('Backlog', ['later'])),
+      ('in progress', 'next', 'backlog'))
+B.configure(column_states={}, default_state='next', label_states={'later': 'waiting'})
+check('unset again, the states are as before', (B.state_of('Up Next', []), B.state_of('Backlog', ['later'])), ('next', 'waiting'))
 try:
     B.configure(nope=1)
     check('configure refuses an unknown name', 'accepted', 'TypeError')

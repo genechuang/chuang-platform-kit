@@ -20,6 +20,8 @@ _SET = {
     'states': ('in progress', 'next', 'waiting', 'parked'),   # the states in the order a reader wants them
     'label_states': {},     # {label: state}: a card in no moving column waits in the state its first such label names
     'moving': ('shipyard', 'dock', 'dev', 'shipping', 'failed'),   # the roles whose columns are `in progress`
+    'column_states': {},    # {role: state}: a card in that role's column, when it is not a moving one, is in this state
+    'default_state': 'next',   # the state of a card no column or label gives one
     'tail': None,           # a regex for a tail a title may carry that no reader needs (an older backlog's number)
     'id_field': '',         # a card field written after the ticket's number in its id (`#213 B4`), '' for none
     'needs_field': '',      # the card field read as what an item needs, '' for none
@@ -29,8 +31,9 @@ IN_PROGRESS, NEXT = 'in progress', 'next'
 
 
 def configure(**settings) -> None:
-    """The host's settings: `states`, `label_states`, `moving` (roles), `tail`, `id_field`, `needs_field` (the module's
-    _SET says what each is). Unknown names are refused."""
+    """The host's settings: `states`, `label_states`, `moving` (roles), `column_states` ({role: state}),
+    `default_state`, `tail`, `id_field`, `needs_field` (the module's _SET says what each is). Unknown names are
+    refused."""
     for name, value in settings.items():
         if name not in _SET:
             raise TypeError(f'backlog.configure() takes no {name!r}')
@@ -50,14 +53,19 @@ def moving(cfg: dict = None) -> tuple:
 
 def state_of(status: str, labels, cfg: dict = None) -> str:
     """A ticket's backlog state from its Status and labels: a moving column is in progress; otherwise the state its
-    first label in `label_states` names, else next."""
+    column's role has in `column_states`, else the state its first label in `label_states` names, else
+    `default_state` (next unless the host says otherwise)."""
     cfg = _tickets._cfg(cfg)
-    if _tickets.column(status, cfg) in moving(cfg):
+    col = _tickets.column(status, cfg)
+    if col in moving(cfg):
         return IN_PROGRESS
+    for role, state in _SET['column_states'].items():
+        if role in cfg['stages'] and _tickets.stage(role, cfg) == col:
+            return state
     for label in labels or ():
         if label in _SET['label_states']:
             return _SET['label_states'][label]
-    return NEXT
+    return _SET['default_state']
 
 
 def board_filter(cfg: dict = None) -> str:

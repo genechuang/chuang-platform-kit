@@ -174,8 +174,25 @@ CHANGE_ORDER_NOTE = ''   # a host's sentence after the change order's Light line
 ESTIMATE_COMMAND = 'estimate'   # the host's command that re-estimates a ticket, named where an estimate was not written
 
 
+# The commit check's and the filing commands' lines. A host words them for its own commands (configure(words=)); the
+# braces are filled by str.format, so a host's text keeps them.
+NO_TICKET = ('tickets: refused, this commit names no ticket. Add a trailer `Ticket: #N` for the issue it works on, or '
+             '`Ticket: none (why)` for a commit no work item owns.')
+NOT_CHECKED = 'no GitHub token here'
+CLOSED_TICKET = '#{n} is closed ({title}); work found after it is a new ticket'
+SESSION_UNREAD = ('tickets: refused, the `Session:` line is not a trailer git reads: put it in the last paragraph, with '
+                  'no blank line between it and the other trailers (git reads trailers from the last paragraph only).')
+FOREIGN_TICKET = "#{n} is {owner}'s: name it in the body, or split your step into its own ticket"
+FOREIGN_IN_RANGE = ("tickets: {sha} names #{n}, which is {owner}'s: name it in the body, or split the step into its "
+                    'own ticket')
+AREA_RULE = ''   # the line that refuses a filing with no Area; '' builds it from the board's `areas`
+BODY_PATH_RULE = ('tickets: not filed: --body is a file path ({path}), not the plan: pass --body-file to put its '
+                  'contents in the ticket')
+
+
 WORDS = ('NO_BODY', 'LOE_RULE', 'REUSE_RULE', 'PRIORITY_RULE', 'P1_RULE', 'PLACEHOLDER_BODY', 'CHANGE_ORDER_NOTE',
-         'ESTIMATE_COMMAND')
+         'ESTIMATE_COMMAND', 'NO_TICKET', 'NOT_CHECKED', 'CLOSED_TICKET', 'SESSION_UNREAD', 'FOREIGN_TICKET',
+         'FOREIGN_IN_RANGE', 'AREA_RULE', 'BODY_PATH_RULE')
 
 
 ORIGINAL_FIELD = 'LOE original'   # the raw estimate on the board, in hours
@@ -2222,3 +2239,314 @@ def _body(argv) -> str:
 def _unknown_flags(argv, known) -> list:
     """The --flags in `argv` that its command does not take, so a typo or an unsupported flag is said, never ignored."""
     return [a for a in argv if a.startswith('--') and a not in known]
+
+
+def strip_loe(body: str) -> str:
+    """The body with its `LOE estimate:` line(s) taken out (the estimate lives in the board's Estimate field)."""
+    return re.sub(r'\n*^LOE estimate:[^\n]*$', '', body or '', flags=re.M).rstrip() + ('\n' if (body or '').endswith('\n') else '')
+
+
+def filed_loe(argv) -> bool:
+    """Whether a filing's estimate reads as one above 0: --loe, else the body's `LOE estimate:` line; a 0, a word or a
+    line that does not read is refused as no --loe is (LOE_RULE)."""
+    return (loe_minutes(_opt(argv, '--loe') or body_loe(_body(argv)) or '') or 0) > 0
+
+
+def calibrated_body(argv, factor_of=None, calibrate: bool = True, say=print) -> tuple:
+    """(the body, the estimate for the board's Estimate field, the raw minutes) of a filing: the raw is --loe, else the
+    body's own `LOE estimate:` line. With `calibrate` (a host that keeps LOE records) the line is lifted out of the body
+    and the estimate is calibrated(raw, factor_of), said in one line; without, the body keeps or gains the line and the
+    estimate is the raw as given, the raw minutes None (nothing to keep beside it). ('', None) for the estimate when
+    neither gives one."""
+    body, loe = _body(argv) or '', _opt(argv, '--loe') or ''
+    line = body_loe(body)
+    if line is not None:
+        loe = loe or line
+        if calibrate:
+            body = strip_loe(body)
+    if not loe:
+        return body, '', None
+    if not calibrate:
+        return (body if line is not None else f'{body.rstrip()}\n\nLOE estimate: {loe}'), loe, None
+    est, raw, note = calibrated(loe, factor_of)
+    say(f'tickets: estimate {est} {note}'.rstrip())
+    return body, est, raw
+
+
+def area_rule(cfg: dict = None) -> str:
+    """The line that refuses a filing with no Area: the host's own (configure(words={'AREA_RULE': ...})), else each of
+    the board's Areas with what its `areas` says of it."""
+    if AREA_RULE:
+        return AREA_RULE
+    cfg = _cfg(cfg)
+    about = cfg.get('areas') or {}
+    return 'tickets: --area is required: ' + '; '.join(
+        f'{a} ({about[a]})' if about.get(a) else a for a in cfg['fields']['Area']['options'])
+
+
+def _refused_filing(argv, command: str, flags, cfg, refused, err, area: bool, reuse: bool):
+    """The exit code of a filing the guards refuse (2 for a missing or malformed argument, 1 for a duplicate), each with
+    its line on `err`, or None when it may be filed. The order: Area, Priority, unknown flags, a body that is a path,
+    the open-issue sweep, the estimate, the reuse line."""
+    if area and _opt(argv, '--area') not in cfg['fields']['Area']['options']:
+        print(area_rule(cfg), file=err)
+        return 2
+    priority = (_opt(argv, '--priority') or ('' if command == 'new' else 'P2')).upper()
+    if not re.fullmatch(r'P[1-4]', priority):
+        print(PRIORITY_RULE, file=err)
+        return 2
+    unknown = _unknown_flags(argv, flags)
+    if unknown:
+        print(f"tickets: not filed: {command} does not take {', '.join(unknown)} (it takes {', '.join(flags)})", file=err)
+        return 2
+    if body_is_path(argv):
+        print(BODY_PATH_RULE.format(path=body_is_path(argv)), file=err)
+        return 2
+    if refused(argv[2], argv):
+        return 1
+    has_body = bool((_body(argv) or '').strip())
+    if has_body and not filed_loe(argv):
+        print(LOE_RULE, file=err)   # a person's filing carries its estimate (no body is new()'s own refusal)
+        return 2
+    if reuse and has_body and not (_opt(argv, '--reuse') or '').strip() and not REUSE_LINE.search(_body(argv)):
+        print(REUSE_RULE, file=err)   # what the plan reuses, read from the shared code's registry first
+        return 2
+    return None
+
+
+def file_new(argv, cfg: dict = None, file=None, refused=None, body_of=None, keep_raw=None, default_owner: str = '',
+             failed=None, out=None, err=None) -> int:
+    """The command `new <kind> "<title>" --area A --priority P1..P4 --body|--body-file ... --loe E --reuse R`: its
+    guards (_refused_filing), then the filing. Exit 0 filed (its `#N` on `out`), 1 not filed or a duplicate, 2 refused.
+    The host passes what it wraps or its suites patch, read at the call: `file` (new), `refused`
+    (refused_as_duplicate), `body_of` (argv -> (body, estimate, raw minutes); calibrated_body), `keep_raw` (number, raw
+    minutes) for a host that keeps the raw beside the calibrated estimate, `default_owner`, and `failed` (() -> why a
+    filing GitHub refused, for the line)."""
+    cfg, out, err = _cfg(cfg), out or sys.stdout, err or sys.stderr
+    code = _refused_filing(argv, 'new', NEW_FLAGS, cfg, refused or refused_as_duplicate, err, area=True, reuse=True)
+    if code is not None:
+        return code
+    has_body = bool((_body(argv) or '').strip())
+    body, est, raw = (body_of or calibrated_body)(argv) if has_body else (_body(argv), '', None)
+    reuse = (_opt(argv, '--reuse') or '').strip()
+    if reuse:
+        body = f'{body.rstrip()}\n\nReuse: {reuse}'
+    try:
+        n = (file or new)(argv[1], argv[2], body, _opt(argv, '--owner') or default_owner, _opt(argv, '--status', 'backlog'),
+                          _opt(argv, '--b'), area=_opt(argv, '--area'), priority=_opt(argv, '--priority').upper(), loe=est)
+    except ValueError as e:   # no body, no ticket
+        print(e, file=err)
+        return 2
+    return _filed(n, raw, keep_raw, failed, out)
+
+
+def file_bug(argv, cfg: dict = None, file=None, refused=None, body_of=None, keep_raw=None, default_owner: str = '',
+             failed=None, out=None, err=None) -> int:
+    """The command `bug <feature> "<title>" [--priority P1..P4] --body|--body-file ... --loe E`: a bug under a feature,
+    P2 unless told, with new's guards but the Area (its feature's) and the reuse line. The exits and the host's
+    callables are file_new's (`file` is bug)."""
+    cfg, out, err = _cfg(cfg), out or sys.stdout, err or sys.stderr
+    code = _refused_filing(argv, 'bug', BUG_FLAGS, cfg, refused or refused_as_duplicate, err, area=False, reuse=False)
+    if code is not None:
+        return code
+    has_body = bool((_body(argv) or '').strip())
+    body, est, raw = (body_of or calibrated_body)(argv) if has_body else (_body(argv), '', None)
+    try:
+        n = (file or bug)(int(argv[1].lstrip('#')), argv[2], body, _opt(argv, '--owner') or default_owner,
+                          priority=(_opt(argv, '--priority') or 'P2').upper(), loe=est)
+    except ValueError as e:   # no body, no ticket
+        print(e, file=err)
+        return 2
+    return _filed(n, raw, keep_raw, failed, out)
+
+
+def _filed(n, raw, keep_raw, failed, out) -> int:
+    if n and raw and keep_raw is not None:
+        keep_raw(n, raw)
+    why = (failed() or '').strip()[:160] if failed is not None and not n else ''
+    print(f'#{n}' if n else 'tickets: not filed' + (f' ({why})' if why else ''), file=out)
+    return 0 if n else 1
+
+
+# ------------------------------------------------------------------ a commit names its ticket
+TRAILER_LINE = re.compile(r'^[A-Za-z][A-Za-z0-9-]*: ?\S')
+SESSION_LINE = re.compile(r'^Session:\s*(.+?)\s*$', re.MULTILINE)
+PASSING_SUBJECTS = ('Merge ', 'fixup! ', 'squash! ', 'amend! ')
+
+
+def session_unread(message: str) -> str:
+    """'' when the message's `Session:` line (if any) is a trailer git reads, else the refusal (SESSION_UNREAD): git
+    reads trailers from the last paragraph only, so a `Session:` line anywhere else is one `git log` cannot attribute.
+    Git's rule, without git: the last paragraph is the trailer block when every line of it is `Key: value`."""
+    lines = (message or '').rstrip().splitlines()
+    if not any(ln.startswith('Session:') for ln in lines):
+        return ''
+    block = []
+    for ln in reversed(lines):
+        if not ln.strip():
+            break
+        block.append(ln)
+    if block and all(TRAILER_LINE.match(ln) for ln in block) and any(ln.startswith('Session:') for ln in block):
+        return ''
+    return SESSION_UNREAD
+
+
+def owners_of(numbers, run=None, cfg: dict = None):
+    """{number: the board's Owner} of each ticket on this board, in ONE aliased GraphQL query through the issue's own
+    project items (no card added to read it); '' for a card with no Owner. None when GitHub did not answer, so the
+    caller lets the message through with a warning."""
+    run, cfg = _run(run), _cfg(cfg)
+    numbers = [int(n) for n in dict.fromkeys(numbers)]
+    if not numbers:
+        return {}
+    owner, name = cfg['repo'].split('/', 1)
+    body = ' '.join(f'i{n}: issue(number: {n}) {{ projectItems(first: 10) {{ nodes {{ project {{ id }} '
+                    'owner: fieldValueByName(name: "Owner") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }'
+                    for n in numbers)
+    try:
+        data = run.graphql(f'query($o: String!, $r: String!) {{ repository(owner: $o, name: $r) {{ {body} }} }}',
+                           {'o': owner, 'r': name})
+    except Exception:   # noqa: BLE001 - a client that raises: no board answer
+        data = None
+    repo = (data or {}).get('repository') if isinstance(data, dict) else None
+    if not isinstance(repo, dict):
+        return None
+    out = {}
+    for n in numbers:
+        for node in (((repo.get(f'i{n}') or {}).get('projectItems') or {}).get('nodes') or []):
+            if ((node or {}).get('project') or {}).get('id') == cfg['id']:
+                out[n] = ((node.get('owner') or {}).get('name') or '')
+    return out
+
+
+def _lead(cfg: dict) -> str:
+    return ((cfg.get('people') or {}).get('lead') or '').lower()
+
+
+def foreign_tickets(message: str, numbers, run=None, cfg: dict = None):
+    """(refusal, warning) for the tickets a message's `Ticket:` trailer names: a ticket whose board Owner is a session
+    other than the message's `Session:` is a refusal naming the split (a commit that builds one step of another
+    owner's ticket and names the whole ticket lets a release close it unfinished); no Owner, Owner the lead (the
+    board's `people.lead`) or Owner the same session passes; no board answer is a warning, never a refusal; a message
+    with no Session line is not checked."""
+    cfg = _cfg(cfg)
+    said = SESSION_LINE.findall(message or '')
+    session = said[-1] if said else ''
+    if not session or not numbers:
+        return '', ''
+    owners = owners_of(numbers, run, cfg)
+    if owners is None:
+        return '', ('WARNING: tickets: the board did not answer, so the Owner of '
+                    + ', '.join(f'#{n}' for n in numbers) + ' was not checked')
+    lead = {_lead(cfg), ''}
+    bad = [(n, o) for n, o in sorted(owners.items()) if o.lower() not in lead and o.lower() != session.lower()]
+    if not bad:
+        return '', ''
+    return 'tickets: refused, ' + '; '.join(FOREIGN_TICKET.format(n=n, owner=o) for n, o in bad), ''
+
+
+def check(message: str, run=None, cfg: dict = None, owner_rule: bool = True, session_rule: bool = True) -> tuple:
+    """(ok, line) for a commit message: it must name at least one open issue (not a pull request) in a `Ticket:`
+    trailer, or say `Ticket: none (why)`. A merge, fixup!, squash! or amend! commit passes. Without a signed-in runner,
+    the form alone, said. `session_rule` also refuses a `Session:` line git cannot read as a trailer (session_unread),
+    and `owner_rule` a ticket another session owns (foreign_tickets); a host with neither convention turns them off."""
+    run = _run(run)
+    first = (message or '').lstrip().splitlines()[0] if (message or '').strip() else ''
+    if first.startswith(PASSING_SUBJECTS):
+        return True, ''
+    lost = session_unread(message) if session_rule else ''
+    if lost:
+        return False, lost
+    numbers, reason = B.ticket_trailers(message)
+    if not numbers:
+        return (True, f'tickets: none ({reason})') if reason else (False, NO_TICKET)
+    if not run.auth_ok():
+        return True, f'tickets: {", ".join(f"#{n}" for n in numbers)} not checked ({NOT_CHECKED})'
+    bad = []
+    for n in numbers:
+        got = issue(n, run)
+        if got is None:
+            bad.append(f'#{n} not found')
+        elif got['pr']:
+            bad.append(f'#{n} is a pull request, not an issue')
+        elif got['state'] != 'open':
+            bad.append(CLOSED_TICKET.format(n=n, title=got['title'][:60]))
+    if bad:
+        return False, 'tickets: refused, ' + '; '.join(bad)
+    refusal, warning = foreign_tickets(message, numbers, run, cfg) if owner_rule else ('', '')
+    if refusal:
+        return False, refusal
+    return True, 'tickets: ' + ', '.join(f'#{n}' for n in numbers) + (f' ({warning})' if warning else '')
+
+
+def _git(cwd):
+    import subprocess
+    return lambda a: subprocess.run(['git', *a], capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=cwd)
+
+
+def unticketed(revrange: str, git=None, mapped=None, skip_subjects=(), cwd: str = None) -> list:
+    """[(short sha, subject)] of the commits in `revrange` that name no ticket: no `Ticket:` trailer (a number or `none
+    (why)`), not in `mapped` (a host's {sha prefix: tickets} for commits from before its rule), and not a merge (two
+    parents), a fixup or a commit whose subject starts with one of `skip_subjects` (a pipeline's own commits). A push
+    gate's check of every commit a push carries, wherever it was made (a checkout with no commit-msg hook). `git` is
+    the seam: (args) -> a result with .stdout."""
+    go = git or _git(cwd)
+    got = go(['log', '--format=%H%x01%P%x01%B%x00', revrange])
+    out = []
+    for entry in (got.stdout or '').split('\x00'):
+        if not entry.strip():
+            continue
+        sha, parents, message = (entry.strip().split('\x01', 2) + ['', ''])[:3]
+        subject = message.strip().splitlines()[0] if message.strip() else ''
+        if len(parents.split()) > 1 or subject.startswith(PASSING_SUBJECTS + tuple(skip_subjects)):
+            continue
+        numbers, reason = B.ticket_trailers(message)
+        if numbers or reason or any(sha.startswith(p) for p in (mapped or ())):
+            continue
+        out.append((sha[:8], subject[:80]))
+    return out
+
+
+def foreign_in(revrange: str, log=None, run=None, cfg: dict = None, cwd: str = None) -> list:
+    """The range read of foreign_tickets' rule, for a checkout with no commit-msg hook: each commit in `revrange` whose
+    `Ticket:` trailer names a ticket another session owns, one line each (FOREIGN_IN_RANGE), every ticket's Owner in
+    ONE aliased read (owners_of); a board that does not answer is one WARNING line. `log` is the seam for git log's
+    (sha, message) pairs."""
+    cfg = _cfg(cfg)
+    if log is None:
+        out = _git(cwd)(['log', '--format=%h%x1f%B%x1e', revrange])
+        log = [tuple(rec.strip('\n').split('\x1f', 1)) for rec in (out.stdout or '').split('\x1e') if '\x1f' in rec]
+    named = {sha: B.ticket_trailers(msg)[0] for sha, msg in log}
+    numbers = sorted({n for ns in named.values() for n in ns})
+    if not numbers:
+        return []
+    owners = owners_of(numbers, run, cfg)
+    if owners is None:
+        return [f'WARNING: tickets: the board did not answer, so the Owners in {revrange} were not checked']
+    lines, lead = [], _lead(cfg)
+    for sha, msg in log:
+        said = SESSION_LINE.findall(msg or '')
+        session = (said[-1] if said else '').lower()
+        for n in named.get(sha, []):
+            o = owners.get(n, '')
+            if session and o and o.lower() not in (lead, session):
+                lines.append(FOREIGN_IN_RANGE.format(sha=sha, n=n, owner=o))
+    return lines
+
+
+def range_check(revrange: str, unnamed=None, foreign=None, err=None) -> int:
+    """The command `range <revrange>`, a push gate's check: every commit named with no ticket (`unnamed`: revrange ->
+    [(sha, subject)]; unticketed) and every line of the owner rule (`foreign`: revrange -> lines; foreign_in, or None
+    for a host without the rule) on `err`. Exit 1 when a commit names no ticket or names another session's; a WARNING
+    line alone passes."""
+    err = err or sys.stderr
+    bad = (unnamed or unticketed)(revrange)
+    for sha, subject in bad:
+        print(f'tickets: {sha} names no ticket: {subject}', file=err)
+    if bad:
+        print(f'tickets: {len(bad)} commit(s) in {revrange} name no ticket; the session that made each amends it with '
+              '`Ticket: #N` (or `Ticket: none (why)`) before the push', file=err)
+    lines = foreign(revrange) if foreign is not None else []
+    for line in lines:
+        print(line, file=err)
+    return 1 if bad or any(not ln.startswith('WARNING') for ln in lines) else 0
