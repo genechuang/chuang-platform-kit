@@ -122,6 +122,24 @@ check("a breadcrumb goes through the same scrub", M.before_breadcrumb({'message'
 check("non-strings and empties pass untouched", (M.scrub(None), M.scrub(''), M.scrub(5)), (None, '', 5))
 del os.environ['MONITORING_TEST_TOKEN']
 
+print("\n-- drop_events_when (0.31.0): a host says which errors are not news")
+retried = {'on': True}
+drop = lambda event, hint=None: retried['on']   # noqa: E731
+M.drop_events_when(drop)
+M.drop_events_when(drop)   # the same function twice is one
+check("the positive case: an error event the host's predicate names is not sent",
+      (M.before_send({'message': 'the games could not be read'}), len(M._drops)), (None, 1))
+retried['on'] = False
+check("an event it does not name is sent, scrubbed as ever",
+      M.before_send({'message': 'failed for ann.lee@gmail.com'}), {'message': 'failed for [email]'})
+retried['on'] = True
+check("a transaction is never dropped", M.before_send({'type': 'transaction', 'transaction': 'GET /v1/games'}),
+      {'type': 'transaction', 'transaction': 'GET /v1/games'})
+M._drops[:] = [lambda event, hint=None: 1 / 0]
+check("a predicate that raises drops nothing: a broken filter hides no error",
+      M.before_send({'message': 'still sent'}), {'message': 'still sent'})
+M._drops[:] = []
+
 print("\n-- the real SDK, with an in-memory transport: what leaves is scrubbed")
 try:
     import sentry_sdk

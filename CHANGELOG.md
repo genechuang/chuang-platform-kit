@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.31.0 - 2026-11-11 PT
+
+Additive; no host call site changes. `monitoring.drop_events_when(predicate)` (SMADPickleBot #1454: a read that lost
+its database connection was run once more and answered 200, and Sentry still filed the first attempt's exception as an
+issue and an alert): a host registers `predicate(event, hint) -> bool`, and `before_send` sends nothing for an error
+event a predicate names. Transactions are never dropped; a predicate that raises drops nothing and says so in one
+WARNING; the same function registered twice is one.
+
 ## 0.30.0 - 2026-11-07 PT
 
 Additive; no host call site changes. `posthog_api` is PostHog's REST API, one client for every project (SMADPickleBot

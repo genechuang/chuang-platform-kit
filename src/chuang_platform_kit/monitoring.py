@@ -60,8 +60,29 @@ def _scrub_all(value, depth: int = 0):
     return value
 
 
+_drops = []
+
+
+def drop_events_when(predicate) -> None:
+    """Register `predicate(event, hint) -> bool`: an error event for which any registered predicate is true is not
+    sent (0.31.0). For a host that knows an error is not news, which the SDK cannot: a read that failed on a dropped
+    database connection and is about to be run once more (SMADPickleBot #1454: the retry answered 200, and Sentry
+    still filed the first attempt as an issue and an alert). A transaction is never dropped, and a predicate that
+    raises drops nothing: a broken filter must not hide errors. Registering the same function twice keeps one."""
+    if predicate not in _drops:
+        _drops.append(predicate)
+
+
 def before_send(event, hint=None):
-    """Sentry's before_send (and before_send_transaction): the event with every string scrubbed."""
+    """Sentry's before_send (and before_send_transaction): the event with every string scrubbed, or None (not sent)
+    for an error event a host's drop_events_when predicate names."""
+    if isinstance(event, dict) and event.get('type') != 'transaction':
+        for predicate in list(_drops):
+            try:
+                if predicate(event, hint):
+                    return None
+            except Exception:   # noqa: BLE001 - a filter that fails hides nothing
+                log.warning('monitoring: a drop_events_when predicate raised; the event is sent')
     return _scrub_all(event)
 
 

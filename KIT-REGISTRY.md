@@ -414,7 +414,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `scrub(text)` | `text` with secrets masked (redact), then every email address and phone number; anything that is not a string is returned as it is. |
-| `before_send(event, hint=)` | Sentry's before_send (and before_send_transaction): the event with every string scrubbed. |
+| `drop_events_when(predicate)` | Register `predicate(event, hint) -> bool`: an error event for which any registered predicate is true is not sent (0.31.0). For a host that knows an error is not news, which the SDK cannot: a read that failed on a dropped database connection and is about to be… |
+| `before_send(event, hint=)` | Sentry's before_send (and before_send_transaction): the event with every string scrubbed, or None (not sent) for an error event a host's drop_events_when predicate names. |
 | `before_breadcrumb(crumb, hint=)` | Sentry's before_breadcrumb: the breadcrumb with every string scrubbed. |
 | `init(dsn, environment, release=, service=, traces_sample_rate=, sdk=)` | Start sending errors and traces to Sentry; True when it did. A no-op (False) without a DSN, or without sentry_sdk installed (one WARNING). `service` is a tag on every event, so one Sentry project can hold several processes (each Cloud Function and Job). `sdk`… |
 | `flush(timeout=, sdk=)` | Send what is queued before the request, message or job ends. On Cloud Run the CPU is throttled once a response is returned, so an event left in the queue is sent late, or retried, or lost; call this at the end of each unit of work. A no-op when monitoring is… |
