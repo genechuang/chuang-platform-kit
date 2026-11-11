@@ -1054,6 +1054,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `matcher(*shapes)` | The plumbing lines as one pattern: each of `shapes` a name in SHAPES or a regex of its own (shape() makes one); STANDARD when none is given. Case is ignored. |
 | `is_plumbing(line, pattern=)` | Whether one body line is a plumbing trailer, by `pattern` (matcher()'s), the standard shapes when none. |
 | `values(message, key)` | Every value of the trailer `key` in a commit message, in order, each stripped: values(m, 'Post-Ship'). One line each: an empty trailer has no value and never borrows the next line. |
+| `reverted(commits)` | The shas, as given, of the commits in `commits` ([{'sha', 'message'}], any order) that another commit of the same list takes back with git's "This reverts commit <sha>" line. A revert that is itself reverted takes nothing back, so a change reverted and then p… |
+| `unreverted(commits)` | `commits` without the ones reverted() names, in the order given: the commits whose work a range still holds. What a release's notes, its change order and its ticket moves read, so a change put on a branch and taken off it again before the release is never sai… |
 
 ## `chuang_sdlc.triage`: A triage pass on a box: one headless Claude run that investigates and triages a project's untriaged…
 

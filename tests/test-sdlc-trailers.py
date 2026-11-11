@@ -58,5 +58,29 @@ check('a CR line ending is stripped', T.values('S\r\n\r\nPost-Ship: worker refre
 check('a key it lacks', T.values(msg, 'Ticket'), [])
 check('no message', T.values(None, 'Ticket'), [])
 
+print('reverted commits')
+
+
+def commit(sha, subject, reverts=None):
+    return {'sha': sha, 'message': subject + (f'\n\nThis reverts commit {reverts}.\n' if reverts else '\n')}
+
+
+A, B, C = 'a' * 40, 'b' * 40, 'c' * 40
+check('the positive case: a commit a later one reverts is dropped, the revert and the others kept',
+      [c['sha'] for c in T.unreverted([commit(A, 'a feature'), commit(B, 'kept'), commit(C, 'Revert "a feature"', A)])], [B, C])
+check('a short sha in the revert line, or a short sha in the list, still names it',
+      (T.reverted([commit(A, 'x'), commit(C, 'Revert', A[:8])]), T.reverted([commit(A[:8], 'x'), commit(C, 'Revert', A)])),
+      ({A}, {A[:8]}))
+check('any order: the list newest first, as git log gives it', T.reverted([commit(C, 'Revert', A), commit(A, 'x')]), {A})
+check('a revert that is itself reverted takes nothing back: the change is there again',
+      T.reverted([commit(A, 'x'), commit(B, 'Revert x', A), commit(C, 'Revert the revert', B)]), {B})
+check('a revert of a commit outside the list drops nothing', T.unreverted([commit(B, 'kept'), commit(C, 'Revert', A)]),
+      [commit(B, 'kept'), commit(C, 'Revert', A)])
+check('no reverts, an empty list, a commit with no message or sha',
+      (T.reverted([commit(A, 'x'), commit(B, 'y')]), T.unreverted([]), T.reverted([{'sha': A}, {'message': f'This reverts commit {A}.'}])),
+      (set(), [], {A}))
+check('a word that only looks like the line, or fewer than seven characters, is no revert',
+      T.reverted([commit(A, 'x'), commit(B, 'see: this reverts commits later\n\nThis reverts commit aaaaaa.')]), set())
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

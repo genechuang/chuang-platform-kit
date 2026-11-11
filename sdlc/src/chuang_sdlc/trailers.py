@@ -51,3 +51,41 @@ def values(message: str, key: str) -> list:
     """Every value of the trailer `key` in a commit message, in order, each stripped: values(m, 'Post-Ship'). One line
     each: an empty trailer has no value and never borrows the next line."""
     return re.findall(rf"^[ \t]*{re.escape(key)}:[ \t]*(\S[^\n]*?)[ \t\r]*$", message or '', re.I | re.M)
+
+
+# git's own line in a revert's body, with the full sha or a short one.
+REVERTS = re.compile(r'\bThis reverts commit ([0-9a-f]{7,40})\b', re.I)
+
+
+def _names(target: str, sha: str) -> bool:
+    """Whether a revert's `target` (a full or short sha) is the commit `sha`."""
+    target, sha = target.lower(), (sha or '').lower()
+    return len(sha) >= 7 and (sha.startswith(target) or target.startswith(sha))
+
+
+def reverted(commits: list) -> set:
+    """The shas, as given, of the commits in `commits` ([{'sha', 'message'}], any order) that another commit of the
+    same list takes back with git's "This reverts commit <sha>" line. A revert that is itself reverted takes nothing
+    back, so a change reverted and then put back counts as there. A revert of a commit outside the list changes
+    nothing here: that commit belongs to another range."""
+    by = {}   # index of a commit -> the indexes of the commits that revert it
+    for i, c in enumerate(commits):
+        for target in REVERTS.findall(c.get('message') or ''):
+            for j, other in enumerate(commits):
+                if j != i and _names(target, other.get('sha') or ''):
+                    by.setdefault(j, []).append(i)
+    gone = {}
+
+    def is_gone(j, seen=()) -> bool:
+        if j not in gone:
+            gone[j] = any(i not in seen and not is_gone(i, (*seen, j)) for i in by.get(j, ()))
+        return gone[j]
+    return {commits[j].get('sha') or '' for j in by if is_gone(j)}
+
+
+def unreverted(commits: list) -> list:
+    """`commits` without the ones reverted() names, in the order given: the commits whose work a range still holds. What
+    a release's notes, its change order and its ticket moves read, so a change put on a branch and taken off it again
+    before the release is never said to have shipped."""
+    gone = reverted(commits)
+    return [c for c in commits if (c.get('sha') or '') not in gone] if gone else list(commits)

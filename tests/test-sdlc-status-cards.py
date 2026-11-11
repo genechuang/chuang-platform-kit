@@ -33,7 +33,7 @@ def check(label, got, want):
 
 CFG = {'id': 'P1', 'stages': {'status': 'Status Column'},
        'fields': {'Status': {'id': 'F1', 'options': {'Status Column': 'O9'}}}}
-NOW = datetime(2026, 11, 10, 20, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 10, 20, 0, tzinfo=timezone.utc)   # utc-ok: a fixed instant for the marks' arithmetic, never a calendar day
 
 
 def render(key, f, mark):

@@ -78,11 +78,13 @@ def issue_url(number: int) -> str:
 def numbers_of(commits: list, mapped: dict = None) -> dict:
     """{ticket number: [shas]} for commits [{'sha', 'message'}] (the message with its trailers), oldest commit first; a
     commit with no `Ticket:` trailer counts through `mapped` ({sha prefix: [numbers]}, configure(mapped=) when None) by
-    its sha's first seven characters."""
+    its sha's first seven characters. A commit that another commit of the list reverts names none (0.24.0,
+    trailers.unreverted): its change is not in what the list ends as."""
+    from chuang_sdlc import trailers
     if mapped is None:
         mapped = _SET['mapped']() if _SET['mapped'] else {}
     out = {}
-    for c in commits:
+    for c in trailers.unreverted(commits):
         numbers = B.ticket_numbers(c.get('message') or '')
         if not numbers:
             numbers = next((v for k, v in mapped.items() if str(c.get('sha', '')).startswith(k[:7])), [])

@@ -71,6 +71,10 @@ check('a commit before the trailer rule counts through `mapped` by its sha prefi
 check("configure's mapped when none is given", TT.numbers_of([{'sha': 'abc1234ff', 'message': 'old'}]),
       {3: ['abc1234ff']})
 check('`Ticket: none (why)` names none', TT.numbers_of([c('f1')], mapped={}), {})
+check('a commit reverted later in the list names none; the ticket of another commit stays (0.24.0)',
+      TT.numbers_of([{'sha': 'aaaaaaa1', 'message': 'a feature\n\nTicket: #7'}, {'sha': 'bbbbbbb2', 'message': 'kept\n\nTicket: #8'},
+                     {'sha': 'ccccccc3', 'message': 'Revert "a feature"\n\n- This reverts commit aaaaaaa1.\n\nTicket: none (a revert)'}],
+                    mapped={}), {8: ['bbbbbbb2']})
 
 
 class _Resp(io.BytesIO):

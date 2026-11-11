@@ -3,6 +3,19 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.24.0 - 2026-11-11 PT
+
+SMADPickleBot #1423 (11/11/26: a change put on the release branch and reverted there before the ship was still named
+as New in the ship's notes, and its ticket would have been moved to shipped).
+- **`chuang_sdlc.trailers.reverted(commits)`** and **`unreverted(commits)`**, new: the commits of a list that another
+  commit of the same list takes back with git's "This reverts commit <sha>" line, and the list without them. A revert
+  that is itself reverted takes nothing back; a revert of a commit outside the list changes nothing; any order; a
+  short or a full sha.
+- **`titles.numbers_of`** reads `unreverted(commits)`, so `shipped`, `read` and the release notes built on them never
+  name a ticket for a commit the range itself took back. A ticket with another, unreverted commit in the range stays.
+- No signature changes. A host that turns a commit range into tickets with its own reader passes the range through
+  `trailers.unreverted` first.
+
 ## 0.23.0 - 2026-11-10 PT
 
 SMADPickleBot #1120, phase 10 of the SDLC move (Gene, 11/7/26 2:02 PM PT: anything sdlc-related is not picklebot
