@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.26.0 - 2026-11-11 PT
+
+SMADPickleBot #1450 (11/11/26: a card the lead dragged into the working column at 9:22 AM sat unstarted until 1:14 PM;
+its owner had missed the one letter, and every 10-minute sweep wrote "no Light" and asked nobody again for a day).
+- **`scrum.UNSTARTED_AGAIN_MINUTES`** (30), new: the question for a card in the working column with no Light is asked
+  again this often while it stays unanswered. A plan may name its own wait (`again_minutes`); every other question
+  keeps `ASK_AGAIN_HOURS`.
+- A repeated question says in its letter how many times it has been asked and how long since the first, and the
+  card's comment says `asked <owner> again (N times since <first>)`. The card's record keeps `asked_count` and
+  `first_asked_at`, dropped when the question changes or is answered.
+- No signature changes.
+
 ## 0.25.0 - 2026-11-11 PT
 
 SMADPickleBot #1434 (11/11/26: a second project's board found that the check a commit-msg hook runs and the guards

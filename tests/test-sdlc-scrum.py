@@ -342,6 +342,32 @@ check('the same question is not asked twice', (len(letters), any('asked Ann' in 
 dry = Board({'status:"Building"': [dict(card(603, light='busy'), status='Building')]}, issues={603: issue(603)})
 S.sweep(CFG, S.GitHub(CFG, run=dry, dry=True), Records(), now=NOW, dry=True)
 check('a dry run writes nothing', dry.writes, [])
+# 0.26.0 (SMADPickleBot #1450): a card in the working column nobody has started is asked about again every
+# UNSTARTED_AGAIN_MINUTES, where every other question waits ASK_AGAIN_HOURS (a card dragged in at 9:22 AM sat until
+# 1:14 PM on one missed letter)
+idle = Board({'status:"Building"': [dict(card(610), status='Building')], 'is:closed': [], 'is:draft': []}, issues={610: issue(610)})
+idle_store = Records()
+letters.clear()
+texts = []
+S.configure(mail=lambda to, text, subject, sender='': (letters.append((to, subject)), texts.append(text)) and f'mailed {to}')
+first = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW)
+soon = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=29))
+later = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=30))
+third = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=61))
+check('the positive case: an unstarted card is asked at once, not at 29 minutes, again at 30 and again 31 later',
+      ([any('#610 no Light' in ln and 'asked Ann' in ln for ln in x) for x in (first, soon, later, third)], len(letters)),
+      ([True, False, True, True], 3))
+check('the second and third letters say how many times and how long',
+      ('Asked 2 times now; first asked 30 minutes ago.' in texts[1], 'Asked 3 times now; first asked 61 minutes ago.' in texts[2],
+       'Asked' in texts[0], any('asked Ann again (3 times since' in ln for ln in third)), (True, True, False, True))
+started = Board({'status:"Building"': [dict(card(610, light='busy'), status='Building')], 'is:closed': [], 'is:draft': []},
+                issues={610: issue(610, [say('Scrum: building | eta 10/29/26 5 PM PT', 1)])})
+S.sweep(CFG, S.GitHub(CFG, run=started), idle_store, now=NOW + timedelta(minutes=95))
+check('once started, its next question (here its ETA) is a new one with its own count, on the day-long wait again',
+      (len(letters), idle_store.get('scrum', '610').get('asked_count'), 'Asked' in texts[-1]), (4, 1, False))
+quiet = S.sweep(CFG, S.GitHub(CFG, run=started), idle_store, now=NOW + timedelta(minutes=95 + 31))
+check('and that one is not asked again 31 minutes on', (len(letters), any('asked Ann' in ln for ln in quiet)), (4, False))
+S.configure(mail=lambda to, text, subject, sender='': letters.append((to, subject)) or f'mailed {to}')
 # 0.14.0 (SMADPickleBot #1233): a Dock card Warming past WARMING_MINUTES is told to its owner once per Warming
 at = lambda minutes: (NOW - timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731
 docked = Board({'status:"Ready"': [dict(card(900, light='warm'), status='Ready', light_at=at(4)),

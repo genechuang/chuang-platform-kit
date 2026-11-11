@@ -46,6 +46,10 @@ NEEDS_EVERY_HOURS = 24
 
 
 ASK_AGAIN_HOURS = 24   # an unanswered question is asked again after this
+# ... but a card in the working column that nobody has started is asked about again this often (0.26.0; SMADPickleBot
+# #1450: a card the lead dragged in at 9:22 AM sat unstarted until 1:14 PM, its owner having missed the one letter,
+# while every 10-minute sweep wrote "no Light" and asked nobody).
+UNSTARTED_AGAIN_MINUTES = 30
 
 
 # A queued card goes back to the next column once it has waited this long with nothing of its owner's being built.
@@ -639,6 +643,7 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         out['question'] = (f"#{n} is in the {_tickets.stage('shipyard', cfg)} with no Light: is it your next, and does what "
                            "you're on now outrank it? `Scrum: next | after #N`, or `Scrum: building | eta <when>` if you've "
                            "switched to it.")
+        out['again_minutes'] = UNSTARTED_AGAIN_MINUTES   # 0.26.0: a card nobody has started is not left for a day
         return out
 
     out['state'] = light
@@ -1151,10 +1156,21 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                     state.pop('prio_assigned', None)
                     did.append(f'Priority set: {who_leads} unassigned')
         key = question_key(p['question'])
-        # An unanswered question is asked again once ASK_AGAIN_HOURS pass.
+        # An unanswered question is asked again once ASK_AGAIN_HOURS pass; one that names its own wait (`again_minutes`:
+        # a card in the working column nobody has started, UNSTARTED_AGAIN_MINUTES) once that passes instead.
+        again_s = (p.get('again_minutes') or ASK_AGAIN_HOURS * 60) * 60
         stale = bool(key) and key == state.get('asked') and bool(state.get('asked_at')) and (
-            now - datetime.fromisoformat(state['asked_at'])).total_seconds() >= ASK_AGAIN_HOURS * 3600
+            now - datetime.fromisoformat(state['asked_at'])).total_seconds() >= again_s
         if key and (key != state.get('asked') or stale):
+            # The same question again counts up from its first ask, and says so: an owner who missed the first letter
+            # reads how long the card has waited (0.26.0).
+            repeat = key == state.get('asked')
+            count = int(state.get('asked_count') or 1) + 1 if repeat else 1
+            first = (state.get('first_asked_at') or state.get('asked_at')) if repeat else now.isoformat()
+            question = p['question']
+            if count > 1:
+                waited = max(0, round((now - datetime.fromisoformat(first)).total_seconds() / 60))
+                question += f' (Asked {count} times now; first asked {waited} minutes ago.)'
             to = card.get('owner') or captain()
             if to == who_leads and answer and p['state'].startswith(f'{who_leads} answered'):
                 to = captain()   # the lead's own card, answered by them: the captain takes it, never a Needs you back on them
@@ -1162,11 +1178,13 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                 gh.field(n, 'Light', needs)
                 did.append(f'{needs}: its owner is {who_leads}')
             else:
-                letters.setdefault(to, []).append((n, card.get('title') or '', p['question'], (c.get('content') or {}).get('url') or ''))
-                did.append(f'asked {to}')
+                letters.setdefault(to, []).append((n, card.get('title') or '', question, (c.get('content') or {}).get('url') or ''))
+                did.append(f'asked {to}' + (f' again ({count} times since {first[:16]})' if count > 1 else ''))
             state['asked'], state['asked_at'] = key, now.isoformat()
+            state['asked_count'], state['first_asked_at'] = count, first
         elif not key:
-            state.pop('asked', None)
+            for name in ('asked', 'asked_count', 'first_asked_at'):
+                state.pop(name, None)
         mine = [x for x in comments if (x.get('author') or {}).get('login') == login
                 and (x.get('body') or '').startswith(MARKER + ' ·')]
         body = comment_body(now, p['state'], '; '.join(did))
