@@ -41,6 +41,7 @@ def env_for(state, desktop=True, hold=None, **extra):
         e['CLAUDE_CODE_DESKTOP_APP_VERSION'] = '1.0.0-test'
     e['CLAUDE_MODEL_CHECK_FILE'] = state.replace('\\', '/')
     e['CLAUDE_MODEL_CHECK_HOLD_FILE'] = (hold or state + '.hold').replace('\\', '/')
+    e['CLAUDE_MODEL_CHECK_READING_FILE'] = (state + '.fable').replace('\\', '/')   # never the box's own reading
     e.update(extra)
     return e
 
@@ -91,10 +92,16 @@ def main():
           (rc, code, 'Model check, due now' in text, 'get_usage' in text, 'labeled Weekly / Fable' in text,
            os.path.isfile(state) and read(state).isdigit() and abs(int(read(state)) - time.time()) < 120),
           ('0', 0, True, True, True, True))
-    check('  the check names the rule: 99 switches to the newest Opus, under it the newest Fable, the ids from the picker, a peer for your own',
-          ('99 or more' in text, 'newest Opus' in text, 'newest Fable' in text, 'list-ids' in text,
-           'peer session' in text, 'only when something was switched, refused or started' in text),
-          (True, True, True, True, True, True))
+    check('  the check names the rule: since 1.24.0 (SMADPickleBot #1475) 95, or the rate carried forward an hour reaching 99, switches to the newest Opus, '
+          'under it the newest Fable, the ids from the picker, a peer for your own',
+          ('95 or more' in text, 'carried forward one hour' in text, 'reaches 99' in text, '99 or more' in text.split('(2)')[0],
+           'newest Opus' in text, 'newest Fable' in text, 'list-ids' in text,
+           'peer session' in text, 'only when something was switched, refused or started, or the check was late' in text),
+          (True, True, True, False, True, True, True, True, True))
+    check('  with no reading on record the text says the 95 rule stands alone, and the check ends by noting this reading, the script named',
+          ('No earlier reading is on record' in text, f"(4) The reading: run bash '{LIB_DIR}/model-check-hold.sh' note" in text,
+           'late by' in text),
+          (True, True, False))
     check('  since 1.17.0 the all-models window at 99 starts the account handover once (the record of one begun today stops a repeat), '
           'and the public hook names no session: the peer comes from the project manifest',
           ('Weekly / all models' in text, 'account handover starts now' in text, 'already begun for this account today' in text,
@@ -208,6 +215,54 @@ def main():
           (f'{named} clear so the new account' in text, text.index(f'{named} clear') < text.index("skill's part (a)")), (True, True))
     rc, out, err = holder(hf, 'bogus')
     check('an unknown command is a usage line and exit 2', (rc, err.startswith('usage:')), (2, True))
+
+    # 1.24.0 (SMADPickleBot #1475): the reading the next check carries, and the late line.
+    rstate = os.path.join(d, 'reading.last')
+    rfile = rstate + '.fable'
+    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e['CLAUDE_MODEL_CHECK_READING_FILE'] = rfile.replace('\\', '/')
+    r = subprocess.run([BASH, HOLD, 'note', '97'], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+    parts = read(rfile).split()
+    check('the positive case: note writes "<epoch> <percent>" and says so',
+          (r.returncode, len(parts), parts[1], abs(int(parts[0]) - time.time()) < 120, 'Fable at 97' in r.stdout), (0, 2, '97', True, True))
+    for bad in ('', 'ninety', '101', '-3', '9.5'):
+        r = subprocess.run([BASH, HOLD, 'note', bad], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+        check(f'  note refuses {bad!r}: exit 2 and the reading left as it was', (r.returncode, read(rfile).split()[1]), (2, '97'))
+    write(rfile, f'{int(time.time()) - 80 * 60} 96\n')
+    rc, text, code = lib(rstate)
+    check('the next check carries the last reading and its age in minutes, and no longer says the 95 rule stands alone',
+          ('The last reading was Fable at 96 percent, 80 minutes ago.' in text, 'No earlier reading' in text), (True, False))
+    for i, (label, body) in enumerate((('from the future', f'{int(time.time()) + 3600} 50'), ('over a week old', f'{int(time.time()) - 8 * 86400} 50'),
+                                       ('garbled', 'yesterday ninety'), ('a percent of four digits', f'{int(time.time()) - 600} 1000'))):
+        write(rfile, body + '\n')
+        rc, text, code = lib(os.path.join(d, f'reading-{i}.last'), CLAUDE_MODEL_CHECK_READING_FILE=rfile.replace('\\', '/'))
+        check(f'  a reading {label} is no reading', ('No earlier reading is on record' in text, 'The last reading' in text), (True, False))
+    with open(rfile, 'w', encoding='utf-8', newline='') as f:
+        f.write(f'{int(time.time()) - 600} 90\r\n')
+    rc, text, code = lib(os.path.join(d, 'reading-crlf.last'), CLAUDE_MODEL_CHECK_READING_FILE=rfile.replace('\\', '/'))
+    check('  a reading line ending in CRLF is still read', 'Fable at 90 percent, 10 minutes ago' in text, True)
+
+    lstate = os.path.join(d, 'late.last')
+    write(lstate, f'{int(time.time()) - 3600 - 76 * 60}\n')
+    rc, text, code = lib(lstate)
+    check('a mark two intervals old or more: the check opens late by the minutes past due and asks the session to say so',
+          (text.startswith('Model check, late by 76 minutes'), 'say so to Gene' in text, 'Model check, due now' in text), (True, True, True))
+    write(lstate, f'{int(time.time()) - 3600 - 20 * 60}\n')
+    rc, text, code = lib(lstate)
+    check('  a check due within its second interval is not late', (text.startswith('Model check, due now'), 'late by' in text), (True, False))
+    write(lstate, f'{int(time.time()) - 3 * 3600}\n')
+    write(hfile, f'{int(time.time()) + 86400}\n')
+    rc, text, code = lib(lstate, hold=hfile)
+    check('  a late check under a hold says late too, then the held text', (text.startswith('Model check, late by'), 'Model check, held' in text), (True, True))
+    rc, text, code = lib(os.path.join(d, 'never-late.last'))
+    check('  a box never checked is not late', 'late by' in text, False)
+    with open(lstate, 'w', encoding='utf-8', newline='') as f:
+        f.write(f'{int(time.time()) - 3 * 3600}\r\n')
+    rc, text, code = lib(lstate)
+    check('  a mark line ending in CRLF is still the mark (a Windows program wrote it): late by 120 minutes, not never checked',
+          text.startswith('Model check, late by 120 minutes'), True)
+    check('  the late and reading texts carry nothing JSON would need escaped, and stay ASCII',
+          ('"' in text, '\\' in text, text.isascii()), (False, False, True))
 
     rc, text, code = lib(state)
     check('a second prompt within the hour: nothing handed, the mark untouched', (rc, text, code), ('0', '', 0))

@@ -8,8 +8,11 @@
 #   model-check-hold.sh set <ISO 8601 time>   hold the model check until then (the Fable window's resetsAt)
 #   model-check-hold.sh clear                 end the hold (the switch back to Fable, or a handover's fresh sessions)
 #   model-check-hold.sh show                  print the hold's epoch, or "no hold"
+#   model-check-hold.sh note <percent>        record this check's Fable reading (1.24.0, SMADPickleBot #1475)
 #
 # The file holds one line, the hold's Unix epoch: CLAUDE_MODEL_CHECK_HOLD_FILE, else $HOME/.claude/model-check.hold.
+# `note` writes one line "<epoch> <percent>" to CLAUDE_MODEL_CHECK_READING_FILE, else $HOME/.claude/model-check.fable:
+# the next check's text carries it, so the session can carry the rate forward an hour (model-check.lib.sh).
 # The time is parsed with `date -d` (GNU), else python3 or python (BSD date has no -d); a time neither can read is
 # refused with exit 2 and one line, and nothing is written. No network.
 file="${CLAUDE_MODEL_CHECK_HOLD_FILE:-$HOME/.claude/model-check.hold}"
@@ -59,8 +62,19 @@ case "$1" in
       echo "no hold"
     fi
     ;;
+  note)
+    case "$2" in
+      ''|*[!0-9]*) echo "model-check-hold: '$2' is not a whole percent; no reading written" >&2; exit 2 ;;
+    esac
+    [ "$2" -le 100 ] || { echo "model-check-hold: '$2' is over 100; no reading written" >&2; exit 2; }
+    reading="${CLAUDE_MODEL_CHECK_READING_FILE:-$HOME/.claude/model-check.fable}"
+    printf -v now '%(%s)T' -1 2>/dev/null || now=$(date +%s)
+    mkdir -p "${reading%/*}" 2>/dev/null
+    printf '%s %s\n' "$now" "$((10#$2))" >"$reading" || { echo "model-check-hold: cannot write $reading" >&2; exit 1; }
+    echo "model-check-hold: Fable at $((10#$2))% noted ($reading)"
+    ;;
   *)
-    echo "usage: model-check-hold.sh set <ISO 8601 time> | clear | show" >&2
+    echo "usage: model-check-hold.sh set <ISO 8601 time> | clear | show | note <percent>" >&2
     exit 2
     ;;
 esac
