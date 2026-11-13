@@ -31,11 +31,36 @@ def check(label, got, want):
 
 HOLD = os.path.join(HOOKS, 'model-check-hold.sh').replace('\\', '/')
 LIB_DIR = LIB.rsplit('/', 1)[0]
+# The app's records (1.25.0, SMADPickleBot #1491): every run reads a test folder, never the box's own records. The
+# default is a folder that does not exist, so a case that builds no records reads them as unreadable.
+NO_RECORDS = os.path.join(tempfile.gettempdir(), 'model-check-no-records-here').replace('\\', '/')
+
+
+def base_env(records=None):
+    """The environment with every CLAUDE_MODEL_CHECK* of the box's removed and the records folder set to a test one."""
+    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e['CLAUDE_MODEL_CHECK_RECORDS'] = (records or NO_RECORDS).replace('\\', '/')
+    return e
+
+
+def make_records(root, sessions, account='acct-1', other=()):
+    """A fake app data folder: config.json naming the account, and one record per (title, model, archived) under it.
+    `other` are records under another account, which the reader must leave out."""
+    os.makedirs(root, exist_ok=True)
+    write(os.path.join(root, 'config.json'), json.dumps({'lastKnownAccountUuid': account}))
+    for acct, rows in ((account, sessions), ('acct-other', other)):
+        folder = os.path.join(root, 'claude-code-sessions', acct, 'proj')
+        os.makedirs(folder, exist_ok=True)
+        for i, (title, model, archived) in enumerate(rows):
+            sid = f'local_{acct}-{i}'
+            write(os.path.join(folder, sid + '.json'),
+                  json.dumps({'sessionId': sid, 'title': title, 'model': model, 'isArchived': archived}))
+    return root.replace('\\', '/')
 
 
 def env_for(state, desktop=True, hold=None, **extra):
     """The hold file is always a test path (state + '.hold' unless given), never the box's own under $HOME."""
-    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e = base_env()
     e.pop('CLAUDE_CODE_DESKTOP_APP_VERSION', None)
     if desktop:
         e['CLAUDE_CODE_DESKTOP_APP_VERSION'] = '1.0.0-test'
@@ -54,9 +79,9 @@ def lib(state, source=None, cwd=None, **kw):
     return rc, text, r.returncode
 
 
-def holder(hold_file, *args):
+def holder(hold_file, *args, records=None):
     """model-check-hold.sh as a session runs it: (exit code, stdout, stderr)."""
-    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e = base_env(records)
     e['CLAUDE_MODEL_CHECK_HOLD_FILE'] = hold_file.replace('\\', '/')
     r = subprocess.run([BASH, HOLD, *args], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -180,7 +205,7 @@ def main():
     rc, out, err = holder(hf, 'set', soon_iso + '+00:00')
     check('  set takes an offset', (rc, read(hf)), (0, str(soon)))
     os.remove(hf)
-    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e = base_env()
     e['CLAUDE_MODEL_CHECK_HOLD_FILE'] = hf.replace('\\', '/')
     r = subprocess.run([BASH, '-c', f'date() {{ return 1; }}; export -f date; bash "{HOLD}" set {soon_iso}.000Z'],
                        capture_output=True, text=True, encoding='utf-8', env=e, timeout=60)
@@ -216,10 +241,75 @@ def main():
     rc, out, err = holder(hf, 'bogus')
     check('an unknown command is a usage line and exit 2', (rc, err.startswith('usage:')), (2, True))
 
+    # 1.25.0 (SMADPickleBot #1491): the app's own record of each session's model. The positive case first: the 11/12/26
+    # night, held as all-Opus while the app recorded two sessions on Fable 5.2, breaks the hold and names them.
+    recs = make_records(os.path.join(d, 'app-night'), [
+        ('Snow White', 'claude-fable-5-2', False), ('Black Widow', 'claude-fable-5-2', False),
+        ('ChuangFinance', 'claude-opus-5-5', False), ('Old one', 'claude-fable-5-1', True)],
+        other=[('Other account', 'claude-fable-5-2', False)])
+    nhold = os.path.join(d, 'night.hold')
+    write(nhold, f'{int(time.time()) + 86400}\n')
+    rc, text, code = lib(os.path.join(d, 'night.last'), hold=nhold, CLAUDE_MODEL_CHECK_RECORDS=recs)
+    check('the positive case for 1.25.0: a hold the app records contradict is broken, the hold file removed, and the full check runs naming each session off Opus',
+          (rc, text.startswith('Model check, hold broken'), 'Model check, due now' in text, os.path.exists(nhold),
+           'Snow White on claude-fable-5-2' in text.split('Model check, due now')[0],
+           'Black Widow on claude-fable-5-2' in text.split('Model check, due now')[0],
+           'ChuangFinance' in text.split('Model check, due now')[0]),
+          ('0', True, True, False, True, True, False))
+    check('  the full text carries every unarchived record of the signed-in account, never an archived one or another account\'s',
+          ("The app's own records, read by this hook just now" in text, 'ChuangFinance on claude-opus-5-5' in text,
+           'Old one' in text, 'Other account' in text),
+          (True, True, False, False))
+    check('  and has the session switch each session whose recorded model differs, even one whose replies already run on the target',
+          ('whose recorded model differs from the target' in text, 'even one whose replies already run on the target' in text,
+           'list_sessions carries no model' in text),
+          (True, True, True))
+    check('  the broken text still carries nothing JSON would need escaped, and only ASCII',
+          ('"' in text, '\\' in text, text.isascii()), (False, False, True))
+
+    allopus = make_records(os.path.join(d, 'app-opus'), [
+        ('Snow White', 'claude-opus-5-5', False), ('Black Widow', 'claude-opus-5-5', False),
+        ('Old one', 'claude-fable-5-1', True)])
+    write(nhold, f'{int(time.time()) + 86400}\n')
+    rc, text, code = lib(os.path.join(d, 'opus.last'), hold=nhold, CLAUDE_MODEL_CHECK_RECORDS=allopus)
+    check('a hold the records agree with stands: the short text, no unreadable note, the hold file kept',
+          (text.startswith('Model check, held'), 'could not be read' in text, os.path.exists(nhold)), (True, False, True))
+    write(nhold, f'{int(time.time()) + 86400}\n')
+    rc, text, code = lib(os.path.join(d, 'unread.last'), hold=nhold)
+    check('a hold whose records cannot be read stands, and says it was not checked against them',
+          (text.startswith('Model check, held'), 'could not be read by this hook, so this hold was not checked' in text,
+           os.path.exists(nhold)), (True, True, True))
+    rc, text, code = lib(os.path.join(d, 'unread-full.last'))
+    check('  a full check whose records cannot be read has the session read each model with get_session',
+          ('could not be read by this hook, so read each session\'s model with get_session' in text), True)
+
+    sh = os.path.join(d, 'set-guard.hold')
+    rc, out, err = holder(sh, 'set', soon_iso + 'Z', records=recs)
+    check('model-check-hold.sh set refuses, exit 3, while the app records a session off Opus, naming each, and writes nothing',
+          (rc, 'not held' in err, 'Snow White\tclaude-fable-5-2' in err, 'Black Widow\tclaude-fable-5-2' in err,
+           'ChuangFinance' in err, 'Other account' in err, os.path.exists(sh)),
+          (3, True, True, True, False, False, False))
+    rc, out, err = holder(sh, 'set', soon_iso + 'Z', records=allopus)
+    check('  set holds once every unarchived record is on Opus (an archived Fable one does not stop it)',
+          (rc, os.path.isfile(sh) and read(sh), 'could not be read' in err), (0, str(soon), False))
+    os.remove(sh)
+    rc, out, err = holder(sh, 'set', soon_iso + 'Z')
+    check('  set with records it cannot read holds as before, and says so on stderr',
+          (rc, os.path.isfile(sh), 'could not be read' in err), (0, True, True))
+
+    rp = subprocess.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'off', 'opus'],
+                        capture_output=True, text=True, encoding='utf-8', env=base_env(recs), timeout=30)
+    check('model-check-records.py off opus lists title, model and id for each unarchived session of the account off Opus',
+          (rp.returncode, sorted(l.split('\t')[0] for l in rp.stdout.splitlines()),
+           all(l.count('\t') == 2 for l in rp.stdout.splitlines())), (0, ['Black Widow', 'Snow White'], True))
+    rp = subprocess.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'list'],
+                        capture_output=True, text=True, encoding='utf-8', env=base_env(), timeout=30)
+    check('  with no data folder it exits 3 with one line, so a caller tells unread from none', (rp.returncode, rp.stdout, len(rp.stderr.splitlines())), (3, '', 1))
+
     # 1.24.0 (SMADPickleBot #1475): the reading the next check carries, and the late line.
     rstate = os.path.join(d, 'reading.last')
     rfile = rstate + '.fable'
-    e = {k: v for k, v in os.environ.items() if not k.startswith('CLAUDE_MODEL_CHECK')}
+    e = base_env()
     e['CLAUDE_MODEL_CHECK_READING_FILE'] = rfile.replace('\\', '/')
     r = subprocess.run([BASH, HOLD, 'note', '97'], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
     parts = read(rfile).split()

@@ -7,7 +7,8 @@
 # noisy and not useful": it died with its session, had to be re-made at every start, and reported every hour whether
 # or not anything had changed.
 #
-# The prompt path pays builtins only: no process, no network, no token. One file under $HOME holds the epoch of the
+# The prompt path pays builtins only, except once an hour: no network and no token, and the one process (the records
+# reader, 1.25.0) runs only on the prompt where the hour falls due. One file under $HOME holds the epoch of the
 # box's last check; the function reads it with `read`, and when MODEL_CHECK_EVERY seconds (3600) have passed it
 # writes the new epoch with `printf` and sets MODEL_CHECK_TEXT, the check handed to THIS session as prompt context:
 # read the weekly Fable window with its own get_usage tool, switch every live desktop session to the newest Opus at
@@ -41,6 +42,16 @@
 # the session to say in its one line, so a gap like that evening's is seen. A timer was not added: the hourly session
 # cron of 10/26 to 11/7/26 was dropped as "too noisy and not useful"; the margin covers about two idle hours at that
 # evening's rate (about 1.5 points an hour).
+# And since 1.25.0 (SMADPickleBot #1491; Gene, 11/12/26 11:50 PM PT: "Do fucking 1491 and make sure it works, because
+# this is like the 5th patch on model switching"): at 11:00 PM PT that night he found Snow White and Black Widow on Fable
+# at 100% and unresponsive, though the check had been held since 11/11/26 10:17 PM PT as "every session on Opus". Their
+# replies did run on Opus after his hand switch on 11/11, but the app's own record of both sessions still said Fable 5.2,
+# and the app starts a session from that record. list_sessions carries no model, so no session could see the gap. So
+# the hook now reads the records itself (model-check-records.py beside this file: the app's claude-code-sessions/<account>
+# records, one python process, only on the prompt where the hour falls due). A held check whose records show any
+# session off Opus clears the hold and runs the full check, naming those sessions. A due check hands the session every
+# record's model and has it switch each session whose record is not the target, not each one whose replies differ. And
+# model-check-hold.sh set reads the records again and refuses the hold while any session is recorded off Opus.
 # The check is the box's, not a session's: four sessions share the hour, and whichever is prompted next
 # does it, so an idle box checks nothing and a busy one checks once an hour. Why the session reads the window and not
 # the hook: get_usage and set_session_model are the desktop app's tools, which only a session can call, and the CLI's
@@ -82,6 +93,30 @@ model_check() {
   [ "$dir" = "$src" ] && dir=.
   case "$dir" in /*|[A-Za-z]:/*) ;; .) dir="$PWD" ;; *) dir="$PWD/$dir" ;; esac
   case "$dir" in *[\"\'%]*) holder="the model-check-hold.sh beside the gene-hooks plugin's model-check.lib.sh" ;; *) holder="bash '$dir/model-check-hold.sh'" ;; esac
+  # The app's own records (1.25.0, SMADPickleBot #1491): model-check-records.py reads the model the desktop app has on
+  # record for every unarchived session of the signed-in account, which is the model the app starts that session on.
+  # It runs only on the prompt where the hour fell due, once an hour, so this is the one process the check spends.
+  local py="" p recs="" rrc=3 offlist="" alllist="" line t m s
+  for p in python3 python; do
+    command -v "$p" >/dev/null 2>&1 && "$p" -c '' >/dev/null 2>&1 && { py="$p"; break; }
+  done
+  if [ -n "$py" ] && [ -f "$dir/model-check-records.py" ]; then
+    recs=$("$py" "$dir/model-check-records.py" list 2>/dev/null); rrc=$?
+  fi
+  if [ "$rrc" -eq 0 ]; then
+    while IFS=$'\t' read -r t m s; do
+      [ -n "$t$m" ] || continue
+      m="${m%$'\r'}"; s="${s%$'\r'}"
+      alllist="${alllist:+$alllist; }$t on $m ($s)"
+      case "$m" in claude-opus-*) ;; *) offlist="${offlist:+$offlist; }$t on $m ($s)" ;; esac
+    done <<<"$recs"
+  fi
+  local records_line
+  if [ "$rrc" -eq 0 ]; then
+    records_line="The app's own records, read by this hook just now (the model the app starts each session on, whatever its last replies ran on; SMADPickleBot #1491): ${alllist:-no unarchived session}."
+  else
+    records_line="The app's own session records could not be read by this hook, so read each session's model with get_session (list_sessions carries none)."
+  fi
   # The hold (1.19.0): an epoch in the hold file still ahead of now hands the all-models read alone. A file that is
   # missing, empty, not an epoch, past, or more than 8 days ahead (past any weekly reset: a wrong field or year, never
   # a hold for good) is no hold, and the full check runs.
@@ -91,8 +126,17 @@ model_check() {
   case "$hold" in ''|*[!0-9]*) hold=0 ;; esac
   [ "${#hold}" -gt 12 ] && hold=0
   [ "$hold" -gt $((now + 691200)) ] && hold=0
+  # A hold the records contradict (1.25.0, #1491) is no hold: some session would start on Fable, so the hold ends here
+  # and the full check runs now, naming those sessions.
+  local broken=""
+  if [ "$now" -lt "$hold" ] && [ -n "$offlist" ]; then
+    rm -f "$holdfile" 2>/dev/null
+    hold=0
+    broken="Model check, hold broken (SMADPickleBot #1491): it was held as if every session were on Opus, but the app's own records show $offlist. The app starts a session on its record, so switch each of these now, and tell Gene in your one line which ones were off. "
+  fi
   if [ "$now" -lt "$hold" ]; then
     MODEL_CHECK_TEXT="${late}Model check, held (every session is on the newest Opus until the Fable window's weekly reset; SMADPickleBot #1144, Gene 11/7/26 6:04 PM PT). Switch no model this turn. Before your answer, call get_usage and read the one window labeled Weekly / all models: at 99 or more the account handover starts now, before anything else, unless your project's handover record shows one already begun for this account today (the account-handover skill says what marks it): tell Gene in one line that the account is at 99 percent and the handover has begun, run $holder clear so the new account's fresh sessions get the full check, then run that skill's part (a). Otherwise say nothing of this check."
+    [ "$rrc" -eq 0 ] || MODEL_CHECK_TEXT="$MODEL_CHECK_TEXT The app's session records could not be read by this hook, so this hold was not checked against them (SMADPickleBot #1491): say so to Gene in one line."
     return 0
   fi
   # The last reading (1.24.0): "<epoch> <percent>" from model-check-hold.sh note, read with builtins. A file that is
@@ -111,6 +155,6 @@ model_check() {
       fi
       ;;
   esac
-  MODEL_CHECK_TEXT="${late}Model check, due now (the box's hourly check rides this prompt; SMADPickleBot #423, Gene 11/7/26 11:37 and 11:58 AM PT). This turn, before your answer, call get_usage and read two plan windows. (1) The window labeled Weekly / Fable (its percentUsed): the target is the newest Opus when it is 95 or more, or when its rise since the last reading, carried forward one hour (now plus the rise times 60 over the minutes since that reading), reaches 99 (SMADPickleBot #1475: an idle hour has no check, so the switch leaves that margin); else the newest Fable (the window's weekly reset to 0% is what switches everyone back). $prior Read the ids from the picker's own list: set_session_model with model list-ids is refused and lists them; the newest is the highest version of that family; never a hand-typed or dated id. Then list_sessions and set_session_model with the target's full id on every live, unarchived session of this desktop whose model differs, but your own; for your own, when it differs, one SendMessage to the peer session your project's manifest names for it (claude-shared sessions.md), naming your local_ id and the target id, since the tool refuses a session's own model; a box with no peer session names that in the line below. Then ListAgents: every session on another machine (a Remote Control row) gets one SendMessage asking it to move itself to the target id and answer when it has, since set_session_model reaches this desktop's sessions alone; one that cannot be reached gets your project's session mail instead, and the switch is said as done only for those that answered. (2) The window labeled Weekly / all models: at 99 or more the account handover starts now, before anything else, unless your project's handover record shows one already begun for this account today (the account-handover skill says what marks it): tell Gene in one line that the account is at 99 percent and the handover has begun, then run that skill's part (a). (3) The hold (SMADPickleBot #1144, Gene 11/7/26 6:04 PM PT): when the target was the newest Opus and every session of this desktop is on it (switched, or already) and every session on another machine answered that it is, run $holder set with the Fable window's resetsAt from get_usage, so the box checks only the all-models window until that reset; when the target is the newest Fable, run $holder clear. (4) The reading: run $holder note with the Fable percent you read, whatever the target, so the next check has the rate. Say one line to Gene only when something was switched, refused or started, or the check was late; otherwise say nothing of this check."
+  MODEL_CHECK_TEXT="${late}${broken}Model check, due now (the box's hourly check rides this prompt; SMADPickleBot #423, Gene 11/7/26 11:37 and 11:58 AM PT). This turn, before your answer, call get_usage and read two plan windows. (1) The window labeled Weekly / Fable (its percentUsed): the target is the newest Opus when it is 95 or more, or when its rise since the last reading, carried forward one hour (now plus the rise times 60 over the minutes since that reading), reaches 99 (SMADPickleBot #1475: an idle hour has no check, so the switch leaves that margin); else the newest Fable (the window's weekly reset to 0% is what switches everyone back). $prior $records_line Read the ids from the picker's own list: set_session_model with model list-ids is refused and lists them; the newest is the highest version of that family; never a hand-typed or dated id. Then set_session_model with the target's full id on every unarchived session of this desktop whose recorded model differs from the target (the records above; a session they do not list, read with get_session, since list_sessions carries no model), even one whose replies already run on the target, but your own; for your own, when it differs, one SendMessage to the peer session your project's manifest names for it (claude-shared sessions.md), naming your local_ id and the target id, since the tool refuses a session's own model; a box with no peer session names that in the line below. Then ListAgents: every session on another machine (a Remote Control row) gets one SendMessage asking it to move itself to the target id and answer when it has, since set_session_model reaches this desktop's sessions alone; one that cannot be reached gets your project's session mail instead, and the switch is said as done only for those that answered. (2) The window labeled Weekly / all models: at 99 or more the account handover starts now, before anything else, unless your project's handover record shows one already begun for this account today (the account-handover skill says what marks it): tell Gene in one line that the account is at 99 percent and the handover has begun, then run that skill's part (a). (3) The hold (SMADPickleBot #1144, Gene 11/7/26 6:04 PM PT): when the target was the newest Opus and every session of this desktop is on it (switched, or already) and every session on another machine answered that it is, run $holder set with the Fable window's resetsAt from get_usage, so the box checks only the all-models window until that reset (it reads the app's records again and refuses, exit 3, naming each session still recorded on another model: switch those, or have your peer switch yours, and run it again; never write the hold another way); when the target is the newest Fable, run $holder clear. (4) The reading: run $holder note with the Fable percent you read, whatever the target, so the next check has the rate. Say one line to Gene only when something was switched, refused or started, or the check was late; otherwise say nothing of this check."
   return 0
 }
