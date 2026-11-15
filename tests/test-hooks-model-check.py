@@ -121,7 +121,7 @@ def main():
           'under it the newest Fable, the ids from the picker, a peer for your own',
           ('95 or more' in text, 'carried forward one hour' in text, 'reaches 99' in text, '99 or more' in text.split('(2)')[0],
            'newest Opus' in text, 'newest Fable' in text, 'list-ids' in text,
-           'peer session' in text, 'only when something was switched, refused or started, or the check was late' in text),
+           'peer session' in text, 'only when something was switched, refused or started;' in text),
           (True, True, True, False, True, True, True, True, True))
     check('  with no reading on record the text says the 95 rule stands alone, and the check ends by noting this reading, the script named',
           ('No earlier reading is on record' in text, f"(4) The reading: run bash '{LIB_DIR}/model-check-hold.sh' note" in text,
@@ -335,23 +335,19 @@ def main():
     lstate = os.path.join(d, 'late.last')
     write(lstate, f'{int(time.time()) - 3600 - 76 * 60}\n')
     rc, text, code = lib(lstate)
-    check('a mark two intervals old or more: the check opens late by the minutes past due and asks the session to say so',
-          (text.startswith('Model check, late by 76 minutes'), 'say so to Gene' in text, 'Model check, due now' in text), (True, True, True))
-    write(lstate, f'{int(time.time()) - 3600 - 20 * 60}\n')
-    rc, text, code = lib(lstate)
-    check('  a check due within its second interval is not late', (text.startswith('Model check, due now'), 'late by' in text), (True, False))
+    check('a check overdue by more than an hour is due, and says nothing of being late (1.26.0; Gene 11/15/26: "useless noise")',
+          (text.startswith('Model check, due now'), 'late by' in text, 'say so to Gene' in text), (True, False, False))
     write(lstate, f'{int(time.time()) - 3 * 3600}\n')
     write(hfile, f'{int(time.time()) + 86400}\n')
     rc, text, code = lib(lstate, hold=hfile)
-    check('  a late check under a hold says late too, then the held text', (text.startswith('Model check, late by'), 'Model check, held' in text), (True, True))
-    rc, text, code = lib(os.path.join(d, 'never-late.last'))
-    check('  a box never checked is not late', 'late by' in text, False)
+    check('  an overdue check under a hold opens with the held text alone', (text.startswith('Model check, held'), 'late by' in text), (True, False))
     with open(lstate, 'w', encoding='utf-8', newline='') as f:
         f.write(f'{int(time.time()) - 3 * 3600}\r\n')
+    write(hfile, '0\n')
     rc, text, code = lib(lstate)
-    check('  a mark line ending in CRLF is still the mark (a Windows program wrote it): late by 120 minutes, not never checked',
-          text.startswith('Model check, late by 120 minutes'), True)
-    check('  the late and reading texts carry nothing JSON would need escaped, and stay ASCII',
+    check('  a mark line ending in CRLF is still the mark (a Windows program wrote it): the check is due',
+          (rc, text.startswith('Model check, due now'), read(lstate).strip().isdigit()), ('0', True, True))
+    check('  the reading texts carry nothing JSON would need escaped, and stay ASCII',
           ('"' in text, '\\' in text, text.isascii()), (False, False, True))
 
     rc, text, code = lib(state)
