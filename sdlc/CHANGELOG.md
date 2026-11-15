@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.27.0 - 2026-11-15 PT
+
+SMADPickleBot #1555 (11/15/26: CO #1554's one aliased mutation of 17 cards, 51 field writes, took 89.8 s, since GraphQL
+runs a document's fields one after another and GitHub took about 1.7 s a Projects field write).
+- **`tickets.move_many`** sends the cards' writes as documents of `DOC_CARDS` (2), up to `MOVE_PARALLEL` (10) at once,
+  so a wave costs about one document's time. The one aliased read, the forward-only rule, the host's `before_ship_move`,
+  the top position and the halving retry of a refused document are unchanged. `MOVE_CHUNK` (100) is now the cards a wave.
+  No signature changes.
+
 ## 0.26.0 - 2026-11-11 PT
 
 SMADPickleBot #1450 (11/11/26: a card the lead dragged into the working column at 9:22 AM sat unstarted until 1:14 PM;

@@ -359,9 +359,10 @@ cards['IT_29'] = {'number': 29, 'status': 'Done', 'light': 'going'}   # already 
 gh = fresh({n: {} for n in range(10, 31)}, cards)
 marks.clear()
 got = T.move_many(list(range(10, 31)), 'shipping', gh)
-check('the positive case: 20 cards in one read and one write, a card already there said as moved, one off the board not moved',
-      (len(gh.batch_reads), len(gh.batch_writes), len(gh.batch_writes[0]), got[-2:], got[0]),
-      (1, 1, 19, [(29, True), (30, False)], (10, True)))
+check('the positive case: 20 cards in one read and ten two-card writes (0.27.0, #1555), a card already there said as moved, one off the board not moved',
+      (len(gh.batch_reads), len(gh.batch_writes), sum(len(w) for w in gh.batch_writes), max(len(w) for w in gh.batch_writes),
+       got[-2:], got[0]),
+      (1, 10, 19, 2, [(29, True), (30, False)], (10, True)))
 check('each moved card is in the ship column with its Light, at the top, the ship mark once for all of them',
       (gh.cards['IT_10']['status'], gh.cards['IT_10']['light'], len(gh.tops), sorted(set(marks)) == list(range(10, 29))),
       ('Done', 'going', 19, True))
@@ -378,6 +379,31 @@ T.move_many(list(range(50, 55)), 'shipping', gh)
 T.MOVE_CHUNK = saved
 check('chunked: five cards at a chunk of two are three writes', len(gh.batch_writes), 3)
 check('the chunk is 100 cards (Gene, 11/8/26 9:12 PM PT)', T.MOVE_CHUNK, 100)
+# 0.27.0 (SMADPickleBot #1555): a document's fields run one after another on GitHub, so the documents go side by side
+import threading as _th
+import time as _tm
+gh = fresh({n: {} for n in range(70, 82)}, {f'IT_{n}': {'number': n, 'status': 'Ready', 'light': 'ok'} for n in range(70, 82)})
+_real_gql, _live, _most = gh.graphql, [0], [0]
+_lock = _th.Lock()
+
+
+def _slow(query, variables=None, **kw):
+    if query.startswith('mutation('):
+        with _lock:
+            _live[0] += 1
+            _most[0] = max(_most[0], _live[0])
+        _tm.sleep(0.2)
+        with _lock:
+            _live[0] -= 1
+    return _real_gql(query, variables, **kw)
+gh.graphql = _slow
+_t = _tm.monotonic()
+got = T.move_many(list(range(70, 82)), 'shipping', gh)
+_wall = _tm.monotonic() - _t
+check('twelve cards are six documents sent side by side: every card moved, in order, the wall about one document',
+      (got == [(n, True) for n in range(70, 82)], len(gh.batch_writes), _most[0] > 1, _wall < 0.2 * 6 / 2),
+      (True, 6, True, True))
+check('two cards a document, ten at once', (T.DOC_CARDS, T.MOVE_PARALLEL), (2, 10))
 # 0.12.1 (SMADPickleBot #1231): GitHub's throttle answered every issue's projectItems with no nodes for cards that were
 # on the board; the board's own filtered read finds them, and a card neither read finds is still not moved.
 gh = fresh({60: {}, 61: {}}, {'IT_60': {'number': 60, 'status': 'Ready', 'light': 'ok'}},

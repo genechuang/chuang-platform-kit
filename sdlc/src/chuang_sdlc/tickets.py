@@ -1257,7 +1257,13 @@ def archive(number: int, run=None, cfg: dict = None) -> bool:
 
 
 PLACES_CHUNK = 50    # issues read in one aliased query (each a few nodes)
-MOVE_CHUNK = 100      # cards written in one aliased mutation document (Gene, 11/8/26 9:12 PM PT: "chunk at 100 cards")
+MOVE_CHUNK = 100      # the cards move_many writes in one wave of documents (Gene, 11/8/26 9:12 PM PT: "chunk at 100 cards")
+# 0.27.0 (SMADPickleBot #1555; Gene, 11/15/26 10:57 AM PT: "Yes, parallel"): GraphQL runs a mutation document's fields
+# one after another, and GitHub took about 1.7 s a Projects field write, so CO #1554's one document of 17 cards (51
+# writes) took 89.8 s. The cards go DOC_CARDS to a document, MOVE_PARALLEL documents at once, so a wave costs about one
+# document's time; a refused document is still halved and sent again.
+DOC_CARDS = 2
+MOVE_PARALLEL = 10
 
 
 def _places_query(numbers) -> str:
@@ -1361,7 +1367,8 @@ def move_many(numbers, status: str, run=None, cfg: dict = None) -> list:
     graphql calls for all tickets in dock that need to be moved to ship and light tag changed??"): every card's place in
     one aliased read (places), the same forward-only rule as move() (a card already at `status` or past it said as
     moved, never stepped back), the host's before_ship_move once for every card going into the ship column, then every
-    card's Status and Light, and its top position for TOP_ROLES, in one aliased mutation document a MOVE_CHUNK of cards.
+    card's Status and Light, and its top position for TOP_ROLES, in aliased mutation documents of DOC_CARDS cards, up to
+    MOVE_PARALLEL of them at once (0.27.0, #1555: one document's fields run one after another), MOVE_CHUNK cards a wave.
     [(number, ok)] in the order given; a card not on the board, or one GitHub refused, is (n, False). A 20-card ship
     costs about 2 to 4 GraphQL calls where move() spent about 140."""
     run, cfg = _run(run), _cfg(cfg)
@@ -1393,7 +1400,15 @@ def move_many(numbers, status: str, run=None, cfg: dict = None) -> list:
     top = {item for _n, item in todo} if role in TOP_ROLES else set()
     for i in range(0, len(todo), MOVE_CHUNK):
         chunk = todo[i:i + MOVE_CHUNK]
-        took = _write_many([(item, fields) for _n, item in chunk], top, run, cfg)
+        docs = [chunk[j:j + DOC_CARDS] for j in range(0, len(chunk), DOC_CARDS)]
+        took = set()
+        if len(docs) == 1:
+            took = _write_many([(item, fields) for _n, item in docs[0]], top, run, cfg)
+        else:   # 0.27.0 (#1555): the documents side by side, each GitHub's to run on its own
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(MOVE_PARALLEL, len(docs))) as pool:
+                for got_ in pool.map(lambda doc: _write_many([(item, fields) for _n, item in doc], top, run, cfg), docs):
+                    took |= got_
         for n, item in chunk:
             done[n] = item in took
     return [(n, done.get(n, False)) for n in numbers]
