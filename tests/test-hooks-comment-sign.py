@@ -106,7 +106,10 @@ def main():
            bool(gate(f'gh issue comment 5 --body "more words{SIGN}\n"'))], [False, False])
 
     # the second review of 11/9/26 10:34 AM PT: no shell parse, so no quoting refuses a signed comment
-    win_file = signed_file.replace('/', '\\')
+    # A backslashed path is the same file only on Windows; on Linux (the kit's CI) it names no file and the gate
+    # rightly refuses it, so the case asks with the path as this platform spells it (red on GitHub from 11/12/26
+    # to 11/16/26, green on the Windows box that wrote it).
+    win_file = signed_file.replace('/', '\\') if os.name == 'nt' else signed_file
     ps = lambda c: bool(C.refusal({'tool_name': 'PowerShell', 'session_id': 'sid-1', 'cwd': home, 'tool_input': {'command': c}},  # noqa: E731
                                   env={}, home=home))
     check('review 2: a signed body with $(...) or $VAR, a here-string, `n escapes, a printf, $\'...\' and a continued line pass',
