@@ -99,6 +99,8 @@ _SET = {
     'tz': None,             # the zone an ETA is read in and a stamp written; None: chuang_platform_kit.clock's
     'eta_command': '',      # 0.16.0: the host's command that sets a card's ETA field, `{n}` its number; '' says none
     'start_command': '',    # 0.20.0: the host's command that picks a ticket up (tickets.start), `{n}` its number
+    'warm_state': None,     # 0.29.0: (store) -> (alive, note): whether the host's dock warm is running now, and its
+                            # last word; None: no such record, the Warming limit alone decides
 }
 
 
@@ -121,7 +123,7 @@ NEEDS_KIND = f"needs {_SET['lead'].lower()}"
 
 def configure(**settings) -> None:
     """The host's settings: `lead` (a name), `store`, `mail`, `finished`, `unplanned`, `closed_question`, `closed_to`,
-    `closed_told`, `closer`, `ship_run_of` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text}
+    `closed_told`, `closer`, `ship_run_of`, `warm_state` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text}
     for this module's worded constants, WORDS). SCRUM_RE and NEEDS_KIND are made again for the lead. Unknown names are
     refused."""
     global SCRUM_RE, NEEDS_KIND
@@ -1244,10 +1246,24 @@ def warming_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool 
     """Each Dock card whose Light is the dock's Warming light and was set more than WARMING_MINUTES ago (its `light_at`,
     the board's updatedAt) goes into its owner's warming letter (the captain's for none or the lead), once per Warming
     episode: the card's scrum record keeps the `light_at` it was told about, so a card that warms again is told again.
-    One read of the Dock column with GitHub's own filter. Lines."""
+    One read of the Dock column with GitHub's own filter. Lines.
+
+    0.29.0 (SMADPickleBot #1600): a card is stuck only when nothing is warming it. A host that keeps a record of its
+    warm (configure(warm_state=)) is asked first: while its warm is running, no card is read and nobody is told (a
+    healthy app landing takes longer than the limit, and three letters in 70 minutes on 11/15 and 11/16/26 were all on
+    warms that had passed or were passing); once it is not, the limit decides as before, and the warm's last word
+    goes in the letter. A record that cannot be read is no record: the limit alone decides."""
     warm = (cfg.get('lights') or {}).get('dock') or ''
     if not warm:
         return []
+    alive, note = False, ''
+    if _SET['warm_state'] is not None:
+        try:
+            alive, note = _SET['warm_state'](store)
+        except Exception:   # noqa: BLE001 - an unread record never silences the sweep
+            alive, note = False, ''
+    if alive:
+        return [f'scrum: the dock is warming now ({note or "its warm is running"}); no {warm} card is asked about']
     # the option the board shows for it when it lacks the Light's own (light_fallback), as rank() reads it
     lit = {warm, (cfg.get('light_fallback') or {}).get(warm) or warm}
     limit = int(cfg.get('warming_minutes') or WARMING_MINUTES)   # the board config's, else Gene's 3
@@ -1273,7 +1289,7 @@ def warming_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool 
             continue
         to = c.get('owner') or captain()
         to = captain() if to == lead() else to
-        letters.setdefault(to, []).append((n, c.get('title') or '', minutes, (c.get('content') or {}).get('url') or ''))
+        letters.setdefault(to, []).append((n, c.get('title') or '', minutes, (c.get('content') or {}).get('url') or '', note))
         state['warming_told'] = at
         if not dry:
             store.set(_SET['state'], str(n), state)
@@ -1282,12 +1298,18 @@ def warming_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool 
 
 
 def warming_letter(owner: str, items) -> tuple:
-    """(subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit."""
+    """(subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit, each item
+    (number, title, minutes, url) and, since 0.29.0, the host's warm's last word as an optional fifth, said once."""
     subject = f"Scrum master: {len(items)} Dock card{'s' if len(items) != 1 else ''} stuck Warming"
     lines = [f"{owner}, these Dock cards are still Warming past the board's limit. Look at the warm's own log and stage "
              "line, its dev Deploy run and the board move's line, then put each right (Ready, or the stage that failed):"]
-    for n, title, minutes, url in items:
+    notes = []
+    for item in items:
+        n, title, minutes, url = item[:4]
         lines.append(f'- #{n} {title}: Warming {minutes} minutes\n  {url}')
+        if len(item) > 4 and item[4] and item[4] not in notes:
+            notes.append(item[4])
+    lines += [f"No warm is running now. The warm's last word: {note}" for note in notes]
     return subject, '\n'.join(lines)
 
 

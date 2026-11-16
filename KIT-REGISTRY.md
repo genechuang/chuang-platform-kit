@@ -773,7 +773,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | Name | Purpose |
 |---|---|
 | `eta_ask(n)` | How an owner gives a card's ETA, in the sweep's asks: the host's command for the board's ETA field (0.16.0, configure(eta_command=)) and the `Scrum: building \| eta <when>` line, which the sweep copies into it. |
-| `configure(**settings)` | The host's settings: `lead` (a name), `store`, `mail`, `finished`, `unplanned`, `closed_question`, `closed_to`, `closed_told`, `closer`, `ship_run_of` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text} for this module's worded const… |
+| `configure(**settings)` | The host's settings: `lead` (a name), `store`, `mail`, `finished`, `unplanned`, `closed_question`, `closed_to`, `closed_told`, `closer`, `ship_run_of`, `warm_state` (callables), `state` (a collection), `tz` (a zone), and `words` ({name: text} for this module'… |
 | `setting(name)` | One of the host's settings (configure). |
 | `lead()` | The project's lead, by the name the board's Owner field gives them. |
 | `captain()` | The release captain (chuang_sdlc.tickets' people): a card with no Owner is theirs to take or assign. |
@@ -820,7 +820,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `sweep(cfg=, gh=, store=, mail=, now=, dry=, out=, only=)` | One pass over the shipyard: every card's plan applied, its comment kept, the owners' letters sent. Lines. `only`, a ticket number, runs that one card (an event named it: its Status, Priority, Light or Owner changed, or a `Scrum:` line was written); a card not… |
 | `ship_card_home(cfg, gh, dry=, ship_run=, now=)` | The ship card back in its home column when it sits anywhere but there or the ship column, or in the ship column with no ship under way, and its title made the board config's `ship_card` title: the board's drafts read with its own filter (a dozen cards), kept… |
 | `warming_sweep(cfg, gh, store, now, letters, dry=)` | Each Dock card whose Light is the dock's Warming light and was set more than WARMING_MINUTES ago (its `light_at`, the board's updatedAt) goes into its owner's warming letter (the captain's for none or the lead), once per Warming episode: the card's scrum reco… |
-| `warming_letter(owner, items)` | (subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit. |
+| `warming_letter(owner, items)` | (subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit, each item (number, title, minutes, url) and, since 0.29.0, the host's warm's last word as an optional fifth, said once. |
 | `wrecked_question(n, col, hours)` | What the owner of a card left in the failed column is asked (0.20.0): re-ship it or drop it, each by the act that moves it (the host's start command, else a move to the shipyard; a close as not planned archives it). |
 | `wrecked_sweep(cfg, gh, store, now, letters, dry=)` | The failed column kept for what it is for (0.20.0; SMADPickleBot #1337): a closed card there whose close was as not planned or a duplicate is archived off the board, and an open card that has sat there WRECKED_HOURS (its `status_at`, the board's updatedAt of… |
 | `wrecked_letter(owner, items)` | (subject, text) of one owner's wrecked letter: every card of theirs left in the failed column past the limit. |

@@ -394,6 +394,34 @@ fell = {}
 S.warming_sweep(dict(CFG, light_fallback={'warm': 'hot'}), S.GitHub(CFG, run=shown), Records(), NOW, fell)
 check("  the board's warming_minutes, and the fallback option the board shows for the Warming light",
       ({k: [i[0] for i in v] for k, v in longer.items()}, [i[0] for i in fell.get('Ann', [])]), ({}, [904]))
+# 0.29.0 (SMADPickleBot #1600): a card is stuck only when nothing is warming it; the host's warm record says
+asked = []
+S.configure(warm_state=lambda st: asked.append(st) or (True, 'warming abc1234, 190 s in'))
+running, run_store, reads = {}, Records(), []
+counted = Board({'status:"Ready"': [dict(card(900, light='warm'), status='Ready', light_at=at(9))]})
+live = S.warming_sweep(CFG, S.GitHub(CFG, run=lambda *a, **k: reads.append(a) or counted(*a, **k)), run_store, NOW, running)
+check('while the host says its warm is running, nobody is told, no card is marked told and the board is not read',
+      (running, live, run_store.get('scrum', '900'), reads, asked == [run_store]),
+      ({}, ['scrum: the dock is warming now (warming abc1234, 190 s in); no warm card is asked about'], None, [], True))
+S.configure(warm_state=lambda st: (False, 'abc1234 failed at images (exit 1)'))
+dead = {}
+S.warming_sweep(CFG, S.GitHub(CFG, run=counted), run_store, NOW, dead)
+subject5, text5 = S.warming_letter('Ann', dead.get('Ann', []))
+check('  once no warm is running the limit decides as before, and the letter carries the warm\'s last word once',
+      ([i[0] for i in dead.get('Ann', [])], text5.count("No warm is running now. The warm's last word: abc1234 failed at images (exit 1)"),
+       '#900' in text5), ([900], 1, True))
+
+
+def unread(st):
+    raise RuntimeError('the record store is down')
+
+
+S.configure(warm_state=unread)
+down = {}
+S.warming_sweep(CFG, S.GitHub(CFG, run=counted), Records(), NOW, down)
+check('  a warm record that cannot be read never silences the sweep: the limit alone decides, no note',
+      ([i[0] for i in down.get('Ann', [])], [i[4] for i in down.get('Ann', [])]), ([900], ['']))
+S.configure(warm_state=None)
 # 0.20.0 (SMADPickleBot #1337): the failed column holds a release's failures alone; its owner asked about each daily
 hours = lambda h: (NOW - timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731
 broken = Board({'is:closed': [dict(card(950), status='Broken'), dict(card(951), status='Broken')],

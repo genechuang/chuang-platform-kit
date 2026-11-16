@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.29.0 - 2026-11-16 PT
+
+SMADPickleBot #1600 (11/15 and 11/16/26: the scrum master's "Dock cards stuck Warming" letter went out three times in
+70 minutes on warms that had passed or were passing; a healthy app landing takes longer than the 3-minute limit).
+- **`scrum.configure(warm_state=)`**, new and optional: `(store) -> (alive, note)`, whether the host's dock warm is
+  running now and its last word. While it is running `warming_sweep` reads no card and tells nobody (one line says
+  so); once it is not, the limit decides as before. A record that cannot be read is no record. Left out, nothing
+  changes.
+- **`scrum.warming_letter`** takes items of four or five: the fifth, the warm's last word, is said once under the
+  cards. A host calling it with four-item tuples needs no change.
+
 ## 0.28.0 - 2026-11-15 PT
 
 SMADPickleBot #1586 (11/15/26: an alert issue retitled to its fix, #1583, was filed again an hour later as #1585; the
