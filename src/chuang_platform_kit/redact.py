@@ -90,6 +90,11 @@ _PATTERNS = (
     (re.compile(r'\bgithub_pat_[A-Za-z0-9_]{20,}\b'), MASK),
     (re.compile(r'\bsk-ant-[A-Za-z0-9_\-]{10,}'), MASK),
     (re.compile(r'(Bearer\s+)[A-Za-z0-9._\-~+/=]{16,}', re.I), r'\1' + MASK),
+    # A Web Push endpoint is a capability URL (RFC 8030 section 8.3: knowing it is the permission to push to that
+    # browser), so it is cut to its host wherever text leaves the process: a log line, a Sentry event's request body
+    # or outbound span, an email (0.32.1, SMADPickleBot #1592). The hosts are web_push's allow-list.
+    (re.compile(r'(https://(?:fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9.-]+\.push\.apple\.com'
+                r'|[a-z0-9.-]+\.notify\.windows\.com)(?::443)?/)[^\s"\'<>\\]+', re.I), r'\1' + MASK),
 )
 
 

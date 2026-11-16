@@ -153,6 +153,17 @@ check("the whole URL is masked, and the password as the driver quotes it (decode
 check("a short password is not masked on its own (it would shred ordinary text); the URL still is",
       R.redact('x postgresql://u:short@h/d y short', {'DATABASE_URL': 'postgresql://u:short@h/d'}), 'x *** y short')
 check("a URL without a password contributes only itself", R.redact('postgresql://h/database-name z', {'DATABASE_URL': 'postgresql://h/database-name'}), '*** z')
+# 0.32.1 (SMADPickleBot #1592): a Web Push endpoint is a capability URL, cut to its host wherever text leaves.
+check("a Web Push endpoint keeps its host and loses the rest, in a log line, a JSON body and a span's URL",
+      (R.redact('POST https://fcm.googleapis.com/fcm/send/dQw4:APA91b-x_y took 1.2 s', {}),
+       R.redact('{"endpoint": "https://updates.push.services.mozilla.com/wpush/v2/gAAAAAB_x", "keys": {}}', {}),
+       R.redact('https://web.push.apple.com/QGk3 and https://wns2-by3p.notify.windows.com:443/w/?token=AwYAAAC%2f', {})),
+      ('POST https://fcm.googleapis.com/*** took 1.2 s', '{"endpoint": "https://updates.push.services.mozilla.com/***", "keys": {}}',
+       'https://web.push.apple.com/*** and https://wns2-by3p.notify.windows.com:443/***'))
+check("  other addresses at those companies, and other sites, are left as they are",
+      (R.redact('https://storage.googleapis.com/bucket/file.json', {}), R.redact('https://developer.apple.com/documentation/x', {}),
+       R.redact('https://example.org/push/abc', {})),
+      ('https://storage.googleapis.com/bucket/file.json', 'https://developer.apple.com/documentation/x', 'https://example.org/push/abc'))
 
 print()
 if fails:

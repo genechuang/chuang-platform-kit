@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.32.1 - 2026-11-16 PT
+
+Additive; no host call site changes. `redact` cuts a Web Push endpoint to its host (SMADPickleBot #1592's review: a
+browser's subscription arrives in a request body and its endpoint is the URL of an outbound request, so both could
+reach a Sentry event or a log line whole, and an endpoint is a capability URL, RFC 8030 section 8.3). The pattern is
+`web_push`'s allow-list: `https://fcm.googleapis.com/…`, `https://updates.push.services.mozilla.com/…`,
+`https://<anything>.push.apple.com/…` and `https://<anything>.notify.windows.com/…` keep the host and lose the rest,
+everywhere `redact()` runs (the log formatter, `monitoring`'s `before_send`, the email senders). Other addresses at
+those companies are untouched.
+
 ## 0.32.0 - 2026-11-15 PT
 
 Additive; no host call site changes. `web_push` (SMADPickleBot #1592: push notifications to a browser on the Web Push
