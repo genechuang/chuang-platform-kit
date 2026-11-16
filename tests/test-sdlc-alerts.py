@@ -91,6 +91,46 @@ check("an alert closer's close, by its mark or an alert title", (A.closed_by_clo
                                                                 A.closed_by_closer('Cloud alert: x', ''), A.closed_by_closer('t', 'done')),
       (True, True, True, False))
 check('the client takes the repository from configure', A.GitHub('tok').repo, 'acme/app')
+
+
+# 0.28.0 (SMADPickleBot #1586): `issues` finds an alert issue by its body marker's tag as well as its title, so one
+# retitled to its fix is still found and never filed a second time.
+class Searched(A.GitHub):
+    """GitHub.issues over canned search answers: {a word of the query: its items}, every query kept."""
+
+    def __init__(self, answers, **kw):
+        super().__init__('tok', **kw)
+        self.answers, self.queries = answers, []
+
+    def _call(self, method, path, body=None):
+        import urllib.parse
+        q = urllib.parse.unquote(path.split('q=', 1)[1].split('&', 1)[0])
+        self.queries.append(q + (' page 2' if '&page=2' in path else ''))
+        return {'items': next((v for k, v in self.answers.items() if k in q), [])}
+
+
+def found(n, title, created, state='OPEN'):
+    return {'number': n, 'title': title, 'created_at': created, 'state': state, 'body': f'<!-- err: {n} -->'}
+
+
+RETITLED = found(1583, 'The app no longer restarts for an update', '2026-11-16T03:42:00Z')
+TITLED = found(1354, 'Error issue X-23: slow', '2026-11-10T01:00:00Z', 'CLOSED')
+gh = Searched({'in:title': [TITLED], 'in:body': [RETITLED, TITLED]}, prefix='Error issue ', tag='err')
+got = gh.issues()
+check('the positive case: a retitled issue is found by its body marker, each issue once, newest first, states lowered',
+      ([(i['number'], i['state']) for i in got], gh.queries),
+      ([(1583, 'open'), (1354, 'closed')],
+       ['repo:acme/app is:issue "Error issue" in:title', 'repo:acme/app is:issue "err" in:body']))
+gh = Searched({'in:title': [TITLED], 'in:body': [RETITLED]}, prefix='Error issue ')
+check("a sweep's own prefix with no tag searches titles alone, as before 0.28.0",
+      ([i['number'] for i in gh.issues()], len(gh.queries)), ([1354], 1))
+gh = Searched({'in:title': [], 'in:body': [RETITLED]})
+check("this module's own prefix brings its own marker tag", ([i['number'] for i in gh.issues()], gh.tag, len(gh.queries)),
+      ([1583], A._SET['marker_tag'], 2))
+full = [found(n, 'Error issue', f'2026-10-{n % 28 + 1:02d}T00:00:00Z') for n in range(100)]
+gh = Searched({'in:title': full, 'in:body': []}, prefix='Error issue ', tag='err')
+check('each search pages on its own: a full first page asks for the second, a short one stops',
+      (len(gh.issues(pages=2)), [q.endswith('page 2') for q in gh.queries]), (100, [False, True, False]))
 store = Records()
 now = datetime(2026, 10, 23, 9, tzinfo=timezone.utc)   # utc-ok: a fixed instant for the fakes, as an event's `at` is UTC
 cid = A.claim_key(KEY, INC)

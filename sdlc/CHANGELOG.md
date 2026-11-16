@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.28.0 - 2026-11-15 PT
+
+SMADPickleBot #1586 (11/15/26: an alert issue retitled to its fix, #1583, was filed again an hour later as #1585; the
+sweep's title search no longer returned it, so the marker in its body was never read).
+- **`alerts.GitHub.issues`** also searches issue bodies for the marker's tag (`"<tag>" in:body`) and merges the two
+  searches, each issue once, newest first. A retitled alert issue is found by its marker and counts as filed.
+- **`alerts.GitHub(..., tag=)`**, new and optional: the tag to search bodies for. Left out, it is this module's
+  `marker_tag` when the prefix is this module's, and none when a sweep passes its own `prefix`, so a host sweep with
+  its own marker passes its tag (`GitHub(token, repo, prefix='Error issue ', tag='error-issue')`) to get the body
+  search. No signature breaks; one more search call a sweep.
+
 ## 0.27.0 - 2026-11-15 PT
 
 SMADPickleBot #1555 (11/15/26: CO #1554's one aliased mutation of 17 cards, 51 field writes, took 89.8 s, since GraphQL

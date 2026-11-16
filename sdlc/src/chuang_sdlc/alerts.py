@@ -260,12 +260,15 @@ class GitHub:
     """The issue reads and writes `act` needs, and a host's alert sweeps', through chuang_platform_kit.github's
     throttled client with one token (the issue search draws on GitHub's search quota; the kit refuses a call locally
     once the quota is under its floor). `repo` the repository (configure(repo=)'s, else the board's, when None);
-    `prefix` the title prefix `issues` finds, this module's unless a sweep names its own. A refusal is the kit's
-    GitHubError (RateLimited for a spent quota), for the caller to acknowledge."""
+    `prefix` the title prefix `issues` finds, this module's unless a sweep names its own; `tag` the body marker's tag
+    `issues` also finds (0.28.0), this module's `marker_tag` when the prefix is this module's, a sweep's own when it
+    names one, none ('') otherwise. A refusal is the kit's GitHubError (RateLimited for a spent quota), for the caller
+    to acknowledge."""
 
-    def __init__(self, token: str, repo: str = None, opener=None, prefix: str = None):
+    def __init__(self, token: str, repo: str = None, opener=None, prefix: str = None, tag: str = None):
         self.token, self.repo, self.opener = token, repo or globals()['repo'](), opener
         self.prefix = _SET['title_prefix'] if prefix is None else prefix
+        self.tag = (_SET['marker_tag'] if prefix is None else '') if tag is None else tag
 
     def _call(self, method: str, path: str, body=None):
         from chuang_platform_kit import github
@@ -273,18 +276,25 @@ class GitHub:
         return got if isinstance(got, dict) else {}
 
     def issues(self, pages: int = 1) -> list:
-        """Every issue, open or closed, whose title starts with the prefix, newest first: 100 a page, at most `pages`
-        pages."""
-        q = urllib.parse.quote(f'repo:{self.repo} is:issue "{self.prefix.rstrip(": ")}" in:title')
-        out = []
-        for page in range(1, max(1, int(pages)) + 1):
-            got = self._call('GET', f'/search/issues?q={q}&sort=created&order=desc&per_page=100'
-                             + (f'&page={page}' if page > 1 else ''))
-            items = got.get('items') or []
-            out += [dict(i, state=i.get('state', '').lower()) for i in items]
-            if len(items) < 100:
-                break
-        return out
+        """Every issue, open or closed, whose title starts with the prefix, or whose body carries the marker's tag,
+        each once, newest first: 100 a page, at most `pages` pages of each search. The body search is what finds an
+        alert issue retitled to its fix (0.28.0, SMADPickleBot #1586: #1583 was retitled, the next sweep's title
+        search no longer returned it, so its marker was never read and the same Sentry issue was filed again as
+        #1585). A body that only mentions the tag comes back too; the caller reads each body's marker, as it always
+        did."""
+        searches = [f'"{self.prefix.rstrip(": ")}" in:title'] + ([f'"{self.tag}" in:body'] if self.tag else [])
+        found = {}
+        for what in searches:
+            q = urllib.parse.quote(f'repo:{self.repo} is:issue {what}')
+            for page in range(1, max(1, int(pages)) + 1):
+                got = self._call('GET', f'/search/issues?q={q}&sort=created&order=desc&per_page=100'
+                                 + (f'&page={page}' if page > 1 else ''))
+                items = got.get('items') or []
+                for i in items:
+                    found.setdefault(i.get('number'), dict(i, state=i.get('state', '').lower()))
+                if len(items) < 100:
+                    break
+        return sorted(found.values(), key=lambda i: (i.get('created_at') or '', i.get('number') or 0), reverse=True)
 
     def file(self, title: str, body: str) -> int:
         """A new issue; its number (0 when GitHub answered none)."""

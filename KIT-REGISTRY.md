@@ -640,7 +640,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `opening_claimed(store, key, inc)` | Whether an incident's opening is claimed already in the host's claims collection (a listener told the same open incident again reads this before it reads GitHub). |
 | `claim_opening(store, key, cid, now)` | An opening's once-only claim, `cid` in the claims collection, created unless held: True when this call took it, False when it was already held. It expires `claim_ttl_days` after `now` (a datetime). A write the store refuses raises, for the caller to say. |
 | `class GitHub` | The issue reads and writes `act` needs, and a host's alert sweeps', through chuang_platform_kit.github's throttled client with one token (the issue search draws on GitHub's search quota; the kit refuses a call locally once the quota is under its floor). `repo… |
-| `GitHub.issues(pages=)` | Every issue, open or closed, whose title starts with the prefix, newest first: 100 a page, at most `pages` pages. |
+| `GitHub.issues(pages=)` | Every issue, open or closed, whose title starts with the prefix, or whose body carries the marker's tag, each once, newest first: 100 a page, at most `pages` pages of each search. The body search is what finds an alert issue retitled to its fix (0.28.0, SMADP… |
 | `GitHub.file(title, body)` | A new issue; its number (0 when GitHub answered none). |
 | `GitHub.close(number, why=, comment=)` | The issue closed with a comment: `comment` as given, else `<close_word> <why>.`. |
 | `GitHub.comment(number, text)` | One comment on the issue (the note that its alert cleared while the ticket stays open), signed (chuang_sdlc.signature: the closer's mark stays its first words). |
