@@ -67,8 +67,11 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      and on it Cloud Tasks, Cloud Scheduler and Cloud Run (job starts, specs, executions)
   webhook_auth       every webhook's proof of its sender: a Google-signed OIDC push and an HMAC-SHA256 signature,
                      refusing by default, constant-time
+  web_push           Web Push to a browser on the standard alone (RFC 8291, 8292, 8030): a subscription checked
+                     against the push services browsers use, a message encrypted and signed with the server's VAPID
+                     key, posted with no redirect followed; gone on a 404 or 410 (the `webpush` extra)
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.31.0'
+__version__ = '0.32.0'

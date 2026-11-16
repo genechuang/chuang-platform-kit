@@ -2,6 +2,21 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.32.0 - 2026-11-15 PT
+
+Additive; no host call site changes. `web_push` (SMADPickleBot #1592: push notifications to a browser on the Web Push
+standard directly, no vendor SDK): a subscription checked (`check_subscription`: the endpoint on the push services
+browsers use, https, no credentials, the default port; `p256dh` a point on P-256; `auth` 16 octets), the server's VAPID
+key (`new_private_key`, `public_key`), RFC 8291's aes128gcm encryption (`encrypt`, pinned to the RFC's own published
+example byte for byte), the RFC 8292 Authorization (`vapid_header`) and `send`, which posts one message, follows no
+redirect, takes no proxy from the environment, never raises for an answer or a network failure, and returns
+`{status, ok, gone, retry_after, host, error}`: `gone` on a 404 or 410, never on a 403. New extra `webpush`
+(cryptography); CI installs it. Reviewed before release by three independent lenses with a skeptic per finding; what
+they found is fixed and pinned: the endpoint check reads an address exactly as the request library does (no tab,
+newline, backslash, percent sign, empty port or `:0443` gets a second reading), `normal` stores one form of an
+endpoint, the VAPID `aud` is the lower-case origin with no port, keys are checked again at `encrypt`, and `send`
+refuses a malformed stored row in words. Also: chuang-sdlc's `__version__` now says 0.28.0, as its package does.
+
 ## 0.31.0 - 2026-11-11 PT
 
 Additive; no host call site changes. `monitoring.drop_events_when(predicate)` (SMADPickleBot #1454: a read that lost

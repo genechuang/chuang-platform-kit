@@ -579,6 +579,22 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `check_source(source)` | (line, rule, text) for each finding in one module's source. Code is what is left after strings and comments. |
 | `main(argv=)` | (no docstring) |
 
+## `web_push`: Web Push to a browser, on the standard alone: RFC 8291 message encryption (aes128gcm), RFC 8292 VAP…
+
+| Name | Purpose |
+|---|---|
+| `b64url(data)` | Bytes as unpadded URL-safe base64, the form every Web Push value travels in. |
+| `unb64url(text)` | Unpadded or padded URL-safe base64 (a browser may send either) as bytes; ValueError when it is neither. |
+| `host_of(endpoint)` | The endpoint's host, lower case, '' when it has none: the only part of an endpoint that is safe to log. |
+| `endpoint_ok(endpoint, hosts=, suffixes=)` | Whether `endpoint` is one this server may post to: at most 2000 printable ASCII characters with no space or backslash, https, no user or password, the default port, and a host name in the strict DNS grammar that is one of `hosts` exactly or ends in one of `su… |
+| `normal(endpoint, hosts=, suffixes=)` | `endpoint` in its one stored form, `https://<lower-case host><path>?<query>` (no port, no fragment), so two spellings of one endpoint are one subscription; ValueError for an endpoint `endpoint_ok` refuses. |
+| `check_subscription(body, hosts=, suffixes=)` | A browser's `PushSubscription.toJSON()` ({endpoint, keys: {p256dh, auth}}) as {'endpoint', 'p256dh', 'auth'}: the endpoint in its `normal` form, the keys re-encoded unpadded. ValueError, in words a person can read, for an endpoint `endpoint_ok` refuses, a `p2… |
+| `new_private_key()` | A new P-256 private key as PKCS8 PEM text: the server's VAPID key, made once and kept as a secret. |
+| `public_key(private_pem)` | The VAPID public key for `private_pem`, base64url of the uncompressed point: what the page passes to `pushManager.subscribe({applicationServerKey})` and what the `k` of the Authorization header carries. |
+| `encrypt(payload, p256dh, auth, salt=, sender_key=)` | `payload` encrypted for one subscription as RFC 8291 says (one aes128gcm record, RFC 8188): the body to post. A new sender key pair and a random salt per message; `salt` (16 octets) and `sender_key` (a base64url P-256 scalar) are the seams a known-answer test… |
+| `vapid_header(endpoint, private_pem, subject, now=, seconds=)` | The Authorization header RFC 8292 asks for, `vapid t=<JWT>, k=<public key>`: an ES256 JWT whose `aud` is the endpoint's origin (`https://` and the lower-case host, never a port), `exp` `seconds` from `now` (at most a day) and `sub` the server's contact, a `ma… |
+| `send(subscription, payload, private_pem, subject, ttl=, urgency=, topic=, opener=, timeout=, now=, hosts=, suffixes=)` | One message to one subscription ({'endpoint', 'p256dh', 'auth'}, as `check_subscription` returns): `payload` encrypted, signed with the server's VAPID key and posted to the endpoint. `ttl` seconds the push service may hold it for a browser that is not running… |
+
 ## `webhook_auth`: Every inbound webhook's proof of its sender, in one place: a Google-signed push (a Pub/Sub push sub…
 
 | Name | Purpose |

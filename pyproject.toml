@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.31.0"
+version = "0.32.0"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,6 +35,8 @@ db = ["psycopg[binary]>=3.1"]
 asc = ["pyjwt[crypto]>=2.8"]
 # Clerk's session check (clerk_api.verify_session): PyJWT with cryptography; its Backend and Platform clients need nothing.
 clerk = ["pyjwt[crypto]>=2.8"]
+# Web Push (web_push.py): cryptography alone does the RFC 8291 encryption and the VAPID ES256 signature.
+webpush = ["cryptography>=42"]
 
 [project.urls]
 Homepage = "https://github.com/genechuang/chuang-platform-kit"
