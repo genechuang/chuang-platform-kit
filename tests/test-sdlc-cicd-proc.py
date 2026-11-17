@@ -10,6 +10,7 @@ anything that is not JSON; `gh` goes through the kit's throttled cli; `primary_r
 """
 import os
 import subprocess
+import bounded
 import sys
 import types
 
@@ -123,7 +124,7 @@ def test_a_shell_command_keeps_its_ampersand():
     eq('  run: a shim with an & gets the quoted line; any other command keeps its list', seen,
        ['gcloud "x?a=1&b=2"', ['gcloud', 'plain'], ['git', 'log', 'a&b']])
     if os.name == 'nt':
-        got = subprocess.run(lib.cmd_line(['echo', 'a&b']), shell=True, capture_output=True, text=True)
+        got = bounded.run(lib.cmd_line(['echo', 'a&b']), shell=True, capture_output=True, text=True)
         eq('  a real cmd.exe keeps the & in its argument', (got.returncode, got.stdout.strip(), got.stderr), (0, '"a&b"', ''))
 
 

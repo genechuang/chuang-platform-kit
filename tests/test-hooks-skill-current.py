@@ -9,7 +9,7 @@ Standard library only; the positive case first.
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import sys
 import tempfile
 
@@ -41,7 +41,7 @@ def cache(versions, skill='handover', missing=()):
 
 def run(payload):
     """pacific-clock.sh on one PostToolUse payload; its additionalContext."""
-    got = subprocess.run([BASH, CLOCK], input=json.dumps(payload), capture_output=True, text=True, encoding='utf-8',
+    got = bounded.run([BASH, CLOCK], input=json.dumps(payload), capture_output=True, text=True, encoding='utf-8',
                          timeout=60)
     try:
         return json.loads(got.stdout)['hookSpecificOutput']['additionalContext']
@@ -108,7 +108,7 @@ def test_the_session_start_check_names_a_stale_gene_shared():
         with open(os.path.join(shared, 'plugin.json'), 'w') as f:
             f.write(f'{{"version": "{latest}"}}')
         env = {**os.environ, 'CLAUDE_PLUGIN_ROOT': hooks_root.replace('\\', '/'), 'CLAUDE_PROJECT_DIR': project.replace('\\', '/')}
-        return subprocess.run([BASH, os.path.join(HOOKS, 'plugin-version.sh').replace('\\', '/')], capture_output=True,
+        return bounded.run([BASH, os.path.join(HOOKS, 'plugin-version.sh').replace('\\', '/')], capture_output=True,
                               text=True, env=env, timeout=30).stdout
     behind, even = said('0.8.29'), said('0.8.28')
     check('  gene-shared 0.8.28 installed against claude-shared 0.8.29 is named with its update; 0.8.28 against 0.8.28 says nothing',

@@ -10,7 +10,7 @@ import importlib.util
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -101,14 +101,14 @@ def main():
     # through the launcher: the JSON the harness reads
     os.environ['NANNY_DIR'] = os.path.join(d, 'state2')
     _o6, ev6 = start(d, 'b6', 'python lock.py', 'the build lock still holds\n')
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps(dict(ev6, hook_event_name='PostToolUse')),
+    r = bounded.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps(dict(ev6, hook_event_name='PostToolUse')),
                        capture_output=True, text=True, timeout=30, env=os.environ)
     got = json.loads(r.stdout or '{}')
     check('  the launcher prints additionalContext for PostToolUse and exits 0',
           (r.returncode, 'still holds' in got.get('hookSpecificOutput', {}).get('additionalContext', '')), (0, True))
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps({'session_id': 's9', 'hook_event_name': 'Stop'}),
+    r = bounded.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps({'session_id': 's9', 'hook_event_name': 'Stop'}),
                        capture_output=True, text=True, timeout=30, env=os.environ)
-    held_r = subprocess.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps({'session_id': 's1', 'hook_event_name': 'Stop'}),
+    held_r = bounded.run([BASH, os.path.join(HOOKS, 'nanny.sh')], input=json.dumps({'session_id': 's1', 'hook_event_name': 'Stop'}),
                             capture_output=True, text=True, timeout=30, env=dict(os.environ, NANNY_DIR=os.path.join(d, 'state2')))
     check('  the event names the hook: a Stop with nothing flagged prints nothing; one with a flagged run prints the block',
           (r.returncode, r.stdout.strip(), json.loads(held_r.stdout or '{}').get('decision')), (0, '', 'block'))

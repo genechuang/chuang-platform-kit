@@ -236,7 +236,7 @@ check("token_info and refresh_access_token",
 print("access_token() and key_file_token() (0.9.0): the standard library's token, each source in its turn")
 import base64  # noqa: E402
 import shutil  # noqa: E402
-import subprocess  # noqa: E402
+import bounded  # noqa: E402
 import urllib.error  # noqa: E402
 import urllib.parse  # noqa: E402
 
@@ -277,8 +277,8 @@ with tempfile.TemporaryDirectory() as d:
            G.access_token({'GOOGLE_APPLICATION_CREDENTIALS': os.path.join(d, 'none.json')}, opener=meta)), ('meta', 'meta'))
     if shutil.which('openssl'):
         pem, pub = os.path.join(d, 'k.pem'), os.path.join(d, 'k.pub')
-        subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', pem], check=True, capture_output=True)
-        subprocess.run(['openssl', 'pkey', '-in', pem, '-pubout', '-out', pub], check=True, capture_output=True)
+        bounded.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', pem], check=True, capture_output=True)
+        bounded.run(['openssl', 'pkey', '-in', pem, '-pubout', '-out', pub], check=True, capture_output=True)
         keyfile = os.path.join(d, 'sa.json')
         with open(keyfile, 'w', encoding='utf-8') as f:
             json.dump({'type': 'service_account', 'client_email': 'ci@example.iam.gserviceaccount.com',
@@ -296,7 +296,7 @@ with tempfile.TemporaryDirectory() as d:
         sigfile, msgfile = os.path.join(d, 's'), os.path.join(d, 'm')
         open(sigfile, 'wb').write(pad(sig))
         open(msgfile, 'wb').write(f'{head}.{body}'.encode())
-        verified = subprocess.run(['openssl', 'dgst', '-sha256', '-verify', pub, '-signature', sigfile, msgfile], capture_output=True)
+        verified = bounded.run(['openssl', 'dgst', '-sha256', '-verify', pub, '-signature', sigfile, msgfile], capture_output=True)
         check("  RS256 over the key's account for its token endpoint, an hour, verifiable with the public key",
               (url, form['grant_type'][0], json.loads(pad(head))['alg'], claims['iss'], claims['aud'], claims['scope'],
                claims['exp'] - claims['iat'], verified.returncode),

@@ -6,7 +6,7 @@ Run:  python tests/test-hooks-stamp-reply.py      (prints PASS/FAIL per case and
 import importlib.util
 import json
 import os
-import subprocess
+import bounded
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -102,13 +102,13 @@ check('  drift: across midnight by the date', S.drift('x\n— 10/12/26 11:59 PM 
 check('  drift: a four-digit year is not judged', S.drift('x\n— 10/13/2026 9:00 AM PT', S.pacific_now(NOON)), None)
 
 # the real script: any error exits 0 with no output (never traps a session)
-r = subprocess.run([sys.executable, PATH], input='not json', capture_output=True, text=True)
+r = bounded.run([sys.executable, PATH], input='not json', capture_output=True, text=True)
 check('  bad input: exit 0, nothing printed', (r.returncode, r.stdout), (0, ''))
 d = tempfile.mkdtemp()
 tp = os.path.join(d, 't.jsonl')
 with open(tp, 'w', encoding='utf-8') as f:
     f.write('\n'.join([PROMPT, line('assistant', [{'type': 'text', 'text': 'unstamped'}])]) + '\n')
-r = subprocess.run([sys.executable, PATH], input=json.dumps({'transcript_path': tp}), capture_output=True, text=True)
+r = bounded.run([sys.executable, PATH], input=json.dumps({'transcript_path': tp}), capture_output=True, text=True)
 check('  end to end: a real transcript file blocks', json.loads(r.stdout or '{}').get('decision'), 'block')
 # 1.14.0 (SMADPickleBot #858): the launcher appends "<epoch> <session> stop" to the activity log, then hands Python the
 # same event, so the turn's verdict is unchanged; a helper's Stop (agent_id) appends nothing.
@@ -116,9 +116,9 @@ import shutil  # noqa: E402
 log = os.path.join(d, 'activity.log')
 env = dict(os.environ, TICKET_ACTIVITY_LOG=log)
 sh = os.path.join(os.path.dirname(PATH), 'stamp-reply.sh')
-r = subprocess.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-1'}),
+r = bounded.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-1'}),
                    capture_output=True, text=True, env=env)
-subprocess.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-2', 'agent_id': 'x'}),
+bounded.run([shutil.which('bash') or 'bash', sh], input=json.dumps({'transcript_path': tp, 'session_id': 'abc-2', 'agent_id': 'x'}),
                capture_output=True, text=True, env=env)
 lines = open(log, encoding='utf-8').read().split('\n') if os.path.exists(log) else []
 check('#858: the launcher logs the turn\'s stop and still blocks the unstamped reply; a helper\'s stop is not logged',

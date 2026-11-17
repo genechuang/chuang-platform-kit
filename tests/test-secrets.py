@@ -202,7 +202,7 @@ check("--data-file: read from the file; only with add; a path is required", (rc_
       (0, b'from-file', {1: 'DESTROYED', 2: 'DESTROYED', 3: 'ENABLED'}, 2, 2))
 
 print("writers(): a gcloud version add, a list-form destroy, an addVersion URL and a secret delete are found; docs, tests and the kit's module are not")
-import subprocess  # noqa: E402
+import bounded  # noqa: E402
 with tempfile.TemporaryDirectory() as repo:
     files = {
         'scripts/store.ps1': 'gcloud secrets versions add TOKEN --data-file=$tmp\n',
@@ -220,8 +220,8 @@ with tempfile.TemporaryDirectory() as repo:
         os.makedirs(os.path.join(repo, os.path.dirname(path)), exist_ok=True)
         with open(os.path.join(repo, path), 'w', encoding='utf-8') as fh:
             fh.write(text)
-    subprocess.run(['git', 'init', '-q'], cwd=repo)
-    subprocess.run(['git', 'add', '.'], cwd=repo)
+    bounded.run(['git', 'init', '-q'], cwd=repo)
+    bounded.run(['git', 'add', '.'], cwd=repo)
     check("found", sorted(S.writers(repo)),
           [('ops/clean.sh', 1), ('scripts/store.ps1', 1), ('svc/rest.py', 1), ('tools/env.py', 2)])
 

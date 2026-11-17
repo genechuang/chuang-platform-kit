@@ -5,7 +5,7 @@ import importlib.util
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -66,7 +66,7 @@ def gate(lines):
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
     ev = {'hook_event_name': 'PreToolUse', 'tool_name': 'Read', 'transcript_path': path, 'session_id': 'sg'}
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True, text=True,
+    r = bounded.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True, text=True,
                        timeout=30, env=dict(os.environ, TMPDIR=d, TEMP=d, STAMP_GATE_WAIT='', PLAN_GATE_WAIT='0'))
     return r.returncode, r.stderr
 
@@ -81,7 +81,7 @@ def gate_tool(lines, tool):
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
     ev = {'hook_event_name': 'PreToolUse', 'tool_name': tool, 'transcript_path': path, 'session_id': 'sf'}
-    return subprocess.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True,
+    return bounded.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True,
                           text=True, timeout=30, env=dict(os.environ, TMPDIR=d, TEMP=d, STAMP_GATE_WAIT='',
                                                           PLAN_GATE_WAIT='0')).returncode
 

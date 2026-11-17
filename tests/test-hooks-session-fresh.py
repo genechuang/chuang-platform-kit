@@ -11,7 +11,7 @@ a transcript and an app data folder made in a temp folder. Standard library only
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import sys
 import tempfile
 
@@ -55,7 +55,7 @@ def clock(d, sid, tp, app=None, note=None, extra=None):
     if note:
         env['ACCOUNT_SWITCH_NOTE'] = note.replace('\\', '/')
     env.update(extra or {})
-    r = subprocess.run([BASH, CLOCK], input=json.dumps({'hook_event_name': 'UserPromptSubmit', 'prompt': 'hello',
+    r = bounded.run([BASH, CLOCK], input=json.dumps({'hook_event_name': 'UserPromptSubmit', 'prompt': 'hello',
                                                         'session_id': sid, 'transcript_path': tp}),
                        capture_output=True, text=True, encoding='utf-8', env=env, timeout=30)
     out = r.stdout.strip()
@@ -65,7 +65,7 @@ def clock(d, sid, tp, app=None, note=None, extra=None):
 def start(d, sid, source):
     env = dict(os.environ, HOME=d.replace('\\', '/'), CLAUDE_SESSION_FRESH_STATE=os.path.join(d, 'state').replace('\\', '/'),
                CLAUDE_PLUGIN_ROOT=os.path.join(d, 'noplugin').replace('\\', '/'))
-    subprocess.run([BASH, VERSION], input=json.dumps({'hook_event_name': 'SessionStart', 'source': source, 'session_id': sid}),
+    bounded.run([BASH, VERSION], input=json.dumps({'hook_event_name': 'SessionStart', 'source': source, 'session_id': sid}),
                    capture_output=True, text=True, encoding='utf-8', env=env, timeout=30)
     return os.path.exists(os.path.join(d, 'state', f'stale-{sid}.mark'))
 
@@ -82,11 +82,11 @@ def main():
                     ('bundled:x', 'bundled:x')])
 
     # stale-skills.py itself
-    r = subprocess.run([sys.executable, STALE, tp], capture_output=True, text=True, timeout=30)
+    r = bounded.run([sys.executable, STALE, tp], capture_output=True, text=True, timeout=30)
     check('the positive case: stale-skills.py names the re-stated skill older than the newest installed one, and only it',
           (r.returncode, r.stdout.strip()),
           (0, 'plugin:gene-shared:account-handover is the 0.8.18 copy your context carries; 0.8.31 is installed'))
-    r = subprocess.run([sys.executable, STALE, os.path.join(d, 'missing.jsonl')], capture_output=True, text=True, timeout=30)
+    r = bounded.run([sys.executable, STALE, os.path.join(d, 'missing.jsonl')], capture_output=True, text=True, timeout=30)
     check('  a transcript that cannot be read prints nothing and exits 0', (r.returncode, r.stdout), (0, ''))
 
     # through the hooks: the compaction's mark, then the prompt

@@ -6,7 +6,7 @@ Run:  python tests/test-hooks-boot.py      (prints PASS/FAIL per case and `N fai
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +37,7 @@ def cache(*versions):
 
 def run(root, loaded, script='say.sh', arg='x', stdin='in'):
     env = dict(os.environ, CLAUDE_PLUGIN_ROOT=os.path.join(root, loaded).replace('\\', '/'))
-    done = subprocess.run(['bash', os.path.join(root, loaded, 'hooks', 'boot.sh').replace('\\', '/'), script, arg],
+    done = bounded.run(['bash', os.path.join(root, loaded, 'hooks', 'boot.sh').replace('\\', '/'), script, arg],
                           input=stdin, capture_output=True, text=True, env=env)
     return done.returncode, done.stdout.strip()
 

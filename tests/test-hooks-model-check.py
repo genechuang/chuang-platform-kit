@@ -10,7 +10,7 @@ bash as the host runs the hook. Standard library only; the positive case first.
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import sys
 import tempfile
 import time
@@ -73,7 +73,7 @@ def env_for(state, desktop=True, hold=None, **extra):
 
 def lib(state, source=None, cwd=None, **kw):
     """The function sourced on its own: prints MODEL_CHECK_TEXT and the function's exit code."""
-    r = subprocess.run([BASH, '-c', f'. "{source or LIB}"; model_check; rc=$?; printf "%s\\n%s" "$rc" "$MODEL_CHECK_TEXT"'],
+    r = bounded.run([BASH, '-c', f'. "{source or LIB}"; model_check; rc=$?; printf "%s\\n%s" "$rc" "$MODEL_CHECK_TEXT"'],
                        capture_output=True, text=True, encoding='utf-8', env=env_for(state, **kw), timeout=30, cwd=cwd)
     rc, _, text = r.stdout.partition('\n')
     return rc, text, r.returncode
@@ -83,7 +83,7 @@ def holder(hold_file, *args, records=None):
     """model-check-hold.sh as a session runs it: (exit code, stdout, stderr)."""
     e = base_env(records)
     e['CLAUDE_MODEL_CHECK_HOLD_FILE'] = hold_file.replace('\\', '/')
-    r = subprocess.run([BASH, HOLD, *args], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+    r = bounded.run([BASH, HOLD, *args], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
@@ -94,7 +94,7 @@ def write(path, text):
 
 def clock(state, event='UserPromptSubmit', **kw):
     """pacific-clock.sh as the host runs it: the one JSON object it prints."""
-    r = subprocess.run([BASH, CLOCK], input=json.dumps({'hook_event_name': event, 'prompt': 'hello'}),
+    r = bounded.run([BASH, CLOCK], input=json.dumps({'hook_event_name': event, 'prompt': 'hello'}),
                        capture_output=True, text=True, encoding='utf-8', env=env_for(state, **kw), timeout=30)
     return r.stdout.strip(), r.returncode
 
@@ -187,7 +187,7 @@ def main():
         m2 = text.split("bash '", 1)[1].split("'", 1)[0] if "bash '" in text else ''
         check('  sourced by a Windows path with backslashes, the named path has forward slashes alone and is the same script',
               (m2, '\\' in text), (f'{LIB_DIR}/model-check-hold.sh', False))
-    found = subprocess.run([BASH, '-c', f'[ -f "{m}" ]'], capture_output=True, text=True, timeout=30).returncode
+    found = bounded.run([BASH, '-c', f'[ -f "{m}" ]'], capture_output=True, text=True, timeout=30).returncode
     check('  bash finds the named script there', found, 0)
 
     # model-check-hold.sh: set, show, clear, and a refusal that writes nothing.
@@ -207,7 +207,7 @@ def main():
     os.remove(hf)
     e = base_env()
     e['CLAUDE_MODEL_CHECK_HOLD_FILE'] = hf.replace('\\', '/')
-    r = subprocess.run([BASH, '-c', f'date() {{ return 1; }}; export -f date; bash "{HOLD}" set {soon_iso}.000Z'],
+    r = bounded.run([BASH, '-c', f'date() {{ return 1; }}; export -f date; bash "{HOLD}" set {soon_iso}.000Z'],
                        capture_output=True, text=True, encoding='utf-8', env=e, timeout=60)
     check('  with no date -d (BSD date), set falls back to python and writes the same epoch', (r.returncode, read(hf)), (0, str(soon)))
     rc, text, code = lib(os.path.join(d, 'rt.last'), hold=hf)
@@ -311,12 +311,12 @@ def main():
     check('  set with records it cannot read holds as before, and says so on stderr',
           (rc, os.path.isfile(sh), 'could not be read' in err), (0, True, True))
 
-    rp = subprocess.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'off', 'opus'],
+    rp = bounded.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'off', 'opus'],
                         capture_output=True, text=True, encoding='utf-8', env=base_env(recs), timeout=30)
     check('model-check-records.py off opus lists title, model and id for each unarchived session of the account off Opus',
           (rp.returncode, sorted(l.split('\t')[0] for l in rp.stdout.splitlines()),
            all(l.count('\t') == 2 for l in rp.stdout.splitlines())), (0, ['Black Widow', 'Snow White'], True))
-    rp = subprocess.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'list'],
+    rp = bounded.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'list'],
                         capture_output=True, text=True, encoding='utf-8', env=base_env(), timeout=30)
     check('  with no data folder it exits 3 with one line, so a caller tells unread from none', (rp.returncode, rp.stdout, len(rp.stderr.splitlines())), (3, '', 1))
 
@@ -325,12 +325,12 @@ def main():
     rfile = rstate + '.fable'
     e = base_env()
     e['CLAUDE_MODEL_CHECK_READING_FILE'] = rfile.replace('\\', '/')
-    r = subprocess.run([BASH, HOLD, 'note', '97'], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+    r = bounded.run([BASH, HOLD, 'note', '97'], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
     parts = read(rfile).split()
     check('the positive case: note writes "<epoch> <percent>" and says so',
           (r.returncode, len(parts), parts[1], abs(int(parts[0]) - time.time()) < 120, 'Fable at 97' in r.stdout), (0, 2, '97', True, True))
     for bad in ('', 'ninety', '101', '-3', '9.5'):
-        r = subprocess.run([BASH, HOLD, 'note', bad], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+        r = bounded.run([BASH, HOLD, 'note', bad], capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
         check(f'  note refuses {bad!r}: exit 2 and the reading left as it was', (r.returncode, read(rfile).split()[1]), (2, '97'))
     write(rfile, f'{int(time.time()) - 80 * 60} 96\n')
     rc, text, code = lib(rstate)
@@ -424,7 +424,7 @@ def main():
     def said(prompt, recorder=fake):
         with open(state2, 'w', encoding='utf-8') as f:
             f.write('0\n')
-        r = subprocess.run([BASH, CLOCK], input=json.dumps({'hook_event_name': 'UserPromptSubmit', 'prompt': prompt}),
+        r = bounded.run([BASH, CLOCK], input=json.dumps({'hook_event_name': 'UserPromptSubmit', 'prompt': prompt}),
                            capture_output=True, text=True, encoding='utf-8',
                            env=dict(env_for(state2, desktop=False), RELEASE_WORDS_PY=recorder), timeout=30)
         return context(r.stdout.strip())

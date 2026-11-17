@@ -9,7 +9,7 @@ Run:  python tests/test-hooks-foreground-guard.py      (prints PASS/FAIL per cas
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,7 +27,7 @@ def check(label, got, want):
 
 def guard(command, tool='Bash', **extra):
     event = {'tool_name': tool, 'tool_input': dict({'command': command}, **extra)}
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input=json.dumps(event), capture_output=True,
+    r = bounded.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input=json.dumps(event), capture_output=True,
                        text=True, timeout=30)
     return r.returncode
 
@@ -60,7 +60,7 @@ def main():
                               'grep -rn x scripts/build-once.py scripts/build-images.py', 'grep -n y a.sh scripts/run-tests.py')], [0] * 7)
     check('  one suite by name through run-tests.py --only passes', guard('python scripts/run-tests.py --only push-decider'), 0)
     check('  not a shell tool: never looked at', guard('python app/scripts/ship.py', tool='Read'), 0)
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input='not json', capture_output=True, text=True, timeout=30)
+    r = bounded.run([BASH, os.path.join(HOOKS, 'foreground-guard.sh')], input='not json', capture_output=True, text=True, timeout=30)
     check('  an unreadable event: allowed, never a trap', r.returncode, 0)
     # The guard rides stamp-gate.sh, which every open session runs from the newest install on every call.
     d = tempfile.mkdtemp()
@@ -68,7 +68,7 @@ def main():
     with open(path, 'w', encoding='utf-8') as f:
         f.write(json.dumps({'type': 'user', 'message': {'content': 'go'}}) + '\n')
     ev = {'tool_name': 'Bash', 'transcript_path': path, 'session_id': 's1', 'tool_input': {'command': 'git push'}}
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True, text=True,
+    r = bounded.run([BASH, os.path.join(HOOKS, 'stamp-gate.sh')], input=json.dumps(ev), capture_output=True, text=True,
                        timeout=30, env=dict(os.environ, TMPDIR=d, TEMP=d, STAMP_GATE_WAIT=''))
     check('stamp-gate.sh refuses a foreground push through the guard, its reason on stderr',
           (r.returncode, 'run_in_background' in r.stderr), (2, True))

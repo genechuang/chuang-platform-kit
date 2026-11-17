@@ -9,7 +9,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import bounded
 import sys
 import tempfile
 import time
@@ -27,7 +27,7 @@ def check(label, got, want):
 
 
 def git(*args, cwd):
-    return subprocess.run(['git', *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    return bounded.run(['git', *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
 def commit(repo, msg):
@@ -54,7 +54,7 @@ def fire(event, root, tmp, **env):
     e = dict(os.environ, CLAUDE_PROJECT_DIR=root, TMPDIR=tmp.replace('\\', '/'))
     e.pop('CLAUDE_UNPUSHED_HOOK_OFF', None)
     e.update(env)
-    r = subprocess.run([BASH, HOOK], input=json.dumps({'hook_event_name': event}), capture_output=True, text=True, env=e, timeout=60)
+    r = bounded.run([BASH, HOOK], input=json.dumps({'hook_event_name': event}), capture_output=True, text=True, env=e, timeout=60)
     return r.stdout.strip()
 
 

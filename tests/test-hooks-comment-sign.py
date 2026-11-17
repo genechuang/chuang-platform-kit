@@ -9,7 +9,7 @@ Run:  python tests/test-hooks-comment-sign.py      (prints PASS/FAIL per case an
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import sys
 import tempfile
 
@@ -141,16 +141,16 @@ def main():
     utf8 = json.dumps({'tool_name': 'Bash', 'session_id': 'x', 'tool_input': {'command': f'gh issue comment 5 --body "Done.{SIGN}"'}},
                       ensure_ascii=False).encode('utf-8')
     plain_env = {k: v for k, v in os.environ.items() if k not in ('PYTHONUTF8', 'PYTHONIOENCODING')}
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input=utf8, capture_output=True, timeout=30, env=plain_env)
+    r = bounded.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input=utf8, capture_output=True, timeout=30, env=plain_env)
     check('  the event as Claude Code sends it, raw UTF-8 with no PYTHONUTF8: a signed inline body passes', r.returncode, 0)
     gate_text = open(os.path.join(HOOKS, 'stamp-gate.sh'), encoding='utf-8').read()
     check("  a helper's call is checked: stamp-gate.sh runs the gate before a helper's early exit",
           gate_text.index('comment-sign.sh') < gate_text.index("helper; exit 0"), True)
 
     event = {'tool_name': 'Bash', 'tool_input': {'command': 'gh issue comment 5 --body "plain words"'}, 'session_id': 'x'}
-    r = subprocess.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input=json.dumps(event), capture_output=True,
+    r = bounded.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input=json.dumps(event), capture_output=True,
                        text=True, timeout=30)
-    ok = subprocess.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input='not json', capture_output=True, text=True,
+    ok = bounded.run([BASH, os.path.join(HOOKS, 'comment-sign.sh')], input='not json', capture_output=True, text=True,
                         timeout=30)
     check('through the launcher: exit 2 with the reason on stderr; a broken event exits 0',
           (r.returncode, 'Sign the comment' in r.stderr, ok.returncode), (2, True, 0))

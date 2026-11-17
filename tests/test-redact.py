@@ -135,8 +135,8 @@ check("the positive case: the email goes, subject and body scrubbed",
       (len(sent), FAKE_TOKEN in raw, 'waInstance<id>/sendMessage/***' in raw), (1, False, True))
 
 print("\n-- the stdin filter (what a host's failure reporter pipes a step log through)")
-import subprocess  # noqa: E402
-out = subprocess.run([sys.executable, '-m', 'chuang_platform_kit.redact'], input=ERR, capture_output=True, text=True,
+import bounded  # noqa: E402
+out = bounded.run([sys.executable, '-m', 'chuang_platform_kit.redact'], input=ERR, capture_output=True, text=True,
                      env={**os.environ, 'PYTHONPATH': os.path.join(ROOT, 'src')}).stdout
 check("python -m chuang_platform_kit.redact scrubs stdin to stdout", (FAKE_TOKEN in out, 'waInstance<id>' in out), (False, True))
 # (How each host wires it -- its report-failure action, its log workflow, its

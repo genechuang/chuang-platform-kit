@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import bounded
 import tempfile
 import time
 
@@ -223,7 +224,7 @@ def main():
     s = Session()
     os.remove(s.path) if os.path.exists(s.path) else None
     missing = {'hook_event_name': 'PreToolUse', 'transcript_path': os.path.join(s.dir, 'none.jsonl')}
-    r = subprocess.run([BASH, GATE], input=json.dumps(missing), capture_output=True, text=True, timeout=20)
+    r = bounded.run([BASH, GATE], input=json.dumps(missing), capture_output=True, text=True, timeout=20)
     check('a missing transcript passes', r.returncode, 0)
 
     # 1.4.0, Gene 10/20/26 12:19 AM PT: "Your time stamp is drifting badly from my iOS time" (12:22 written at 12:19).

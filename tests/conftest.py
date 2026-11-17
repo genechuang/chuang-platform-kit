@@ -12,7 +12,7 @@ here in forty lines so the kit depends on nothing of theirs.
 """
 import os
 import re
-import subprocess
+import bounded
 import sys
 
 import pytest
@@ -31,7 +31,7 @@ class SuiteItem(pytest.Item):
         env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                    PYTHONPATH=os.pathsep.join(p for p in (os.path.join(ROOT, 'src'), os.path.join(ROOT, 'sdlc', 'src'),
                                                           os.environ.get('PYTHONPATH', '')) if p))
-        r = subprocess.run([sys.executable, '-B', str(self.path)], cwd=ROOT, capture_output=True, text=True,
+        r = bounded.run([sys.executable, '-B', str(self.path)], cwd=ROOT, capture_output=True, text=True,
                            encoding='utf-8', errors='replace', env=env, timeout=60)
         out = (r.stdout or '') + (r.stderr or '')
         m = SUMMARY.search(out)

@@ -8,7 +8,7 @@ Run:  python tests/test-hooks-no-console-windows.py      (prints PASS/FAIL per c
 import json
 import os
 import shutil
-import subprocess
+import bounded
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +26,7 @@ def check(label, got, want):
 
 
 def run(env_extra, cwd='x'):
-    r = subprocess.run([BASH, HOOK], input=json.dumps({'hook_event_name': 'SessionStart', 'cwd': cwd}),
+    r = bounded.run([BASH, HOOK], input=json.dumps({'hook_event_name': 'SessionStart', 'cwd': cwd}),
                        capture_output=True, text=True, timeout=60, env=dict(os.environ, **env_extra))
     return r.returncode, r.stdout
 
@@ -40,10 +40,10 @@ def main():
         check('no check script on this box: nothing, exit 0', run({'NO_CONSOLE_CHECK': os.path.join(d, 'none.ps1')}), (0, ''))
     if shutil.which('powershell.exe') and os.path.exists('D:/code/claude-shared/hooks/no-console-windows.ps1'):
         repo = tempfile.mkdtemp()
-        subprocess.run(['git', 'init', '-q', repo], check=True)
+        bounded.run(['git', 'init', '-q', repo], check=True)
         with open(os.path.join(repo, 'a.py'), 'w', encoding='utf-8') as f:
             f.write('import subprocess\nsubprocess.Popen(["git"], creationflags=subprocess.DETACHED_PROCESS)\n')
-        subprocess.run(['git', '-C', repo, 'add', '.'], check=True)
+        bounded.run(['git', '-C', repo, 'add', '.'], check=True)
         code, out = run({}, cwd=repo)
         told = json.loads(out) if out else {}
         check('a console-less launch in the repo: told as one line and listed in context, exit 0',
