@@ -1208,16 +1208,29 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         lines += closed_sweep(cfg, gh, store, now, dry, letters, skip=shipyard)
         lines += closed_needs_sweep(cfg, gh, dry)
         warming, wrecked = {}, {}
-        if _SET['release_train']:
-            # 0.31.0 (SMADPickleBot #1652): the parts that read a release train (a dock branch, its warm, the ship card,
-            # the columns' placeholders); a board without one (configure or tenant.using(release_train=False)) skips them
+        # 0.31.0 (SMADPickleBot #1652): a board without a release train (configure or tenant.using(release_train=False))
+        # skips what reads one, the dock branch and its warm. 0.32.0 (#1688; Gene, 11/17/26: a new board "inherits
+        # everything we built"): the ship card and the columns' label cards are the board's own, so such a board keeps
+        # them whenever its config names them (`ship_card`, `placeholders`), and since no ship's sync makes its label
+        # cards, the sweep makes a missing one.
+        train = _SET['release_train']
+
+        def said(ln):
+            return ('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
+        if train:
             lines += dock_catch(cfg, gh, dry)   # #1203: a dock ticket a lost landing never moved
+        if train or cfg.get('ship_card'):
             # The sweep's own store reads the ship record too: no second client.
             reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
             lines += ship_card_home(cfg, gh, dry, ship_run=reader)
+        if train or cfg.get('placeholders'):
+            if not train and not dry:
+                made = _tickets.placeholders(gh.run, cfg)
+                if ' in place' not in made:
+                    lines.append(said(made))
             # 0.14.0 (#1234): each column's placeholder first, the ship card second in its home, after the keeper's move
-            lines += [('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
-                      for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
+            lines += [said(ln) for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
+        if train:
             lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
         lines += wrecked_sweep(cfg, gh, store, now, wrecked, dry)   # 0.20.0: the failed column kept for failures
     else:

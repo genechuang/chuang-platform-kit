@@ -574,9 +574,30 @@ try:
     check('the positive case: a release train board runs the dock, ship card and Warming parts',
           sorted(called), ['dock_catch', 'ship_card_home', 'warming_sweep', 'wrecked_sweep'])
     called.clear()
+    bare = {k: v for k, v in CFG.items() if k not in ('ship_card', 'placeholders')}
     with TN.using('other', scrum={'release_train': False}):
-        S.sweep(CFG, S.GitHub(CFG, run=Board({'': []})), Records(), now=NOW)
-    check('a board with no release train skips them and keeps the failed column sweep', called, ['wrecked_sweep'])
+        none = S.sweep(bare, S.GitHub(bare, run=Board({'': []})), Records(), now=NOW)
+    check('a board with no release train, its config naming no ship card or label cards, skips them and keeps the '
+          'failed column sweep', (called, [ln for ln in none if 'placeholder' in ln]), (['wrecked_sweep'], []))
+    # 0.32.0 (#1688): the ship card and the label cards are the board's own, kept whenever its config names them
+    called.clear()
+    made = []
+    keep_t = {name: getattr(S._tickets, name) for name in ('placeholders', 'card_order_keep')}
+    S._tickets.placeholders = lambda run, cfg: made.append('placeholders') or 'tickets: placeholders made: Dock'
+    S._tickets.card_order_keep = lambda run, cfg, dry=False: made.append('card_order_keep') or []
+    try:
+        own = dict(bare, ship_card={'home': 'dock'}, placeholders={'dock': '— Dock —'})
+        with TN.using('other', scrum={'release_train': False}):
+            lines = S.sweep(own, S.GitHub(own, run=Board({'': []})), Records(), now=NOW)
+            live = len(made)
+            S.sweep(own, S.GitHub(own, run=Board({'': []})), Records(), now=NOW, dry=True)
+        check('no train, its config names both: the ship card kept, a missing label card made and said, the order kept; '
+              'never the dock or Warming parts', (called[:2], made[:live], 'scrum: tickets: placeholders made: Dock' in lines),
+              (['ship_card_home', 'wrecked_sweep'], ['placeholders', 'card_order_keep'], True))
+        check('a dry run makes no label card', made[live:], ['card_order_keep'])
+    finally:
+        for name, fn in keep_t.items():
+            setattr(S._tickets, name, fn)
 finally:
     for name, fn in kept.items():
         setattr(S, name, fn)

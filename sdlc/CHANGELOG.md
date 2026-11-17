@@ -3,6 +3,16 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.32.0 - 2026-11-17 PT
+
+SMADPickleBot #1688 (Gene, 11/17/26: a new project's board "inherits everything we built"): 0.31.0's one switch
+turned off four parts of the sweep, and only two of them read a release train.
+- **`scrum.sweep()` on a board with `release_train=False`** still skips the dock catch and the stuck-Warming letters,
+  and now keeps the ship card when the board's config names one (`ship_card`) and the columns' label cards when it
+  names them (`placeholders`): a missing label card is made by the sweep itself (no ship's sync does it there), then
+  the card order is kept. A config naming neither behaves as 0.31.0. No signature changed; a release train board is
+  unchanged.
+
 ## 0.31.0 - 2026-11-16 PT
 
 SMADPickleBot #1652: ChuangFinance's board has no release train (its Dock is pushed work waiting for a deploy or the
