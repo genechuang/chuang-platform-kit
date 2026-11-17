@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(HERE, '..', 'sdlc', 'src'))
 from chuang_sdlc.cicd import claim as C  # noqa: E402
 
 FAILURES = []
-NOW = datetime(2026, 11, 17, 21, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 17, 21, 0, tzinfo=timezone.utc)   # utc-ok: an instant for the pending check's due time, never a day
 SHA = 'a' * 40
 
 
