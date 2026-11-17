@@ -345,3 +345,24 @@ def send_file_by_url(instance_id: str, api_token: str, chat_id: str,
         "fileName": filename,
         "caption": caption
     }, timeout=timeout)
+
+
+REACTION_METHOD = "sendReaction"
+
+
+def reaction_payload(chat_id: str, message_id: str, emoji: str = "") -> dict:
+    """The body of GREEN-API's sendReaction (0.33.0): the instance's own reaction `emoji` on the message `message_id`
+    in `chat_id`, '' to take it off. One reaction an account on a message is WhatsApp's rule, so the newest replaces
+    the last. For a host that posts through `post` itself (its own status handling); `send_reaction` is the call."""
+    return {"chatId": chat_id, "idMessage": message_id, "reaction": emoji or ""}
+
+
+def send_reaction(instance_id: str, api_token: str, chat_id: str, message_id: str, emoji: str = "",
+                  timeout: int = REQUEST_TIMEOUT) -> dict | None:
+    """Put the instance's reaction on a message, or take it off with '' (GREEN-API sendReaction, 0.33.0).
+
+    Returns:
+        Response dict on success, None on error
+    """
+    return call_api(instance_id, api_token, REACTION_METHOD, reaction_payload(chat_id, message_id, emoji),
+                    timeout=timeout)

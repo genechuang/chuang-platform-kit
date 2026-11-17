@@ -131,6 +131,14 @@ try:
     check("sendFileByUrl: URL, default file name, caption, 60 s",
           (posts[-1][1], posts[-1][2]),
           ({'chatId': 'g@g.us', 'urlFile': 'https://example.com/h.png', 'fileName': 'image.jpg', 'caption': 'Heatmap'}, 60))
+    G.send_reaction(IID, FAKE_TOKEN, 'g@g.us', 'BAE550673B9C0497', '\U0001F3D3')
+    check("sendReaction (0.33.0): chatId, idMessage and the emoji, 10 s",
+          (posts[-1][0].endswith('/sendReaction/' + FAKE_TOKEN), posts[-1][1], posts[-1][2]),
+          (True, {'chatId': 'g@g.us', 'idMessage': 'BAE550673B9C0497', 'reaction': '\U0001F3D3'}, 10))
+    check("  an empty emoji takes the reaction off; the payload is the one a host posts itself",
+          (G.reaction_payload('g@g.us', 'BAE5'), G.reaction_payload('g@g.us', 'BAE5', None), G.REACTION_METHOD),
+          ({'chatId': 'g@g.us', 'idMessage': 'BAE5', 'reaction': ''}, {'chatId': 'g@g.us', 'idMessage': 'BAE5', 'reaction': ''},
+           'sendReaction'))
     G.remove_group_participant(IID, FAKE_TOKEN, 'g@g.us', '1@c.us')
     check("removeGroupParticipant: groupId and participantChatId",
           posts[-1][1], {'groupId': 'g@g.us', 'participantChatId': '1@c.us'})

@@ -112,6 +112,16 @@ try:
     check("an image: URL and caption, its correlation_id kept (a re-run must not re-send)",
           (attrs['message_type'], body['image_url'], body['image_caption'], body['content'], attrs['correlation_id']),
           ('image', 'https://example.com/h.png', 'Heatmap', 'Heatmap', 'heatmap-2026-10-02'))
+    WP.send_reaction('120363000000@g.us', 'BAE550673B9C0497', '\U0001F3D3', source='league-chat',
+                     correlation_id='react-m1-gene-1')
+    _, body, attrs = published[-1][:3]
+    check("a reaction (0.33.0): the message's WhatsApp id, the emoji as the content, its correlation_id kept",
+          (attrs['message_type'], body['recipient_id'], body['reaction_to'], body['content'], attrs['correlation_id'],
+           WM.WhatsAppMessage.from_json(json.dumps(body)).message_type),
+          ('reaction', '120363000000@g.us', 'BAE550673B9C0497', '\U0001F3D3', 'react-m1-gene-1', WM.MessageType.REACTION))
+    WP.send_reaction('120363000000@g.us', 'BAE550673B9C0497', '', correlation_id='react-m1-gene-2')
+    check("  an empty emoji is published too: it takes the reaction off",
+          (published[-1][1]['content'], published[-1][1]['reaction_to']), ('', 'BAE550673B9C0497'))
     msg = WM.create_dm('1@c.us', 'raw', correlation_id='raw-1')
     msg.timestamp = '2026-01-01T00:00:00'
     WP.publish_raw(msg)
@@ -135,6 +145,8 @@ try:
           'content (poll question) is required for POLL type')
     check("an image with no URL", refused(lambda: WP.send_image('g@g.us', '')), 'image_url is required for IMAGE type')
     check("empty text", refused(lambda: WP.send_group_message('g@g.us', '')), 'content is required for text messages')
+    check("a reaction with no message id", refused(lambda: WP.send_reaction('g@g.us', '', '\U0001F44D')),
+          "reaction_to (the message's WhatsApp id) is required for REACTION type")
     check("  none of them published", len(published), n)
 finally:
     WP.datetime = _keep_dt

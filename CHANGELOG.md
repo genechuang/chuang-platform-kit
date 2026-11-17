@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.33.0 - 2026-11-16 PT
+
+Additive; no host call site changes. **A reaction is a WhatsApp message type** (SMADPickleBot #1671: a reaction made
+in a host's app, mirrored onto the message in the WhatsApp group). `whatsapp_message.MessageType.REACTION` with the new
+envelope field `reaction_to` (the WhatsApp id of the message reacted on; `content` is the emoji, `''` takes the
+reaction off), `create_reaction` and `whatsapp_publisher.send_reaction`; `greenapi.send_reaction`,
+`REACTION_METHOD` and `reaction_payload` over GREEN-API's `sendReaction`. WhatsApp keeps one reaction an account on a
+message, so the instance's newest reaction replaces its last. A host's sender that reads the envelope with
+`WhatsAppMessage.from_dict` must run this version before a publisher sends it the new field.
+
 ## 0.32.1 - 2026-11-16 PT
 
 Additive; no host call site changes. `redact` cuts a Web Push endpoint to its host (SMADPickleBot #1592's review: a

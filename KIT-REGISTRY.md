@@ -363,6 +363,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `send_message(instance_id, api_token, chat_id, message, timeout=)` | Send a text message via GREEN-API. |
 | `send_poll(instance_id, api_token, chat_id, question, options, multiple_answers=, timeout=)` | Create a poll via GREEN-API. |
 | `send_file_by_url(instance_id, api_token, chat_id, file_url, caption=, filename=, timeout=)` | Send a file by URL via GREEN-API. |
+| `reaction_payload(chat_id, message_id, emoji=)` | The body of GREEN-API's sendReaction (0.33.0): the instance's own reaction `emoji` on the message `message_id` in `chat_id`, '' to take it off. One reaction an account on a message is WhatsApp's rule, so the newest replaces the last. For a host that posts thr… |
+| `send_reaction(instance_id, api_token, chat_id, message_id, emoji=, timeout=)` | Put the instance's reaction on a message, or take it off with '' (GREEN-API sendReaction, 0.33.0). |
 
 ## `headless_claude`: Headless Claude on the subscriptions, failing over between accounts (SMAD PickleBot #294, then #660…
 
@@ -619,6 +621,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `create_group_message(group_id, message, source=, dry_run=, include_signature=, include_joke=, correlation_id=)` | Create a message to a group chat. |
 | `create_poll(group_id, question, options, multiple_answers=, source=, dry_run=)` | Create a poll in a group chat (signature/joke not applicable). |
 | `create_image(recipient_id, image_url, caption=, source=, dry_run=, include_signature=, correlation_id=)` | Create an image message with optional caption. |
+| `create_reaction(chat_id, message_id, emoji=, source=, dry_run=, correlation_id=)` | Create the sending account's reaction on a message in a chat (0.33.0): `emoji` on the message whose WhatsApp id is `message_id`, '' to take the account's reaction off. One reaction an account on a message is WhatsApp's rule, so the newest replaces the last. c… |
 
 ## `whatsapp_publisher`: WhatsApp Message Publisher for Pub/Sub Event-Driven Architecture
 
@@ -630,6 +633,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `send_group_message(group_id, message, source=, dry_run=, include_signature=, include_joke=, correlation_id=)` | Send a message to a group chat. |
 | `send_poll(group_id, question, options, multiple_answers=, source=, dry_run=)` | Create a poll in a group chat. |
 | `send_image(recipient_id, image_url, caption=, source=, dry_run=, include_signature=, correlation_id=)` | Send an image with optional caption. |
+| `send_reaction(chat_id, message_id, emoji=, source=, dry_run=, correlation_id=)` | Put the sending account's reaction on a message, or take it off (0.33.0). |
 | `publish_raw(message)` | Publish a pre-constructed WhatsAppMessage. |
 
 ## `chuang_sdlc.alerts`: An alert's incident as a GitHub issue, filed once per opening and closed once the alert watcher say…

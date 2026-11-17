@@ -17,6 +17,7 @@ class MessageType(str, Enum):
     TEXT_GROUP = "text_group"     # Message to group chat
     POLL = "poll"                 # Create poll in group
     IMAGE = "image"               # Send image with caption
+    REACTION = "reaction"         # The sending account's reaction on a message ('' takes it off; 0.33.0)
 
 
 @dataclass
@@ -38,6 +39,9 @@ class WhatsAppMessage:
         image_caption: Caption for image
         source: Identifier for the sending service (e.g., "court-booking")
         timestamp: ISO format timestamp when message was created
+        reaction_to: The WhatsApp id of the message reacted on (for REACTION type; `content` is the emoji, '' to
+            take the account's reaction off). WhatsApp keeps one reaction an account on a message, so a new one
+            replaces the account's last.
     """
     message_type: MessageType
     recipient_id: str
@@ -52,6 +56,7 @@ class WhatsAppMessage:
     image_caption: Optional[str] = None
     source: Optional[str] = None
     timestamp: Optional[str] = None
+    reaction_to: Optional[str] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -101,6 +106,11 @@ class WhatsAppMessage:
         elif self.message_type in (MessageType.TEXT_DM, MessageType.TEXT_GROUP):
             if not self.content:
                 raise ValueError("content is required for text messages")
+
+        elif self.message_type == MessageType.REACTION:
+            # content may be '': that takes the reaction off
+            if not self.reaction_to:
+                raise ValueError("reaction_to (the message's WhatsApp id) is required for REACTION type")
 
 
 # Convenience factory functions
@@ -192,5 +202,28 @@ def create_image(
         source=source,
         dry_run=dry_run,
         include_signature=include_signature,
+        correlation_id=correlation_id
+    )
+
+
+def create_reaction(
+    chat_id: str,
+    message_id: str,
+    emoji: str = "",
+    source: str = None,
+    dry_run: bool = False,
+    correlation_id: str = None
+) -> WhatsAppMessage:
+    """Create the sending account's reaction on a message in a chat (0.33.0): `emoji` on the message whose WhatsApp
+    id is `message_id`, '' to take the account's reaction off. One reaction an account on a message is WhatsApp's
+    rule, so the newest replaces the last. correlation_id is the sender's dedup key: make it differ per change (the
+    emoji and its moment), or a second, different reaction on the same message is dropped as a duplicate."""
+    return WhatsAppMessage(
+        message_type=MessageType.REACTION,
+        recipient_id=chat_id,
+        content=emoji or "",
+        reaction_to=message_id,
+        source=source,
+        dry_run=dry_run,
         correlation_id=correlation_id
     )

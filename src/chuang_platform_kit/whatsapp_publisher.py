@@ -24,7 +24,8 @@ from .whatsapp_message import (
     create_dm,
     create_group_message,
     create_poll,
-    create_image
+    create_image,
+    create_reaction
 )
 
 logger = logging.getLogger(__name__)
@@ -207,6 +208,33 @@ def send_image(
     """
     wa_message = create_image(recipient_id, image_url, caption, source, dry_run,
                               include_signature, correlation_id)
+    return publish_whatsapp_message(wa_message)
+
+
+def send_reaction(
+    chat_id: str,
+    message_id: str,
+    emoji: str = "",
+    source: str = None,
+    dry_run: bool = False,
+    correlation_id: str = None
+) -> str:
+    """
+    Put the sending account's reaction on a message, or take it off (0.33.0).
+
+    Args:
+        chat_id: Phone ID or Group ID the message is in
+        message_id: The WhatsApp id of the message reacted on
+        emoji: The reaction; '' takes the account's reaction off
+        source: Identifier for the sending service
+        dry_run: If True, log but don't actually send
+        correlation_id: Deterministic dedup key, different per change (the emoji and its moment): the sender drops
+            a second message with the same key. If None, a UUID is generated.
+
+    Returns:
+        Pub/Sub message ID
+    """
+    wa_message = create_reaction(chat_id, message_id, emoji, source, dry_run, correlation_id)
     return publish_whatsapp_message(wa_message)
 
 
