@@ -466,6 +466,32 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `normalize_us_phone(phone)` | Normalize a US phone number to 11-digit format (1XXXXXXXXXX). Strips formatting, adds country code if needed. Returns None if the phone number is invalid. |
 | `format_phone_for_whatsapp(phone)` | Convert phone number to WhatsApp format (e.g., 12345678901@c.us). Handles US numbers (normalizes to 1XXXXXXXXXX) and international numbers (uses raw digits as-is, e.g. 85298011875 for Hong Kong). Returns None if the phone number is invalid. |
 
+## `play_developer`: Google Play's Developer API (androidpublisher v3), one client for every project (0.35.0, out of a h…
+
+| Name | Purpose |
+|---|---|
+| `class PlayError` | A Play or IAM answer that stops the call, its text Google's own (never a token). |
+| `api(package)` | The Developer API's address for the app `package` (its Android package name). |
+| `upload_api(package)` | The Developer API's upload address for the app `package` (bundles and deobfuscation files go here). |
+| `iam_token_url(account)` | The IAM Credentials address `publisher_token` calls for `account` (google_auth.impersonate's), for a suite or a log line that names it. |
+| `call(method, url, token=, body=, data=, content_type=, opener=, timeout=, error=)` | One HTTP call, its JSON answer as a dict ({} for an empty one); a refusal raised as `error` (PlayError) with Google's status and message. A JSON call is `google_rest.call` (guard 'none'); a raw upload (`data`, the file's bytes, with its `content_type`) is sen… |
+| `publisher_token(account, source=, opener=, what=, error=)` | An access token, an hour, for the publisher service account `account` (its email), minted by IAM Credentials (`google_auth.impersonate`) for the androidpublisher scope from `source`'s token (a callable; `google_auth.access_token` by default). `what` names the… |
+| `open_edit(package, token, opener=)` | A new edit of `package`, its id. |
+| `commit_edit(package, edit, token, opener=)` | The edit committed: its changes are Play's now. Play's answer. |
+| `validate_edit(package, edit, token, opener=)` | The edit checked as a commit would be, without committing it; a refusal is the PlayError a commit would be. |
+| `delete_edit(package, edit, token, opener=)` | The edit deleted, so nothing of it stays in Play; False when Play refused (an edit already gone). Never raises PlayError: it is the clean-up after a call that may itself have failed. |
+| `edit_tracks(package, edit, token, opener=)` | Every track the open edit lists, each {'track', 'releases': [...]}. |
+| `edit_track(package, edit, track, token, opener=)` | One track of the open edit, {'track', 'releases': [...]}. |
+| `set_track(package, edit, track, releases, token, opener=)` | `track`'s releases put in the open edit (they replace the track's own); in Play once the edit is committed. |
+| `upload_bundle(package, edit, data, token, opener=, timeout=)` | An Android App Bundle's bytes uploaded into the open edit; Play's answer, whose `versionCode` is the bundle's. |
+| `upload_mapping(package, edit, code, data, token, opener=, timeout=)` | The R8 / ProGuard mapping for version code `code` uploaded into the open edit, so Play's crash reports read. |
+| `tracks(package, token, opener=)` | Every track Play lists for `package`, read in an edit that is deleted after, so nothing changes in Play. Play keeps one open edit an app: a commit of another deletes this one under the read, so an edit Play says has been deleted (EDIT_DELETED) is opened again… |
+| `release(code, status=, name=, notes=, language=)` | A release to put on a track (`set_track`): version code `code`, Play's `status`, named `name` (the code when none), with `notes` in `language` cut to Play's limit (NOTES_MAX) when given. |
+| `version_codes(releases)` | Every version code the releases carry, as ints (anything that is not a number left out). |
+| `newest(releases)` | The release with the highest version code (Play's newest), or None; a release with no code is skipped. |
+| `fact(track, rel)` | A release as the fact a status page keeps: {track, version (its name), codes (strings), status, fraction (a staged rollout's userFraction, else None)}. |
+| `newest_on(listed, names)` | The newest release's fact on the first of the tracks `names` (in the order given) that holds a release, from `tracks`' answer; when none does, a fact with status NONE and track '' (or the one name when `names` is a single track). |
+
 ## `posthog_api`: PostHog's REST API, one client for every project (SMAD PickleBot #1132, out of its picklebot_core/p…
 
 | Name | Purpose |

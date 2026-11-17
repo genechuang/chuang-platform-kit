@@ -80,8 +80,12 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      Sentry's suspect commits; the host passes its Sentry organization and its repository
   image_keep         every image Cloud Run runs keeps a `keep-<consumer>` tag in Artifact Registry, so a cleanup
                      policy never deletes a deployed one; the host passes its project and region
+  play_developer     Google Play's Developer API, one client for every project: an edit opened, committed, validated
+                     or deleted, its tracks read and put, a bundle and its mapping uploaded, the tracks read in an
+                     edit that is always deleted, the keyless publisher account's token, and the readers of Play's
+                     answers; the host passes its package name and its publisher account
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.34.0'
+__version__ = '0.35.0'

@@ -2,6 +2,31 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.35.0 - 2026-11-17 PT
+
+Additive; no host call site changes. `play_developer`: Google Play's Developer API (androidpublisher v3), one client
+for every project, out of a host's own status module and the edit calls of its Android upload (SMADPickleBot #1680),
+with its suite `tests/test-play-developer.py`. Standard library, over `google_rest.call` (guard 'none') and
+`google_auth.impersonate`; no new dependency.
+
+- The token: `publisher_token(account, source=, opener=, what=, error=)` mints an hour's access token for a keyless
+  publisher service account through IAM Credentials, for `SCOPE` (androidpublisher), from `source`'s token
+  (`google_auth.access_token` by default); `iam_token_url(account)` names the address it calls.
+- One call: `call(method, url, token, body=, data=, content_type=, opener=, timeout=, error=)`, JSON through
+  `google_rest.call`, a raw upload (`data`) sent as bytes; a refusal is `PlayError` (or the host's `error`) with
+  Google's status and message, never a token. `api(package)` and `upload_api(package)` are the addresses.
+- An edit: `open_edit`, `commit_edit`, `validate_edit`, `delete_edit` (best effort, never raises), `edit_tracks`,
+  `edit_track`, `set_track(package, edit, track, releases, token)`, `upload_bundle` and `upload_mapping`.
+- `tracks(package, token)`: every track, read in an edit that is always deleted after; an edit Play says was deleted
+  under the read (`EDIT_DELETED`: another edit's commit) is opened again once.
+- Play's answers, read (pure): `release(code, status, name=, notes=, language=)` (notes cut to `NOTES_MAX`),
+  `version_codes(releases)`, `newest(releases)`, `fact(track, release)` ({track, version, codes, status, fraction})
+  and `newest_on(listed, names)` (the first of several tracks that holds a release; status `NONE` when none does).
+
+What a host passes in: its Android package name on every call, its publisher account's email (and its own word for
+it in a refusal), and its token source. What stays the host's: which tracks it reads and in what order, every word a
+person reads for a status (Play's API says nothing of Google's review), and any record it keeps of a review.
+
 ## 0.34.0 - 2026-11-17 PT
 
 Additive; no host call site changes. Five small standard-library modules out of a host's own core (SMADPickleBot
