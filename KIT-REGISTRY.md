@@ -1228,6 +1228,21 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `cmd_zip(a)` | (no docstring) |
 | `main(argv=)` | (no docstring) |
 
+## `chuang_sdlc.cicd.claim`: The push decider's half of a two-path pipeline claim (SMADPickleBot #1681): what a webhook service…
+
+| Name | Purpose |
+|---|---|
+| `changed_files(payload)` | The push payload's changed paths, or None when the payload cannot list them all: GitHub carries at most 20 commits and 3,000 files a commit, and a forced push's `before` is not an ancestor. |
+| `pipelines_touched(changed, pipelines, match)` | {pipeline: trigger name} for every pipeline whose path filter (its `included_files`) matches one of the changed paths that none of its `ignored_files` matches. `match(glob, path)` is the host's path matcher, the one its triggers' filters are written for. `cha… |
+| `class Decider` | One project's push decider. `decide` is the host's per-job claim; `unreachable` the exception its store raises when the claim store cannot be reached; `github` the kit's GitHub client module (request, get, GitHubError), or None where it is not installed (a di… |
+| `Decider.run_trigger(name, sha, token, opener=, substitutions=)` | Start trigger `name` on commit `sha` (Cloud Build's triggers.run with a RepoSource: the commit and the substitutions); the started build's id. `_GATED`, not `_BACKEND`: the real build skips the claim (the decider made it) but still asks its dependency gate wh… |
+| `Decider.dispatch_workflow(real, sha, token=, opener=, env=, repo=, inputs=)` | Dispatch the workflow a `dispatch:<file>` entry names on the ref with runner=github, or with `inputs`. GitHub's REST API with the token in the dispatch token's environment variable; `token`, the cloud one the triggers take, is not used. 'dispatched'; raises R… |
+| `Decider.hand_run(real, sha)` | The command that runs the real trigger by hand, for an ERROR line when the decider could not. |
+| `Decider.workflow_ran(real, sha, env=, opener=, repo=)` | Whether GitHub already has a run of the `dispatch:<file>` workflow for `sha` (any state): the run that took the push but could not write its claim. One REST read with the dispatch token; False when it cannot be read, so the fallback stands. |
+| `Decider.record_pending(pipeline, real, sha, store, wait=, now=)` | Write <pending>/<pipeline>__<sha> {pipeline, real, sha, due, expires_at}, the check the sweep makes `wait` seconds from now; the document written. A re-delivered push writes it again, harmlessly. |
+| `Decider.on_push(sha, touched, store, token, runner=, wait=, now=, out=)` | The decider's answer to one push: for each touched pipeline, claim and start the real build now when the cloud build is preferred (`decide` with no wait), else record the pending check for the sweep. The claim store unreachable: start every touched build now,… |
+| `Decider.sweep(store, token, runner=, now=, out=, dispatcher=, ran=)` | Every pending check past due: the provider's claim is there, the check is deleted; none, the cloud build claims (the failover) and the real trigger is started, then the check is deleted. A start that fails is an ERROR line naming the hand run, and the check i… |
+
 ## `chuang_sdlc.cicd.gh_deploy`: Record a release's rung as a GitHub deployment, so the repository's Deployments view is the CI/CD c…
 
 | Name | Purpose |

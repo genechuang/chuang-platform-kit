@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.33.0 - 2026-11-17 PT
+
+SMADPickleBot #1681 (Gene, 11/17/26: "Move only the push decider's half"): a new module, nothing changed in any other.
+- **`chuang_sdlc.cicd.claim`**: the push decider's half of a two-path pipeline claim. `Decider(project=, region=,
+  repo=, decide=, unreachable=, github=, ...)` holds a host's names once and gives `on_push`, `sweep`,
+  `record_pending`, `run_trigger`, `dispatch_workflow`, `workflow_ran` and `hand_run`; `changed_files(payload)` and
+  `pipelines_touched(changed, pipelines, match)` are the payload's paths and the pipelines they touch, with the host's
+  own path matcher handed in. The per-job claim stays the host's, standard library in its own repository (it is the
+  first step of every pipeline job and must run with nothing installed), and is handed in as `decide`.
+- No host call site changes: a host that does not import the module is untouched.
+
 ## 0.32.0 - 2026-11-17 PT
 
 SMADPickleBot #1688 (Gene, 11/17/26: a new project's board "inherits everything we built"): 0.31.0's one switch

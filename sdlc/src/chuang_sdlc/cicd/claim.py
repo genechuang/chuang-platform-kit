@@ -70,7 +70,7 @@ class Decider:
                  paths=('gha', 'gcb'), names=None, default_preferred: str = 'gha', cloud_path: str = 'gcb',
                  claim_wait: float = 75, pending_ttl_days: int = 1, dispatch_token_env: str = 'GITHUB_DISPATCH_TOKEN',
                  ref: str = 'main', prefix: str = 'push-decider', hint: str = 'its own runners down?',
-                 trigger_timeout: int = TRIGGER_TIMEOUT):
+                 down: str = 'its runners are down', trigger_timeout: int = TRIGGER_TIMEOUT):
         self.project, self.region, self.repo = project, region, repo
         self.decide, self.unreachable, self.github = decide, unreachable, github
         self.claims, self.pending, self.preferences = claims, pending, preferences
@@ -78,7 +78,7 @@ class Decider:
         self.default_preferred, self.cloud_path = default_preferred, cloud_path
         self.claim_wait, self.pending_ttl_days = claim_wait, pending_ttl_days
         self.dispatch_token_env, self.ref = dispatch_token_env, ref
-        self.prefix, self.hint, self.trigger_timeout = prefix, hint, trigger_timeout
+        self.prefix, self.hint, self.down, self.trigger_timeout = prefix, hint, down, trigger_timeout
 
     # ------------------------------------------------------------------ the real build
     def run_trigger(self, name: str, sha: str, token: str, opener=None, substitutions=None) -> str:
@@ -183,7 +183,7 @@ class Decider:
                     lines.append(_line(f'{pipeline} at {sha[:7]}: GitHub only; the sweep checks for its claim in {wait:.0f}s', out))
                 except self.unreachable as e:
                     lines.append(_line(f'WARNING: {self.prefix}: {pipeline} at {sha[:7]}: the check could not be recorded ({e}); '
-                                       f'nothing will dispatch it if its runners are down', out))
+                                       f'nothing will dispatch it if {self.down}', out))
                 continue
             try:
                 pref = store.get(self.preferences, pipeline) or {}

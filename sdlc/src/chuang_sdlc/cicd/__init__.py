@@ -15,4 +15,7 @@ own names in).
                   path, passed on its own JSON's word; the host's repo, app folder, prefix and command configured (#1188)
   gh_deploy       a release's rung as a GitHub deployment (the Deployments view as the CI/CD console): start and finish,
                   the token's fallbacks, the kit's client or the standard library, never stopping a release (#1285)
+  claim           the push decider's half of a two-path pipeline claim: a push's files and the pipelines they touch,
+                  the pending check, the sweep, starting a cloud build trigger and dispatching a workflow, a host's
+                  names handed to Decider; the per-job claim stays the host's own standard-library file (#1681)
 """
