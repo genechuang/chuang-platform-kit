@@ -102,6 +102,7 @@ _SET = _tenant.Layered('scrum', {   # a tenant's settings layered over it (tenan
     'start_command': '',    # 0.20.0: the host's command that picks a ticket up (tickets.start), `{n}` its number
     'warm_state': None,     # 0.29.0: (store) -> (alive, note): whether the host's dock warm is running now, and its
                             # last word; None: no such record, the Warming limit alone decides
+    'release_train': True,  # 0.31.0: False for a board with no dock, warm or ship card: sweep() skips those parts
 })
 
 
@@ -1206,15 +1207,18 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         shipyard = {(c.get('content') or {}).get('number') for c in cards}   # its closed cards were just moved above
         lines += closed_sweep(cfg, gh, store, now, dry, letters, skip=shipyard)
         lines += closed_needs_sweep(cfg, gh, dry)
-        lines += dock_catch(cfg, gh, dry)   # #1203: a dock ticket a lost landing never moved
-        # The sweep's own store reads the ship record too: no second client.
-        reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
-        lines += ship_card_home(cfg, gh, dry, ship_run=reader)
-        # 0.14.0 (#1234): each column's placeholder first, the ship card second in its home, after the keeper's move
-        lines += [('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
-                  for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
         warming, wrecked = {}, {}
-        lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
+        if _SET['release_train']:
+            # 0.31.0 (SMADPickleBot #1652): the parts that read a release train (a dock branch, its warm, the ship card,
+            # the columns' placeholders); a board without one (configure or tenant.using(release_train=False)) skips them
+            lines += dock_catch(cfg, gh, dry)   # #1203: a dock ticket a lost landing never moved
+            # The sweep's own store reads the ship record too: no second client.
+            reader = _SET['ship_run_of'](store) if _SET['ship_run_of'] is not None else None
+            lines += ship_card_home(cfg, gh, dry, ship_run=reader)
+            # 0.14.0 (#1234): each column's placeholder first, the ship card second in its home, after the keeper's move
+            lines += [('WARNING: scrum: ' + ln[len('WARNING: tickets: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}'
+                      for ln in _tickets.card_order_keep(gh.run, cfg, dry)]
+            lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
         lines += wrecked_sweep(cfg, gh, store, now, wrecked, dry)   # 0.20.0: the failed column kept for failures
     else:
         warming, wrecked = {}, {}

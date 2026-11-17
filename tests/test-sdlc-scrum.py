@@ -562,5 +562,24 @@ check('a dry run says what it would move and writes nothing',
       (S.dock_catch(CFG, S.GitHub(CFG, run=Docked([{'message': 'Ticket: #900'}], {'': []}, places={900: ('Building', '')})), dry=True)),
       ['scrum: #900 is on dock but not in Ready; it would move there (dry run)'])
 
+print('release_train (0.31.0, SMADPickleBot #1652):')
+from chuang_sdlc import tenant as TN  # noqa: E402
+S.configure(store=lambda: Records())
+called = []
+kept = {name: getattr(S, name) for name in ('dock_catch', 'ship_card_home', 'warming_sweep', 'wrecked_sweep')}
+for name in kept:
+    setattr(S, name, (lambda name: lambda *a, **k: called.append(name) or [])(name))
+try:
+    S.sweep(CFG, S.GitHub(CFG, run=Board({'': []})), Records(), now=NOW)
+    check('the positive case: a release train board runs the dock, ship card and Warming parts',
+          sorted(called), ['dock_catch', 'ship_card_home', 'warming_sweep', 'wrecked_sweep'])
+    called.clear()
+    with TN.using('other', scrum={'release_train': False}):
+        S.sweep(CFG, S.GitHub(CFG, run=Board({'': []})), Records(), now=NOW)
+    check('a board with no release train skips them and keeps the failed column sweep', called, ['wrecked_sweep'])
+finally:
+    for name, fn in kept.items():
+        setattr(S, name, fn)
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.31.0 - 2026-11-16 PT
+
+SMADPickleBot #1652: ChuangFinance's board has no release train (its Dock is pushed work waiting for a deploy or the
+lead's word), and the sweep's dry run there would have lettered its owner about seven "stuck Warming" Dock cards and
+read a dock branch the repository does not have.
+- **`scrum.configure(release_train=)`**, new, default True: False skips the parts of `sweep()` that read a release
+  train (the dock catch, the ship card's keeper, the card order keep, the stuck-Warming letters); the closed, Needs-you
+  and failed-column sweeps still run. Set per board with `tenant.using(key, scrum={'release_train': False})`.
+
 ## 0.30.0 - 2026-11-16 PT
 
 SMADPickleBot #1652 (Gene, 11/16/26 3:56 PM PT: "I want to platformize what we built, ChuangFinance is our first
