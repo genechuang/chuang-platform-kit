@@ -36,16 +36,30 @@ case "$input" in
 esac
 # Gene's ship words (10/21/26 9:51 AM PT, "yes" to the push gate's release-order check): a prompt that names ship,
 # deploy or release is handed to claude-shared's release-words.py, which records it only when the prompt starts with
-# one (his own word, never another session's message). A process only for those prompts; silent; never blocks.
+# one (his own word, never another session's message). A process only for those prompts; never blocks. What the
+# recorder says (1.27.0, SMADPickleBot #1664: a word that started the project's ship or its store chain, one plain line
+# from `record plain`) rides the clock's own context: until then its output went to /dev/null and no session ever saw
+# that its ship had started. RELEASE_WORDS_PY names the recorder for the suite.
+RELEASE_NOTE=
 if [ "$event" = UserPromptSubmit ]; then
   shopt -s nocasematch
   case "$input" in
     *ship*|*deploy*|*release*)
-      for rw in /d/code/claude-shared/hooks/release-words.py "$HOME/code/claude-shared/hooks/release-words.py"; do
-        if [ -f "$rw" ]; then printf '%s' "$input" | python "$rw" record >/dev/null 2>&1; break; fi
+      for rw in "${RELEASE_WORDS_PY:-/d/code/claude-shared/hooks/release-words.py}" "$HOME/code/claude-shared/hooks/release-words.py"; do
+        if [ -f "$rw" ]; then
+          RELEASE_NOTE=$(printf '%s' "$input" | python "$rw" record plain 2>/dev/null)
+          break
+        fi
       done ;;
   esac
   shopt -u nocasematch
+  # one line, JSON-safe: a recorder from before `plain` prints a JSON object, which is dropped, never spliced in
+  case "$RELEASE_NOTE" in '{'*) RELEASE_NOTE= ;; esac
+  RELEASE_NOTE=${RELEASE_NOTE//$'\r'/}
+  RELEASE_NOTE=${RELEASE_NOTE//$'\n'/ }
+  RELEASE_NOTE=${RELEASE_NOTE//$'\t'/ }
+  RELEASE_NOTE=${RELEASE_NOTE//\\/\\\\}
+  RELEASE_NOTE=${RELEASE_NOTE//\"/\\\"}
   # The model check rides this prompt (SMADPickleBot #423; Gene, 11/7/26 11:37 AM PT: "add the model check to pre-prompt
   # hook, if this doesn't add much latency"): model-check.lib.sh, builtins only, sets MODEL_CHECK_TEXT once an hour per
   # box and leaves it empty otherwise, found beside this script in the version boot.sh chose, so every open session
@@ -65,5 +79,5 @@ if [ "$event" = PostToolUse ]; then
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT), copied, never estimated.%s"}}' "$clock" "${SKILL_CURRENT_TEXT:+ $SKILL_CURRENT_TEXT}"
   exit 0
 fi
-printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT.%s"}}' "$clock" "${MODEL_CHECK_TEXT:+ $MODEL_CHECK_TEXT}"
+printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT.%s%s"}}' "$clock" "${RELEASE_NOTE:+ $RELEASE_NOTE}" "${MODEL_CHECK_TEXT:+ $MODEL_CHECK_TEXT}"
 exit 0

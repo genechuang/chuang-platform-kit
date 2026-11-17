@@ -399,6 +399,31 @@ def main():
     out, code = clock(state2, desktop=False)
     check('  a session outside the desktop app gets the clock alone', ('Model check' in context(out), context(out).startswith('Pacific clock: ')), (False, True))
 
+    # 1.27.0 (SMADPickleBot #1664): what the release-words recorder says on a ship word rides the clock's context.
+    fake = os.path.join(d, 'release-words.py').replace('\\', '/')
+    write(fake, 'import sys\nsys.stdin.read()\n'
+                'if sys.argv[1:] == ["record", "plain"]:\n'
+                '    print(\'ship word: Gene\\\'s "ship" started the ship (log %TEMP%\\\\smad-ship-word.log)\')\n'
+                'else:\n'
+                '    print(\'{"hookSpecificOutput": {"additionalContext": "old shape"}}\')\n')
+
+    def said(prompt, recorder=fake):
+        with open(state2, 'w', encoding='utf-8') as f:
+            f.write('0\n')
+        r = subprocess.run([BASH, CLOCK], input=json.dumps({'hook_event_name': 'UserPromptSubmit', 'prompt': prompt}),
+                           capture_output=True, text=True, encoding='utf-8',
+                           env=dict(env_for(state2, desktop=False), RELEASE_WORDS_PY=recorder), timeout=30)
+        return context(r.stdout.strip())
+    ctx = said('Ship it')
+    check('the positive case: a ship word\'s line from the recorder rides the clock\'s context, its quotes and backslash kept, in one valid JSON object',
+          (ctx.startswith('Pacific clock: '), 'ship word: Gene\'s "ship" started the ship (log %TEMP%\\smad-ship-word.log)' in ctx), (True, True))
+    check('  a prompt with no ship word runs no recorder and carries the clock alone', 'ship word' in said('hello'), False)
+    old = os.path.join(d, 'old-words.py').replace('\\', '/')
+    write(old, 'import sys\nsys.stdin.read()\nprint(\'{"hookSpecificOutput": {"additionalContext": "old shape"}}\')\n')
+    ctx = said('ship', old)
+    check('  a recorder from before `plain`, which prints a JSON object, adds nothing and breaks nothing',
+          (ctx.startswith('Pacific clock: '), 'old shape' in ctx), (True, False))
+
     shutil.rmtree(d, ignore_errors=True)
     print(f'\n{len(FAILS)} failure(s)')
     return 1 if FAILS else 0
