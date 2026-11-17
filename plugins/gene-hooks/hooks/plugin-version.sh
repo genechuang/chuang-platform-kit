@@ -5,6 +5,15 @@
 # claude-shared checkout beside the project, whose skills a session reads (11/8/26: a session followed a stale
 # handover skill). Auto-update keeps most boxes current; this catches one that is not. Every exit is 0; one JSON
 # object at most.
+# A compaction or a resume re-states skills from the session's earlier context (1.28.0, SMADPickleBot #1665): a mark
+# for this session, so its next prompt checks them against the newest installed copies (session-fresh.lib.sh).
+input=$(cat 2>/dev/null)
+fresh_re='"source" *: *"(compact|resume)"'
+sid_re='"session_id" *: *"([A-Za-z0-9_-]+)"'
+if [[ "$input" =~ $fresh_re ]] && [[ "$input" =~ $sid_re ]]; then
+  fresh_state="${CLAUDE_SESSION_FRESH_STATE:-$HOME/.claude/session-fresh}"
+  mkdir -p "$fresh_state" 2>/dev/null && : >"$fresh_state/stale-${BASH_REMATCH[1]}.mark" 2>/dev/null
+fi
 ver() { sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$1" 2>/dev/null | head -1; }
 msg=""
 installed=$(ver "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json")

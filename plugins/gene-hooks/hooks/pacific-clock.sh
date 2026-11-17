@@ -67,6 +67,8 @@ if [ "$event" = UserPromptSubmit ]; then
   mcdir="${BASH_SOURCE[0]%/*}"
   [ "$mcdir" = "${BASH_SOURCE[0]}" ] && mcdir=.
   [ -f "$mcdir/model-check.lib.sh" ] && . "$mcdir/model-check.lib.sh" && model_check
+  # A stale skill after a compaction and an account switch since the session's last prompt (1.28.0, #1665)
+  [ -f "$mcdir/session-fresh.lib.sh" ] && . "$mcdir/session-fresh.lib.sh" && session_fresh
 fi
 clock=$(TZ='PST8PDT,M3.2.0,M11.1.0' printf '%(%a %m/%d/%y %I:%M %p)T' -1 2>/dev/null)
 [ -n "$clock" ] || exit 0
@@ -79,5 +81,5 @@ if [ "$event" = PostToolUse ]; then
   printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT), copied, never estimated.%s"}}' "$clock" "${SKILL_CURRENT_TEXT:+ $SKILL_CURRENT_TEXT}"
   exit 0
 fi
-printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT.%s%s"}}' "$clock" "${RELEASE_NOTE:+ $RELEASE_NOTE}" "${MODEL_CHECK_TEXT:+ $MODEL_CHECK_TEXT}"
+printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Pacific clock: %s PT. Every reply you write begins with this stamp, the date and the time (mm/dd/yy h:mm am/pm PT; Gene, 10/17/26). A time you write (a note'"'"'s stamp, a doc, a reply) is copied from this line, never estimated. A stamp from a tool or a machine (GitHub, Cloud Logging, Sentry, Postgres, Pub/Sub) is UTC unless it names a zone, with or without a Z: convert it (PT = UTC-7 PDT / UTC-8 PST) before quoting it. A time from Gene is PT.%s%s%s"}}' "$clock" "${FRESH_TEXT:+ $FRESH_TEXT}" "${RELEASE_NOTE:+ $RELEASE_NOTE}" "${MODEL_CHECK_TEXT:+ $MODEL_CHECK_TEXT}"
 exit 0

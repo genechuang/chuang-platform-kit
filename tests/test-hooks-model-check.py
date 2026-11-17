@@ -274,6 +274,20 @@ def main():
     rc, text, code = lib(os.path.join(d, 'opus.last'), hold=nhold, CLAUDE_MODEL_CHECK_RECORDS=allopus)
     check('a hold the records agree with stands: the short text, no unreadable note, the hold file kept',
           (text.startswith('Model check, held'), 'could not be read' in text, os.path.exists(nhold)), (True, False, True))
+    # 1.28.0 (SMADPickleBot #1665): every recorded session on Opus and no hold on file is a switch whose hold was never
+    # set; the check sets it and switches nothing back (11/16/26 9:11 PM PT: Fable at 92 read as "under 95" and every
+    # session went back to Fable).
+    nohold = os.path.join(d, 'none.hold')
+    rc, text, code = lib(os.path.join(d, 'stick.last'), hold=nohold, CLAUDE_MODEL_CHECK_RECORDS=allopus)
+    check('the positive case for 1.28.0: every session on Opus with no hold sets the hold and switches nothing to Fable, unless the window reset',
+          (rc, 'already on the newest Opus with no hold on file' in text, 'Switch no model to Fable' in text,
+           f'{named} set with' in text, 'reads lower than the last reading' in text, f'{named} note' in text,
+           'Weekly / all models' in text, 'else the newest Fable' in text),
+          ('0', True, True, True, True, True, True, False))
+    check('  the sticky text carries nothing JSON would need escaped, and only ASCII', ('"' in text, '\\' in text, text.isascii()),
+          (False, False, True))
+    rc, text, code = lib(os.path.join(d, 'mixed.last'), hold=nohold, CLAUDE_MODEL_CHECK_RECORDS=recs)
+    check('  a session recorded off Opus with no hold still gets the full check', text.startswith('Model check, due now (the box'), True)
     write(nhold, f'{int(time.time()) + 86400}\n')
     rc, text, code = lib(os.path.join(d, 'unread.last'), hold=nhold)
     check('a hold whose records cannot be read stands, and says it was not checked against them',
