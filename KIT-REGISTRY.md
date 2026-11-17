@@ -390,6 +390,14 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `run(args, env=, resting=, now=, timeout=, names=, project=, access=, popen=, stdin=, out=, err=, cwd=, cli=, zone=, login_fallback=)` | The CLI with the caller's arguments on the first account whose run is not refused for a limit: {'ok', 'returncode', 'account', 'tried'}. A limited run rests the account and the same run starts on the next; a plain failure (any other exit) is the caller's, ret… |
 | `main(argv=)` | (no docstring) |
 
+## `image_keep`: Every image Cloud Run runs carries a `keep-<consumer>` tag in Artifact Registry, so a repository's…
+
+| Name | Purpose |
+|---|---|
+| `tag_name(consumer)` | The keep tag of a service or job: `keep-<name>`, in Artifact Registry's tag characters. |
+| `consumers(project, region, token=, opener=, rest=, sleep=, retry_seconds=)` | {consumer: image} for every image Cloud Run runs in the region: a service's revisions with traffic or a traffic tag (`<service>` for the one serving, `<service>-<tag>` for a tagged one, `<service>-<revision>` for any other serving revision), and each job's te… |
+| `keep(project, region, token=, opener=, rest=, found=, retry_seconds=)` | Each deployed image's keep tag made right: the lines said (each a change or a skip, a refusal a WARNING; never raises). `found` is {consumer: image} when the caller read it already (consumers otherwise, with `retry_seconds`). |
+
 ## `keepalive`: HTTPS calls on kept-alive connections, pooled by host, for a service that calls the same few hosts…
 
 | Name | Purpose |
@@ -471,6 +479,13 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Client.query(hogql, k=)` | A HogQL query ({columns, results}), PostHog's SQL over its events: POST .../query/. |
 | `Client.insight(insight_id, k=)` | One saved insight with its last result, refreshed before it answers (a dashboard tile). |
 | `Client.run(action, args=, k=)` | One named action with its args ({event, after, before, limit} for events, {hogql}, {id}); Refused for an unknown action, a missing arg or PostHog's refusal. |
+
+## `public_text`: Text bound for a public page, a group chat or a public ticket: emails and phone numbers scrubbed (s…
+
+| Name | Purpose |
+|---|---|
+| `redact(s)` | `s` with every email as "[email redacted]" and every phone number as "[phone redacted]". |
+| `findings(s)` | What redact() would hide, as ('email' \| 'phone', text) pairs: for a check that refuses the text instead. |
 
 ## `pubsub`: Pub/Sub without the client library: one REST publish, one token, one envelope, one decoder.
 
@@ -558,6 +573,37 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `Client.search(query, limit=, tok=)` | Issues across the organization matching Sentry's own search, newest first. |
 | `Client.comment(short_id, text, tok=)` | A note on the issue (a triager's finding, a fix's commit). |
 | `Client.run(action, args=, tok=)` | One named action with its args ({id, query, text, commit, next_release, session, postmortem}); Refused for an unknown action, a missing arg or Sentry's refusal. |
+
+## `sentry_blame`: Who and what broke production, for a Sentry alarm: the commit and the code an error summary should…
+
+| Name | Purpose |
+|---|---|
+| `top_frame(event)` | {file, line, function} of the frame that raised: the last in-app source frame of the last exception's stack, else its last source frame; {} when the event has no stack trace or no frame names a source file. |
+| `repo_path(code_url)` | The repository path of a GitHub blob link ('src/app/queue.py'), or ''. |
+| `release_sha(event)` | The commit an event's release names ('1abb2227…', or an app's 'com.example.app@1.0.0+<sha>'), or ''. |
+| `session_of(message)` | The `Session:` trailer of a commit message (the working session that made it), or ''. |
+| `commit_url(repo, sha)` | A commit's page on GitHub, or '' without a repository or a sha. |
+| `code_link(get, project, frame, sha, org)` | The failing line on GitHub, at `sha` when known (else the mapped default branch), '#L<line>' appended; '' when Sentry's code mappings cannot place the file. |
+| `suspects(get, project, event_id, org, repo=)` | Sentry's suspect commits for an event, newest first: [{sha, subject, who, url}], `who` the Session trailer, else the author's name, `url` the commit in `repo` ('' without one); [] when Sentry has none (a release with no commits, no mapping). |
+| `released_by(get, version, sha, org)` | Who shipped a release: the `Session:` trailer of its head commit, else that commit's author, from the commits the deploy sent Sentry; '' when Sentry holds none for it. |
+| `blame(get, issue, event, org, repo=)` | Everything above for one issue: {frame, code_url, release, release_url, released_by, suspects}; each part empty when unknown. The caller may add `line_change` ({sha, subject, who, url}: the commit that last changed the failing line, from git blame), which `li… |
+| `lines(b, link=, esc=)` | The alarm's 'what broke it' lines, Slack links by default (`link` makes them Markdown for an issue body; `esc` escapes the free text, a commit subject or a function name, for the channel): the failing line, the release and who shipped it, and the likely cause… |
+
+## `sentry_rules`: Which Sentry issues are alarms: one definition for every reader of a host's Sentry issues (a webhoo…
+
+| Name | Purpose |
+|---|---|
+| `tags(event)` | An event's tags as {key: value}: the API's [{key, value}] list or a webhook's [[key, value]] pairs. |
+| `is_performance(issue)` | Whether a Sentry issue is one of its performance detectors' (issueCategory `performance`, an issueType starting `performance_`, or one of their titles when an older answer carries neither). |
+| `is_alarm(issue, event=, dev_hosts=)` | (True, '') when the issue is an alarm; (False, why) when it is not. `event` is its latest event, or None/{} when it could not be read. `dev_hosts` are the host's own development host names (whole names, any case), whose pages and processes are a developer's;… |
+
+## `signed_link`: A link that carries its own proof: an HMAC-SHA256 signature of a value under a key, as a query para…
+
+| Name | Purpose |
+|---|---|
+| `signature(key, value, length=)` | The signature of `value` under `key`: HMAC-SHA256, its first `length` hex characters. The value is signed as given: a host that reads an id in any case normalizes it before it signs and before it checks. |
+| `verify(key, value, sig, length=)` | Whether `sig` is `value`'s signature under `key`, compared in constant time; False without a key or a signature. |
+| `signed_url(base, path, key, value, param=, length=)` | `base` + `path` with `?<param>=<signature of value>` ('' without a key). `path` starts with a slash and is already quoted; `base`'s trailing slash is dropped. |
 
 ## `slack`: Slack, one client for every project: a message posted as a bot to a channel, a post redrawn, any ot…
 

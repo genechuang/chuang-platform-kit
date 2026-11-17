@@ -2,6 +2,31 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.34.0 - 2026-11-17 PT
+
+Additive; no host call site changes. Five small standard-library modules out of a host's own core (SMADPickleBot
+#1679), each with its suite; the host keeps a thin module of its own names over each:
+
+- `public_text`: emails and US-shaped phone numbers scrubbed from text bound for a public page, a group or a public
+  ticket (`redact`), or listed for a check that refuses the text (`findings`); `EMAIL_RE`, `PHONE_RE`. Nothing to
+  pass in. It is not `redact`, which scrubs tokens and keys.
+- `signed_link`: `signature(key, value)` (HMAC-SHA256, its first 32 hex characters), `verify(key, value, sig)` in
+  constant time and `signed_url(base, path, key, value)`. The host passes its key, its address and route, and
+  normalizes the value it signs (an id's case) itself.
+- `sentry_rules`: `is_alarm(issue, event, dev_hosts=())`, `is_performance`, `tags`: an alarm is error or fatal (a
+  performance issue at any level), from production (an emulator or simulator run from any environment), not from a
+  developer's machine. The host passes `dev_hosts`, the whole names of its own development hosts; the loopbacks are
+  built in.
+- `sentry_blame`: `blame(get, issue, event, org, repo)` and `lines(b)`, with `top_frame`, `release_sha`,
+  `repo_path`, `session_of`, `code_link`, `suspects`, `released_by` and `commit_url`: the failing line on GitHub at
+  the release, who shipped it and Sentry's suspect commits. The host passes `get` (its own Sentry read, so it holds
+  the token), its Sentry organization's slug and the GitHub repository its commit links point at ('' for none: no
+  commit links, and the release line is its short sha alone).
+- `image_keep`: `consumers(project, region)` and `keep(project, region)`: every image Cloud Run runs (each serving
+  or tagged revision, each job) keeps a `keep-<consumer>` tag in the project's Artifact Registry, a moved tag
+  rewritten and a gone consumer's deleted, over `google_rest`. The host passes its project and region, and
+  `retry_seconds` when the built-in waits before a refused revision read is asked again do not suit it.
+
 ## 0.33.0 - 2026-11-16 PT
 
 Additive; no host call site changes. **A reaction is a WhatsApp message type** (SMADPickleBot #1671: a reaction made

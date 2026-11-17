@@ -70,8 +70,18 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
   web_push           Web Push to a browser on the standard alone (RFC 8291, 8292, 8030): a subscription checked
                      against the push services browsers use, a message encrypted and signed with the server's VAPID
                      key, posted with no redirect followed; gone on a 404 or 410 (the `webpush` extra)
+  public_text        text bound for a public page or ticket: emails and phone numbers scrubbed, or listed for a check
+                     that refuses the text
+  signed_link        a link that carries its own proof: an HMAC-SHA256 signature of a value as a query parameter,
+                     made and checked in constant time
+  sentry_rules       which Sentry issues are alarms: error or fatal, production, not a developer's machine (the
+                     host names its development hosts), performance issues and emulator runs included
+  sentry_blame       what broke it, for a Sentry alarm: the failing line on GitHub, the release and who shipped it,
+                     Sentry's suspect commits; the host passes its Sentry organization and its repository
+  image_keep         every image Cloud Run runs keeps a `keep-<consumer>` tag in Artifact Registry, so a cleanup
+                     policy never deletes a deployed one; the host passes its project and region
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.33.0'
+__version__ = '0.34.0'
