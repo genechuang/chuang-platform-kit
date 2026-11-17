@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.30.0 - 2026-11-16 PT
+
+SMADPickleBot #1652 (Gene, 11/16/26 3:56 PM PT: "I want to platformize what we built, ChuangFinance is our first
+customer"): one host serves more than one board.
+- **`tenant`**, new: `with tenant.using(key, tickets={...}, listeners={...}, scrum={...}):` lays a tenant's wiring over
+  each module's own table for the block (a context variable; a dict merged over the host's, anything left out the
+  host's; an unknown module or name refused before the block runs). `tenant.current()` names the tenant in force.
+- `tickets._HOST`, `listeners._SET` and `scrum._SET` are `tenant.Layered` tables. `configure()` is unchanged and always
+  writes the host's own table. A host that never enters a layer sees no change.
+- **`board.loads(text, fmt)`**, new: a board's config from JSON or TOML text (a host reading another repository's
+  config over GitHub's contents API); `board.load(path)` reads a `.toml` file too.
+
 ## 0.29.0 - 2026-11-16 PT
 
 SMADPickleBot #1600 (11/15 and 11/16/26: the scrum master's "Dock cards stuck Warming" letter went out three times in

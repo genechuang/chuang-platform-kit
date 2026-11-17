@@ -27,6 +27,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from . import signature as _signature
+from . import tenant as _tenant
 from . import tickets as _tickets
 
 
@@ -84,8 +85,8 @@ PREFETCH_CHUNK = 50   # issues a prefetch reads in one aliased query (#1207)
 LINK_MUTATION = 'mutation($i: ID!, $b: ID!) { addBlockedBy(input: {issueId: $i, blockingIssueId: $b}) { issue { number } } }'
 
 
-_SET = {
-    'lead': 'lead',         # the project's lead: the `needs <lead>` line, the Light for their decision, the assignee
+_SET = _tenant.Layered('scrum', {   # a tenant's settings layered over it (tenant.using, 0.30.0)
+    'lead': 'lead',        # the project's lead: the `needs <lead>` line, the Light for their decision, the assignee
     'store': None,          # () -> the record store (get and set on (collection, id)) a sweep keeps its state in
     'mail': None,           # (to, text, subject, sender=) -> the line said; an owner's letter
     'state': 'scrum',       # the record collection of each card's sweep state
@@ -101,7 +102,7 @@ _SET = {
     'start_command': '',    # 0.20.0: the host's command that picks a ticket up (tickets.start), `{n}` its number
     'warm_state': None,     # 0.29.0: (store) -> (alive, note): whether the host's dock warm is running now, and its
                             # last word; None: no such record, the Warming limit alone decides
-}
+})
 
 
 def eta_ask(n) -> str:

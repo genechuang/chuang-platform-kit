@@ -24,9 +24,21 @@ import re
 
 
 def load(path: str) -> dict:
-    """The board's config from a JSON file."""
+    """The board's config from a JSON file, or a TOML one by its `.toml` name (0.30.0)."""
     with open(path, encoding='utf-8') as f:
-        return json.load(f)
+        return loads(f.read(), 'toml' if path.lower().endswith('.toml') else 'json')
+
+
+def loads(text: str, fmt: str = 'json') -> dict:
+    """The board's config from its text, `json` or `toml` (0.30.0, SMADPickleBot #1652: a host serving another
+    repository's board reads that repository's own config file over GitHub's contents API, so the board keeps one
+    source). The same dict either way."""
+    if fmt == 'toml':
+        import tomllib
+        return tomllib.loads(text)
+    if fmt != 'json':
+        raise ValueError(f'board.loads() reads json or toml, not {fmt!r}')
+    return json.loads(text)
 
 
 def stage(role: str, cfg: dict) -> str:

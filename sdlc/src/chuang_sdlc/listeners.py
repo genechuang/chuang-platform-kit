@@ -32,6 +32,7 @@ tickets.NotConfigured. Standard library only.
 """
 from datetime import datetime, timedelta, timezone
 
+from . import tenant as _tenant
 from .tickets import NotConfigured
 
 
@@ -39,7 +40,7 @@ class Retry(Exception):
     """The delivery should come again (the bus's retry): the message says why."""
 
 
-_SET = {
+_SET = _tenant.Layered('listeners', {   # a tenant's settings layered over it (tenant.using, 0.30.0)
     'head': 'listeners',    # every line opens `<head>: ` (after a WARNING: when it is one)
     'claims': '',           # the record collection a listener claims an event's telling in
     'claim_ttl_days': 7,    # a claim's expires_at, this many days after it is taken (the collection's TTL reads it)
@@ -50,7 +51,7 @@ _SET = {
     'loe_record': None,     # (data, store, estimate_of, write_actual) -> lines: the host's LOE record of a commit
     'actual_field': 'Actual',   # the card's field the working time is written to, in hours
     'closer': None,         # (title, newest comment) -> whether an alert closer closed it; None: alerts.closed_by_closer
-}
+})
 
 
 def configure(**settings) -> None:

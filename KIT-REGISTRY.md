@@ -682,7 +682,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 
 | Name | Purpose |
 |---|---|
-| `load(path)` | The board's config from a JSON file. |
+| `load(path)` | The board's config from a JSON file, or a TOML one by its `.toml` name (0.30.0). |
+| `loads(text, fmt=)` | The board's config from its text, `json` or `toml` (0.30.0, SMADPickleBot #1652: a host serving another repository's board reads that repository's own config file over GitHub's contents API, so the board keeps one source). The same dict either way. |
 | `stage(role, cfg)` | A column's name on the board by its role (`stages`). |
 | `named(status, cfg)` | A Status as the board names it now: a role as its column, an old name (`renamed`, `merged`) as its new one, anything else as it is. |
 | `flow(cfg)` | The pipeline's columns in order (`flow`, by role). |
@@ -863,6 +864,15 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `waited(at_iso, now)` | '2d 4h', '5h 12m', '7m': how long since `at_iso`; '' for none or an unreadable one. |
 | `when(iso, zone)` | An instant in people's words in `zone` with its year and zone word ('11/10/26 3:12 PM PT'); '' for none. |
 | `sync(call, cfg, role, keys, facts, marks, render, kept)` | The cards made what `facts` says, in `keys`' order. `call(document, variables)` is one GraphQL call answering its `data` (None writes nothing); `cfg` the board's config (its `id`, `stages` by role and the Status field's `id` and `options`); `render(key, facts… |
+
+## `chuang_sdlc.tenant`: One host serving several boards (SMADPickleBot #1652, 0.30.0): a tenant's wiring laid over each mod…
+
+| Name | Purpose |
+|---|---|
+| `class Layered` | A module's wiring table: the host's values (the dict itself), with the current tenant's layered over them. |
+| `Layered.get(name, default=)` | (no docstring) |
+| `using(key, **modules)` | Run the block as tenant `key`, each module's wiring (`tickets=`, `listeners=`, `scrum=`, dicts of the names that module's configure() takes) laid over the host's. A module or a name the module does not take is refused, before anything runs. |
+| `current()` | The key of the tenant whose layer is in force, '' outside any. |
 
 ## `chuang_sdlc.testing`: A fake GitHub for a host's suites of the ship's pull request (chuang_sdlc.ship_pr) and the shipped…
 

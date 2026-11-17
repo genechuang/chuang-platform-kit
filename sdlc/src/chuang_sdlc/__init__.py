@@ -44,6 +44,9 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   triage     a triage pass on a box: the request over the host's bus, the prompt, the read-only worktree, one pass at a
              time by its lock, the headless run on the subscriptions' accounts (chuang_platform_kit.headless_claude),
              capped and logged; the worktree, prompt file, logs and model the host's
+  tenant     one host serving several boards: a tenant's wiring laid over tickets', listeners' and scrum's own
+             (`using(key, tickets=..., listeners=..., scrum=...)`, a context variable), so no board's wiring leaks
+             into another's call
   testing    the fake GitHub a host's suites of the ship pull request share (ShipPRs, Minimal, ShipFake, ship_fake), and
              of the sweep, the board's reads and the claims (Board, Records, items_page), and the board helpers the
              listeners take (Moves)
@@ -55,4 +58,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.29.0'   # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
+__version__ = '0.30.0'  # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)

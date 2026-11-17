@@ -26,13 +26,14 @@ import sys
 from . import board as B
 from . import loe as L
 from . import signature as _signature
+from . import tenant as _tenant
 
 
 class NotConfigured(RuntimeError):
     """The host has not wired what this call needs (configure)."""
 
 
-_HOST = {
+_HOST = _tenant.Layered('tickets', {   # a tenant's wiring layered over it (tenant.using, 0.30.0)
     'board': None,          # () -> the board's config dict
     'runner': None,         # () -> the GitHub runner (Client)
     'store': None,          # () -> the record store, or None when none is at hand (a suite's offline run)
@@ -53,7 +54,7 @@ _HOST = {
     'ship_run': None,       # () -> the host's record of its latest ship ({state, at, ...}, or None): ship_card_keep's reader
     'ship_under_way': ('requested', 'shipping'),   # the ship record's states of a ship not yet ended (ship_ended)
     'ship_run_name': 'its ship record',   # the ship record as a line names it when it cannot be read
-}
+})
 
 
 def configure(**wiring) -> None:
@@ -70,7 +71,8 @@ def configure(**wiring) -> None:
     for name, value in wiring.items():
         if name not in _HOST:
             raise TypeError(f'configure() takes no {name!r}')
-        _HOST[name] = dict(_HOST[name], **value) if isinstance(_HOST[name], dict) and isinstance(value, dict) else value
+        base = dict.__getitem__(_HOST, name)   # the host's own value, whatever tenant layer is in force
+        _HOST[name] = dict(base, **value) if isinstance(base, dict) and isinstance(value, dict) else value
     for name, value in words.items():
         if name not in WORDS:
             raise TypeError(f'configure(words=) takes no {name!r}')
