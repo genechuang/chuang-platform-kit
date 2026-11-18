@@ -70,7 +70,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" stamp-reply.sh",
-            "timeout": 30
+            "timeout": 5
           },
           {
             "type": "command",
