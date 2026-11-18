@@ -18,6 +18,17 @@ is and only the URL builder encodes it.
   holding `%XX`); SMADPickleBot had 13, none live.
 - `name()` raises ValueError for an id holding `/`, which Firestore would read as a path.
 
+Also additive, out of a host's own modules (SMADPickleBot #1729):
+
+- `slack_post`: one Slack post as an event. `event_data()` is the event's one shape; `deliver(data, token, store,
+  collection, resolve=)` is the token holder's answer: the key claimed once, the channel resolved by the host's
+  `resolve`, the post made (a file with its blocks through `upload()`, else `post_message()`; `chat.update` for
+  `update_of`), its ts kept for the threads and redraws that follow (`kept()`); `Retry` for what a redelivery may
+  fix, an ERROR line for a refusal in `FINAL_ERRORS`. `form_answer()`, `json_answer()` and `share_ts()` are the
+  never-raising Slack calls it leans on. Suite `tests/test-slack-post.py`.
+- `github.label_ladder(tok, repo, number, wanted)`: every label on an issue in one request, then one at a time with a
+  missing label made first; answers what did not land, never raises.
+
 ## 0.35.0 - 2026-11-17 PT
 
 Additive; no host call site changes. `play_developer`: Google Play's Developer API (androidpublisher v3), one client

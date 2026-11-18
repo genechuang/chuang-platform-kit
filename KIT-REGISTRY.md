@@ -228,6 +228,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `close_issue(tok, repo, number, reason=, comment_body=, opener=)` | An issue closed with `reason` (completed or not_planned), a comment posted first when `comment_body` is given (gh's `issue close --comment`). 0.21.0. |
 | `reopen_issue(tok, repo, number, opener=)` | An issue reopened. 0.21.0. |
 | `add_labels(tok, repo, number, labels, opener=)` | `labels` added to an issue (POST .../labels); the issue's label names after. A label the repository lacks is GitHub's own call (gh's `--add-label` refused one before asking), so a caller that wants its color and description runs create_label first, or on a re… |
+| `label_ladder(tok, repo, number, wanted, opener=, add=, create=)` | Every label of `wanted` on an issue, a missing one made first: `wanted` is (name, color, description) triples, a blank color meaning a label the repository is known to hold. One request for all of them (one POST a label is a burst GitHub's secondary limit and… |
 | `remove_label(tok, repo, number, label, opener=)` | One label taken off an issue; True, or False when the issue did not carry it (GitHub's 404), which is the state the caller wanted, so never an error. 0.21.0. |
 | `create_label(tok, repo, name, color=, description=, opener=)` | A repository label made, or an existing one of that name given this color and description (gh's `label create --force`); the label's name. `color` is six hex digits with no '#'. 0.21.0. |
 | `add_assignees(tok, repo, number, logins, opener=)` | `logins` assigned to an issue; the issue's assignee logins after. 0.21.0. |
@@ -642,6 +643,21 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `post(token, channel, text, blocks=, thread_ts=, unfurl_links=, unfurl_media=, opener=, timeout=)` | One message to `channel` (an id, or a name the bot can resolve) as the bot: `text` the notification's own words and the message when there are no `blocks`; `blocks` (Block Kit) draw it instead; `thread_ts` makes it a reply under that post. Links are not unfur… |
 | `update(token, channel, ts, text, blocks=, opener=, timeout=)` | The bot's own post at `ts` in `channel` redrawn with `text` and `blocks` (the whole message is replaced, so a post with blocks is sent its blocks again). Slack's answer; SlackError as call(). |
 | `webhook_post(url, payload, opener=, timeout=)` | The second door: `payload` ({'text', 'blocks', …}) to an incoming webhook URL, which answers `ok` as text and needs no token. Nothing on success; SlackError on a refusal (`status` and the webhook's word, `invalid_payload`, `no_service`) or no answer; the URL,… |
+
+## `slack_post`: One Slack post as an event: a producer that holds no Slack token publishes the post's data on its o…
+
+| Name | Purpose |
+|---|---|
+| `class Retry` | The post was not made and a redelivery may make it: Slack unreachable or refusing for the moment, the store out of reach. The listener answers its bus's retry status. |
+| `class Final` | A refusal no redelivery would change; its line is the ERROR the host's alarm reads. |
+| `event_data(key, channel, text, blocks=, thread_of=, update_of=, file=, who=)` | The event's data, the one copy of its shape. `file` is {name, content_type, data: bytes, title?}, encoded here; ValueError when it is over FILE_MAX. |
+| `form_answer(method, token, params, opener=)` | A Web API call that takes form fields (`files.getUploadURLExternal`, `files.info`) through slack.form, as an answer that never raises: Slack's own, or {'ok': False, 'error': …} when Slack refuses or cannot be reached. |
+| `json_answer(method, token, payload, opener=)` | One Web API call as JSON through slack.call; the same answer shape as form_answer. |
+| `share_ts(answer, channel)` | The share message's `ts` for `channel` in a Slack file answer (files.completeUploadExternal, files.info: the file's `shares`, public or private, by channel, each share with its `ts`); '' when the answer has none. |
+| `upload(token, name, data, channel, thread_ts=, title=, json_=, form_=, opener=, blocks=)` | One file into `channel` (under `thread_ts` when given) by Slack's three-step upload (`files:write`): the upload URL for the name and size, the bytes POSTed to it, then the upload completed into the channel. The last answer, or the first refusal ({'ok': False,… |
+| `post_message(token, channel, text, blocks, thread_ts)` | chat.postMessage through slack.post, the text and blocks redacted; {'ok': False, 'error': …} on a refusal. |
+| `kept(store, collection, key, token=, info=)` | The post kept under `key` (its channel and ts). A post kept with no ts but its file's id (Slack had not filled the share when it was posted) is read once more from files.info now, a phase later, and the ts kept once it has come. The store out of reach is a Re… |
+| `deliver(data, token, store, collection, resolve=, now=, upload=, post=, update=, info=, sleep=)` | The listener's answer to one post event: the lines it logs. Claims <collection>/<key> first (a repeated delivery is acknowledged with nothing posted), resolves the channel (`resolve(channel) -> id`, the host's roles; the value as given without one) and the th… |
 
 ## `timecheck`: The scanner behind "in code, every calendar day is a day in the kit's zone" (Gene, 2026-10-07 PT).
 

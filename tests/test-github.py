@@ -403,5 +403,34 @@ check("0.19.1: a binary run's bytes stderr naming a rate limit spends core as a 
 GH._now = time.time
 GH.reset_limits()
 
+# ------------------------------------------------------------------ the label ladder (0.36.0)
+ladder = []
+
+
+def _add(tok, repo, number, labels, opener=None):
+    ladder.append(('add', list(labels)))
+    if len(labels) > 1 and 'new' in labels:
+        raise GH.GitHubError(422, 'Validation Failed')
+    if labels == ['new'] and ('create', 'new') not in ladder:
+        raise GH.GitHubError(422, 'Validation Failed')
+    if labels == ['locked']:
+        raise GH.GitHubError(403, 'Forbidden')
+
+
+def _create(tok, repo, name, color, desc, opener=None):
+    ladder.append(('create', name))
+
+
+WANTED = (('feedback', '', ''), ('new', 'FBCA04', 'a new label'), ('locked', '', ''))
+one = GH.label_ladder('tok', REPO, 7, WANTED[:1], add=_add, create=_create)
+first_calls, ladder[:] = list(ladder), []
+missed = GH.label_ladder('tok', REPO, 7, WANTED, add=_add, create=_create)
+check('0.36.0 label_ladder: every label in one request; refused, one at a time, a missing one made then added; what still '
+      'did not land is answered, never raised',
+      (one, first_calls, missed, ladder, GH.label_ladder('tok', REPO, 7, ())),
+      ([], [('add', ['feedback'])], [('locked', 'GitHubError')],
+       [('add', ['feedback', 'new', 'locked']), ('add', ['feedback']), ('add', ['new']), ('create', 'new'), ('add', ['new']),
+        ('add', ['locked']), ('add', ['locked'])], []))
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)

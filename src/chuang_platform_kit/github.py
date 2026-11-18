@@ -356,6 +356,37 @@ def add_labels(tok, repo, number, labels, opener=None) -> list:
     return [str(lb.get('name', '')) for lb in (got if isinstance(got, list) else []) if isinstance(lb, dict)]
 
 
+def label_ladder(tok, repo, number, wanted, opener=None, add=None, create=None) -> list:
+    """Every label of `wanted` on an issue, a missing one made first: `wanted` is (name, color, description) triples,
+    a blank color meaning a label the repository is known to hold. One request for all of them (one POST a label is a
+    burst GitHub's secondary limit and an error tracker's "consecutive HTTP" both notice); when that is refused,
+    which a single label the repository lacks does to the whole request, one at a time, and a label still refused is
+    created (when it has a color) and added again. The labels that did not land, [(name, the error's type name)];
+    [] when all did. Never raises: the issue exists, and a label is the caller's WARNING. `add` and `create` are the
+    seams (add_labels and create_label's own signatures). 0.36.0."""
+    add, create = add or add_labels, create or create_label
+    wanted = [(str(n), str(c or ''), str(d or '')) for n, c, d in wanted]
+    if not wanted:
+        return []
+    try:
+        add(tok, repo, number, [n for n, _c, _d in wanted], opener=opener)
+        return []
+    except Exception:   # noqa: BLE001 - a missing label refuses the whole request: the one-at-a-time path below
+        pass
+    missed = []
+    for name, color, desc in wanted:
+        try:
+            add(tok, repo, number, [name], opener=opener)
+        except Exception:   # noqa: BLE001 - the repository lacks the label: made, then added
+            try:
+                if color:
+                    create(tok, repo, name, color, desc, opener=opener)
+                add(tok, repo, number, [name], opener=opener)
+            except Exception as e:   # noqa: BLE001
+                missed.append((name, type(e).__name__))
+    return missed
+
+
 def remove_label(tok, repo, number, label, opener=None) -> bool:
     """One label taken off an issue; True, or False when the issue did not carry it (GitHub's 404), which is the state
     the caller wanted, so never an error. 0.21.0."""
