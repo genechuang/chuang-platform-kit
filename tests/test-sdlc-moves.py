@@ -4,15 +4,15 @@ Pinned (the positive case first): one item is read and its fields answered; then
 the writes, the fixed cards, the put-backs, an issue's card, an alert's card, a closed ticket's card and its letters;
 and that the host's names are read at call time, a missing one refused, and no project's name is a default.
 
-Run:  python -m pytest sdlc/tests/test_moves.py -q
+Run:  python tests/test-sdlc-moves.py      (prints PASS/FAIL per case and `N failure(s)`)
 """
 import json
 import os
+import re
 import sys
+import traceback
 
-import pytest
-
-ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path.insert(0, os.path.join(ROOT, 'src'))
 sys.path.insert(0, os.path.join(ROOT, 'sdlc', 'src'))
 
@@ -104,17 +104,30 @@ def moved(n, was='Backlog', by='someone', field='Status'):
     return {'item': n['id'], 'node': n, 'from': was, 'by': by, 'field_name': field}
 
 
-@pytest.fixture(autouse=True)
-def wired():
-    """The host's names, set for each case and cleared after it."""
+class raises:
+    """`with raises(Error, match='words')`: the block must raise Error whose text holds the pattern."""
+
+    def __init__(self, kind, match=None):
+        self.kind, self.match = kind, match
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, error, tb):
+        assert kind is not None and issubclass(kind, self.kind), f'{self.kind.__name__} was not raised'
+        assert not self.match or re.search(self.match, str(error)), f'{error!r} does not say {self.match!r}'
+        return True
+
+
+def wired() -> dict:
+    """The host's names, set for each case; the runner puts back what it returns."""
     before = dict(M._SET)
     M.configure(board=lambda: CFG, people={'captain': 'Cap', 'lead': 'Lee'},
                 labels={'feedback': 'voice', 'admin_ask': 'from:boss', 'change_order': 'order', 'blocked': 'stuck'},
                 senders={'board': 'The board', 'scrum': 'The scrum master'},
                 collections={'starts': 'starts', 'put_backs': 'putbacks', 'board_moves': 'moves', 'closed_claims': 'claims'},
                 alert_kind='Defect')
-    yield
-    dict.update(M._SET, before)
+    return before
 
 
 def aliases(opener, at=-1):
@@ -140,9 +153,9 @@ def test_an_item_is_read_and_its_fields_answered():
 
 def test_a_refusal_is_a_runtime_error_with_its_words():
     """No token, and GitHub's GraphQL error, each raise RuntimeError saying which."""
-    with pytest.raises(RuntimeError, match='no GitHub token'):
+    with raises(RuntimeError, match='no GitHub token'):
         M.read_item('IT_7', '', Opener())
-    with pytest.raises(RuntimeError, match='Could not resolve'):
+    with raises(RuntimeError, match='Could not resolve'):
         M.read_item('IT_7', 'tok', Opener(errors='Could not resolve to a node'))
 
 
@@ -335,7 +348,7 @@ def test_a_closed_tickets_card_is_read_archived_restored_and_shipped():
     M.to_unplanned('IT_7', 'tok', opener=opener)
     assert opener.calls[-1][1] == {'p': 'PVT_1', 'i': 'IT_7'}
     assert M.restore(7, 'tok', opener=opener) == 'IT_7' and M.restore(8, 'tok', opener=opener) == ''
-    with pytest.raises(RuntimeError, match='archived no item'):
+    with raises(RuntimeError, match='archived no item'):
         M.to_unplanned('IT_7', 'tok', opener=Opener())
     M.to_shipped('IT_7', 'tok', opener=opener)
     assert aliases(opener) == {'F_status': {'singleSelectOptionId': 'o_ship'}, 'F_light': {'singleSelectOptionId': 'l_shipped'}}
@@ -367,13 +380,13 @@ def test_names_are_read_at_call_time_and_a_missing_one_is_refused():
     assert (M.CAPTAIN, M.LEAD, M.STARTED_MINUTES, M.ALERT_KIND, M.CHANGE_ORDER_LABEL) == ('Cap', 'Lee', 20, 'Defect', 'order')
     M.configure(senders={'board': 'Another board'}, collections={})
     assert M.SENDER == 'Another board'
-    with pytest.raises(tickets.NotConfigured):
+    with raises(tickets.NotConfigured):
         M.SCRUM_SENDER
-    with pytest.raises(tickets.NotConfigured):
+    with raises(tickets.NotConfigured):
         M.pipeline_marked(Store())(7)
-    with pytest.raises(TypeError):
+    with raises(TypeError):
         M.configure(nonsense=1)
-    with pytest.raises(AttributeError):
+    with raises(AttributeError):
         M.NO_SUCH_NAME
 
 
@@ -396,3 +409,37 @@ def test_unwired_the_board_and_people_are_tickets_own_and_no_project_is_a_defaul
     for name in ('SMAD', 'ickle', 'Gene', 'Snow White', 'Black Widow', 'Sprint board', 'ticket_starts', 'board_putbacks',
                  'ci_releases', 'change-order', 'from:admin'):
         assert name not in defaults
+
+
+def test_a_tenant_lays_its_own_names_over_the_hosts():
+    """tenant.using(moves=): a tenant's labels, people and words hold inside its block alone; a name moves does not take is refused."""
+    card = node(labels=('ask',))
+    with tenant.using('other', moves={'labels': {'feedback': 'ask'}, 'people': {'captain': 'Other Cap'},
+                                      'words': {'board_name': 'their board'}}):
+        inside = (M.is_feedback(card), M.captain(), M.word('board_name'), M.label('blocked'))
+    after = (M.is_feedback(card), M.captain(), M.word('board_name'))
+    assert inside == (True, 'Other Cap', 'their board', 'stuck')
+    assert after == (False, 'Cap', 'the board')
+    with raises(TypeError, match='takes no'):
+        with tenant.using('other', moves={'nonsense': 1}):
+            pass
+
+
+if __name__ == '__main__':
+    FAILURES = []
+    for name, fn in list(globals().items()):   # in the file's order: the positive case first
+        if not (name.startswith('test_') and callable(fn)):
+            continue
+        label = (fn.__doc__ or name).strip().splitlines()[0]
+        before = wired()
+        try:
+            fn()
+            print(f'  PASS  {label}')
+        except Exception:   # an assertion or the case's own error: the case failed, the rest still run
+            FAILURES.append(label)
+            print(f'  FAIL  {label}')
+            traceback.print_exc(file=sys.stdout)
+        finally:
+            dict.update(M._SET, before)
+    print(f'{len(FAILURES)} failure(s)')
+    sys.exit(1 if FAILURES else 0)

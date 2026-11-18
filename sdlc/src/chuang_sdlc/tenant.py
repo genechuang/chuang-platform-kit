@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 _LAYER = contextvars.ContextVar('chuang_sdlc_tenant', default=None)
 _TABLES = {}   # module name -> its Layered table, registered when the module is imported
-MODULES = ('tickets', 'listeners', 'scrum')
+MODULES = ('tickets', 'listeners', 'scrum', 'moves')
 
 
 class Layered(dict):
@@ -53,8 +53,8 @@ class Layered(dict):
 
 @contextmanager
 def using(key: str, **modules):
-    """Run the block as tenant `key`, each module's wiring (`tickets=`, `listeners=`, `scrum=`, dicts of the names that
-    module's configure() takes) laid over the host's. A module or a name the module does not take is refused, before
+    """Run the block as tenant `key`, each module's wiring (`tickets=`, `listeners=`, `scrum=`, `moves=`, dicts of the
+    names that module's configure() takes) laid over the host's. A module or a name the module does not take is refused, before
     anything runs."""
     if not key:
         raise ValueError('tenant.using() needs the tenant key')
