@@ -96,6 +96,40 @@ def _claim(now) -> dict:
     return {'at': now, 'expires_at': now + timedelta(days=_SET['claim_ttl_days'])}
 
 
+# ------------------------------------------------------------------ an event's handlers
+def _lines(got) -> list:
+    return [x for x in got if x] if isinstance(got, (list, tuple)) else ([got] if got else [])
+
+
+def collect(steps, tail=None) -> list:
+    """Every listener of one delivery, run in order: each step's line or lines kept, and a step that raises the retry
+    exception kept as its line while the others still run (each is claimed once, so a redelivery repeats none that
+    finished). `tail()`'s lines, a step that never asks for a redelivery, are added after. When any step asked, the
+    retry exception is raised with every line as its message; else the lines."""
+    lines, again = [], False
+    for step in steps:
+        try:
+            lines += _lines(step())
+        except (Retry, _SET['retry'] or Retry) as e:
+            lines.append(str(e))
+            again = True
+    if tail is not None:
+        lines += _lines(tail())
+    if again:
+        raise _retry('\n'.join(lines))
+    return lines
+
+
+def dispatch(kind, table: dict, other=None) -> list:
+    """An event's lines by its type: the handler `table` names for `kind`, called with no argument (a host's table of
+    lambdas over its own listeners, read at call time), its answer as a list; `other(kind)` for a type the table names
+    none of, [] when the host passed none."""
+    run = (table or {}).get(kind)
+    if run is not None:
+        return _lines(run())
+    return _lines(other(kind)) if other is not None else []
+
+
 # ------------------------------------------------------------------ once, here, else the job
 # The shape a host's own listeners repeat (SMADPickleBot #1683): claim the event's work once, do it in the function
 # when there is something to do there, else start the job that does it, and ask for the event again when the job would

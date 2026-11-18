@@ -3,6 +3,16 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.36.0 - 2026-11-17 PT
+
+SMADPickleBot #1683, step 2: two functions added to `chuang_sdlc.listeners`; nothing existing changed.
+- **`collect(steps, tail=None)`**: every listener of one delivery, run in order. Each step's line or lines are kept; a
+  step that raises the retry exception is kept as its line while the others still run; `tail()`'s lines are added
+  after; and when any step asked, the retry exception is raised once with every line as its message.
+- **`dispatch(kind, table, other=None)`**: an event's lines by its type, from a host's table of handlers read at call
+  time; `other(kind)` for a type the table names none of.
+- Host call sites: none must change.
+
 ## 0.35.0 - 2026-11-17 PT
 
 SMADPickleBot #1683, step 1: three functions added to `chuang_sdlc.listeners`; nothing existing changed.

@@ -240,6 +240,38 @@ check('with no work here, the start alone: its answer, and the next delivery cla
       (L.start_or_retry(store, 'ship-abc', lambda: {'execution': 'ex-2'}, 'the notes job did not start'),
        L.once(store, 'ship-abc', {}, NOW), L.execution({}), L.execution({'execution': 'ex-3'})),
       ({'execution': 'ex-2'}, True, 'an execution', 'ex-3'))
+
+print("an event's handlers")
+ran = []
+
+
+def step(name, got=None, again=False):
+    def run():
+        ran.append(name)
+        if again:
+            raise Again(f'WARNING: events: {name} wants it again')
+        return got
+    return run
+
+
+check('every step runs in order; a line, a list of lines and nothing are each kept as they are',
+      (L.collect([step('a', 'events: a'), step('b', ['events: b1', '', 'events: b2']), step('c')],
+                 tail=step('t', ['events: tail'])), ran),
+      (['events: a', 'events: b1', 'events: b2', 'events: tail'], ['a', 'b', 'c', 't']))
+ran.clear()
+try:
+    L.collect([step('a', 'events: a'), step('b', again=True), step('c', 'events: c')], tail=step('t', 'events: tail'))
+    check('a step that asks again raises once every step ran', 'no raise', 'Again')
+except Again as e:
+    check('a step that asks again: the others and the tail still run, then one retry with every line',
+          (str(e), ran), ('events: a\nWARNING: events: b wants it again\nevents: c\nevents: tail', ['a', 'b', 'c', 't']))
+table = {'card.moved': lambda: ['events: moved'], 'note': lambda: 'events: noted', 'quiet': lambda: None}
+check("an event's type runs its handler, a line or lines; an unknown type is the host's other, or nothing",
+      (L.dispatch('card.moved', table), L.dispatch('note', table), L.dispatch('quiet', table),
+       L.dispatch('odd', table, lambda kind: f'events: {kind}; nothing to do'), L.dispatch('odd', table),
+       L.dispatch(None, table, lambda kind: f"events: {kind or 'an unreadable event'}; nothing to do")),
+      (['events: moved'], ['events: noted'], [], ['events: odd; nothing to do'], [],
+       ['events: an unreadable event; nothing to do']))
 L.configure(retry=None)
 
 L.configure(moves=Moves(), claims='')
