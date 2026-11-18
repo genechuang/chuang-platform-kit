@@ -146,8 +146,12 @@ def test_haiku_none_or_failure_lets_it_go():
     reply = 'Building passed next to the warm.'
     for label, run in [('NONE', Ran('NONE')), ('exit 1', Ran('PROMISE: x', code=1)), ('odd answer', Ran('maybe?')),
                        ('timeout', Ran(boom=TimeoutError())), ('no claude', Ran(boom=FileNotFoundError())),
-                       ('a wait Haiku called a promise', Ran("PROMISE: The profile follows once the smoke lands; I'll report it then."))]:
+                       ('PROMISE: NONE (1.32.1)', Ran('PROMISE: NONE')), ('PROMISE: none.', Ran('PROMISE: none.')),
+                       ('a sentence not in the reply (1.32.1)', Ran('PROMISE: I will start #12 now.'))]:
         check(f'let go: {label}', judged(reply, run), None)
+    wait = "Building passed next to the warm. The profile follows once the smoke lands; I'll report it then."
+    check('let go: a wait Haiku called a promise',
+          judged(wait, Ran("PROMISE: The profile follows once the smoke lands; I'll report it then.")), None)
 
 
 def test_no_candidate_word_calls_no_model():

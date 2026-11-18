@@ -107,9 +107,23 @@ def judge(text: str, run=None) -> str:
     line = next((ln.strip() for ln in (r.stdout or '').splitlines() if ln.strip()), '')
     m = re.match(r'PROMISE:\s*(.+)', line, re.I)
     said = m.group(1).strip().strip('"')[:200] if m else ''
+    # 'PROMISE: NONE' (or none, n/a, an empty quote) is Haiku saying no in the yes shape (1.32.1, 11/18/26: three
+    # replies held quoting "NONE"); and a sentence it names must be in the text, never one it made up.
+    if re.fullmatch(r'(?:none|n/?a|no|nothing|-+)?\W*', said, re.I) or not _in_text(said, text):
+        return ''
     # The model's yes is narrowed by the regex's own conditions: a sentence that names what it waits on ("once the smoke
     # lands") is a wait, whatever Haiku read (the live check of 11/18/26 7:42 AM PT held exactly that one).
     return '' if said and WAITS.search(said) else said
+
+
+def _in_text(said: str, text: str) -> bool:
+    """Whether the judge's sentence is in the text it read: its words, lowercased with punctuation and spacing
+    ignored, are a run of the text's (the model may drop a quote mark or a trailing period)."""
+    def words(s):
+        return re.findall(r"[a-z0-9#']+", (s or '').lower())
+    want, have = words(said), words(text)
+    n = len(want)
+    return bool(want) and any(have[i:i + n] == want for i in range(len(have) - n + 1))
 
 
 # CONDITION less a bare "after": "right after this" is a promise, "after #1794 ships" a wait.
