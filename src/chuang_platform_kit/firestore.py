@@ -118,6 +118,12 @@ def decode(value: dict):
     return v   # stringValue, timestampValue, referenceValue, geoPointValue
 
 
+def stored_id(doc_id) -> str:
+    """The id a document is stored under: the id itself, with each '/' as '%2F' (Firestore reads a '/' as a path, so
+    an id cannot hold one). run_query hands the id back unquoted, so a caller sees the id it gave. 0.36.1."""
+    return str(doc_id).replace('/', '%2F')
+
+
 def to_fields(data: dict) -> dict:
     """A plain dict as a document body's `fields` (encode() on each value)."""
     return {str(k): encode(v) for k, v in (data or {}).items()}
@@ -192,12 +198,10 @@ class Client:
         it is: this is the name a request BODY carries (a commit's write, batchGet), where Firestore takes it
         literally. Only a URL encodes the id (`_doc_url`). Until 0.36.0 this encoded it, so set(), merge(), the claims
         and batch_get() addressed 'a%40b.com' while get() and delete() addressed 'a@b.com': a set could not be read
-        back and a claim on such an id could not be released. ValueError for an id holding '/', which Firestore
-        reads as a path."""
-        doc_id = str(doc_id)
-        if '/' in doc_id:
-            raise ValueError("a Firestore document id cannot hold '/'")
-        return f'{self.root}/{collection.strip("/")}/{doc_id}'
+        back and a claim on such an id could not be released. A '/' is the one character an id cannot hold (Firestore
+        reads it as a path), so it alone is stored as '%2F', as it always was (`stored_id`): hosts key locks by dates
+        like 'name-10/06'."""
+        return f'{self.root}/{collection.strip("/")}/{stored_id(doc_id)}'
 
     def _full(self, name: str) -> str:
         return name if name.startswith('projects/') else f'{self.root}/{name.lstrip("/")}'
@@ -257,8 +261,9 @@ class Client:
             self.sleep(waits.pop(0))
 
     def _doc_url(self, collection: str, doc_id: str) -> str:
-        """The document's URL: the one place its id is percent-encoded."""
-        return f'{API}/{self.root}/{collection.strip("/")}/{urllib.parse.quote(str(doc_id), safe="")}'
+        """The document's URL: the one place its stored id is percent-encoded (so a stored '%2F' travels as '%252F'
+        and Firestore decodes it back to the id set() wrote)."""
+        return f'{API}/{self.root}/{collection.strip("/")}/{urllib.parse.quote(stored_id(doc_id), safe="")}'
 
     # -- documents
     def get(self, collection: str, doc_id: str, raw: bool = False):

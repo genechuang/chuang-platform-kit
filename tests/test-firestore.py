@@ -140,12 +140,13 @@ check("  merge writes that document, not a second one", list(kept), [f'{ROOTNAME
 check("  only the URL encodes the id", '%40' in kseen[1][1] and '%40' not in json.dumps(kseen[0][2]), True)
 kc.delete('c', ODD)
 check("  and delete removes what set wrote", kc.get('c', ODD), None)
-try:
-    kc.name('c', 'a/b')
-    slash = 'no error'
-except ValueError as e:
-    slash = str(e)
-check("an id holding '/' is refused: Firestore would read it as a path", slash, "a Firestore document id cannot hold '/'")
+# 0.36.1: a '/' is stored as '%2F', as it always was (a host's lock keyed 'name-10/06'), and now reads back too
+kc.set('locks', 'name-10/06', {'v': 3})
+check("an id holding '/' is stored with it as %2F, in the collection itself", list(kept), [f'{ROOTNAME}/locks/name-10%2F06'])
+check("  read back by get, which the URL's double encoding reaches", kc.get('locks', 'name-10/06'), {'v': 3})
+check("  the URL carries %252F, never a bare slash", kseen[-1][1].endswith('/locks/name-10%252F06'), True)
+kc.delete('locks', 'name-10/06')
+check("  and delete releases it", (kc.get('locks', 'name-10/06'), list(kept)), (None, []))
 
 # ------------------------------------------------------------------ documents
 c, seen = db(http_error(404, 'NOT_FOUND'))
@@ -154,7 +155,7 @@ c, seen = db({'name': 'n', 'fields': {}, 'updateTime': '2026-11-06T08:00:00Z'})
 check("get raw: Firestore's document with its updateTime", c.get('a', 'b', raw=True)['updateTime'], '2026-11-06T08:00:00Z')
 c, seen = db({})
 c.get('a', 'x/y z')
-check("an id is percent-encoded in the URL", seen[0][1], f'{API}/a/x%2Fy%20z')
+check("an id is percent-encoded in the URL, its '/' twice: stored as %2F, then encoded (0.36.1)", seen[0][1], f'{API}/a/x%252Fy%20z')
 
 c, seen = db({'name': f'{ROOTNAME}/c/d'})
 check("create: True when this call made it", c.create('c', 'd', {'at': NOW}), True)

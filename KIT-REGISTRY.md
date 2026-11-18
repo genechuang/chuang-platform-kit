@@ -159,6 +159,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `class Conflict` | A commit's precondition did not hold (the document exists for a create-only write, or it changed since the read an update named): Firestore's ALREADY_EXISTS, FAILED_PRECONDITION or ABORTED. |
 | `encode(value)` | One Python value as a Firestore REST value, decode's inverse: None, bool, int, float, str, bytes, a datetime (a timestampValue in UTC; a naive one is read as UTC), lists or tuples and dicts of them; anything else as its str(). |
 | `decode(value)` | One Firestore REST value as plain Python: integers and doubles as numbers, arrays and maps in kind, null as None, bytes as bytes, a timestamp, a reference or a geo point as Firestore wrote it (text, or a {latitude, longitude} dict). None for anything that is… |
+| `stored_id(doc_id)` | The id a document is stored under: the id itself, with each '/' as '%2F' (Firestore reads a '/' as a path, so an id cannot hold one). run_query hands the id back unquoted, so a caller sees the id it gave. 0.36.1. |
 | `to_fields(data)` | A plain dict as a document body's `fields` (encode() on each value). |
 | `from_fields(doc)` | A document's fields as a plain dict (decode() on each): `doc` is the document ({'fields': ...}) or its `fields` map itself (told apart by the document's own keys, so pass the document when its only field is named `fields`). |
 | `instant(value)` | An aware UTC datetime from a decoded timestamp (RFC 3339 text), a number of epoch seconds or a datetime (naive read as UTC); None for anything else. |

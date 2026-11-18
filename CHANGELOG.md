@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.36.1 - 2026-11-18 PT
+
+0.36.0's `firestore.Client.name()` refused an id holding `/`; a host keys locks by dates (`name-10/06`), found by
+its own suites before any deploy. A `/` is again stored as `%2F`, as every release before 0.36.0 did
+(`firestore.stored_id`), and the URL now encodes that stored id, so `get()` and `delete()` reach the document `set()`
+and a claim wrote: a lock on such a key can be released, which it could not before. No host should pin 0.36.0.
+
 ## 0.36.0 - 2026-11-18 PT
 
 A fix that changes where a write lands for one kind of document id; no signature changes. `firestore.Client.name()`
