@@ -130,7 +130,11 @@ case "$found" in *"another session's working copy"*|*"another project:"*) others
 said=""
 [ -f "$said_file" ] && IFS= read -r said <"$said_file" 2>/dev/null
 [ -n "$found" ] || exit 0
-[ "$event" = "UserPromptSubmit" ] && [ "$found" = "$said" ] && exit 0
+# Compared without the counts (1.31.0, SMADPickleBot #1807: in one long session it spoke 429 times, about 58,000
+# tokens, mostly because another session's count went 1 → 2 → 1 as it committed and pushed): a prompt hears it again
+# only when a repo, branch or owner joins or leaves the list.
+key="${found//[0-9]/}"
+[ "$event" = "UserPromptSubmit" ] && [ "$key" = "${said//[0-9]/}" ] && exit 0
 printf '%s\n' "$found" >"$said_file" 2>/dev/null
 
 # Only your own commits are yours to push (Gene, 2026-10-13): the session a commit's
@@ -141,6 +145,8 @@ advice="Commits are pushed only by the session their Session trailer names. If a
 if [ "$others" = 1 ]; then
   advice="$advice A worktree of another repo, or another project, is its owner's to push; message that session if it should know."
 fi
+# A prompt gets the one-line form (1.31.0, #1807): the full rule came at the session's start and lives in claude-shared.
+[ "$event" = "UserPromptSubmit" ] && advice="Only the session a commit's Session trailer names pushes it (claude-shared, Aggregate and save); don't mention them unless the user asks."
 # Repo and branch names only, so nothing here needs JSON escaping beyond quotes.
 found="${found//\"/\'}"
 printf '{"systemMessage":"Unpushed commits: %s","hookSpecificOutput":{"hookEventName":"%s","additionalContext":"Unpushed commits in sibling repos: %s. %s"}}' \

@@ -92,17 +92,19 @@ def main():
     with open(cache, encoding='utf-8') as f:
         found = f.read().strip()
     check('  with the new count', '2 unpushed, by Snow White' in found, True)
-    check('  and the next prompt says it', '2 unpushed' in said(fire('UserPromptSubmit', a, tmp)), True)
+    # 1.31.0 (#1807): a count that only moved is not news on a prompt; the session start still says it.
+    check('  and the next prompt stays quiet: only the count moved', fire('UserPromptSubmit', a, tmp), '')
     check('  once', fire('UserPromptSubmit', a, tmp), '')
 
     # The scanner mode itself, and the inline switch.
     commit(a, 'third\n\nSession: Snow White')
     check('  scanner mode writes the cache and says nothing', (fire('UserPromptSubmit', a, tmp, CLAUDE_UNPUSHED_SCAN='1'),
                                                                '3 unpushed' in open(cache, encoding='utf-8').read()), ('', True))
-    check('  the prompt then speaks the scanner\'s count', '3 unpushed' in said(fire('UserPromptSubmit', a, tmp)), True)
+    check('  the prompt reads the scanner\'s cache, a count change alone unsaid', fire('UserPromptSubmit', a, tmp), '')
     commit(a, 'fourth\n\nSession: Snow White')
     os.utime(cache, (old, old))
-    check('  CLAUDE_UNPUSHED_INLINE looks on the prompt itself', '4 unpushed' in said(fire('UserPromptSubmit', a, tmp, CLAUDE_UNPUSHED_INLINE='1')), True)
+    check('  CLAUDE_UNPUSHED_INLINE looks on the prompt itself (the cache holds the new count, unsaid)',
+          (fire('UserPromptSubmit', a, tmp, CLAUDE_UNPUSHED_INLINE='1'), '4 unpushed' in open(cache, encoding='utf-8').read()), ('', True))
 
     # Another project's held commit, with no Session trailer, is named as its own sessions' to push.
     commit(b, 'theirs')
