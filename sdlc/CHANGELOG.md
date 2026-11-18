@@ -3,6 +3,22 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.34.0 - 2026-11-17 PT
+
+SMADPickleBot #1682: a new module and one more name in the tenant layer; nothing changed in any other.
+- **`chuang_sdlc.moves`**: a Project board's item helpers, the interface `listeners` and `webhooks` ask of a host's
+  board helpers (`listeners.configure(moves=chuang_sdlc.moves)`): one item read by its id, its fields written in one
+  request, the fixed cards (the ship card, the label cards), the put-backs of a move that breaks a board's rules, a
+  landed issue's card, an alert's card, a closed ticket's card and the letters each sends. A host says its names once
+  with `moves.configure(board=, people=, labels=, senders=, collections=, started_minutes=, alert_kind=, words=,
+  github=)`, each read when a call needs it; a board left out is `tickets`' own, so a tenant's layer over tickets
+  reaches here; a rule whose label the host named none of is not applied, and a guarded column the board has none of
+  is skipped. `to_dock`'s worker threads carry the caller's context, so a tenant's layer holds in them.
+- **`tenant.using(moves=)`**: `tenant.MODULES` takes `moves`, so a tenant lays its own people, labels and words over
+  the host's.
+- Host call sites: none must change. A host whose own module held these helpers passes its names to `configure` and
+  reads the same function names from `chuang_sdlc.moves`.
+
 ## 0.33.0 - 2026-11-17 PT
 
 SMADPickleBot #1681 (Gene, 11/17/26: "Move only the push decider's half"): a new module, nothing changed in any other.

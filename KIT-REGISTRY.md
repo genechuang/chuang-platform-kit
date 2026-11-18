@@ -804,6 +804,73 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`, with `, 45m of it by delegates` after the work when the record holds delegated minut… |
 | `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`, and of it the delegates' `delegated`, kept as delegated_min, None when the event… |
 
+## `chuang_sdlc.moves`: A Project board's item helpers: one card read by itself, its fields written in one request, and the…
+
+| Name | Purpose |
+|---|---|
+| `configure(**names)` | The host's names (the module's _SET says what each is). Unknown names are refused. |
+| `setting(name)` | One of the host's names (configure). |
+| `label(role)` | The host's label for a rule (`feedback`, `admin_ask`, `change_order`, `blocked`); '' when it named none. |
+| `sender(role)` | Who a letter is from (`board`, `scrum`); NotConfigured when the host named none. |
+| `collection(role)` | The record collection of a role (`starts`, `put_backs`, `board_moves`, `closed_claims`); NotConfigured when the host named none. |
+| `word(key, **values)` | One of the module's words (WORDS, the host's own where it gave one), its template filled. |
+| `board()` | The board's config in force: the host's (configure(board=)), else chuang_sdlc.tickets' own, which a tenant's layer over tickets replaces. |
+| `person(role)` | The name the host gave a role (`captain`, `lead`): configure(people=), else tickets.person(role); '' for none. |
+| `captain()` | The release captain, who takes a card with no Owner or the lead's; NotConfigured when the host named none. |
+| `lead()` | The lead, whose cards the captain settles ('' when the host named none: then no Owner is the lead). |
+| `read_item(item_id, token, opener=)` | One Project item's node by its id over GitHub's GraphQL API ({} for none); RuntimeError with the refusal. |
+| `column(node)` | The column the item is in ('' when its Status is unset). |
+| `column_now(node, cfg=)` | The item's column with an old name read as its new one (the board's `renamed` and `merged`): the board says an old name until its options are renamed, so a forward-only move must not take a shipped card for an earlier one. |
+| `light(node)` | The card's Light ('' when unset): its state within its column. |
+| `number(node)` | The item's issue number (None for a draft such as the ship card). |
+| `estimate_minutes(node)` | The card's Estimate field (hours) as minutes; None when it is unset. |
+| `labels(node)` | The issue's label names. |
+| `is_feedback(node)` | Whether the item is a feedback ticket: an issue carrying the host's `feedback` label (never, when it named none). |
+| `owner(node)` | The card's Owner ('' when unset). |
+| `title(node)` | The item's title ('' when unread): an issue's, or a draft's (the ship card's, a placeholder's). |
+| `stage(role, cfg=)` | A column's name on the board by its role (board.stage over the board in force). |
+| `rank(col, light=, raw=, cfg=)` | A card's place along the flow as a role's index: its column and, where two roles share one, its Light; a card in a merged column is that column's role. None off the flow (board.rank). |
+| `named(status, cfg=)` | A Status as the board names it now: an old name read as its new one, a role as its column (board.named). |
+| `stage_role(status, light=, cfg=)` | {stage, stage_name}: the card's role along the flow (where two roles share a column, by its Light), `failed` for the wreck column, '' off the flow; and its column's name as the board says it. |
+| `column_phase(status, cfg=)` | The phase an open ticket in `status` is in: 'working' in a working column (WORKING_ROLES), else 'filed' (none, a ticket off the board, is filed). |
+| `newly_in(data, role, cfg=)` | Whether this move event is a Status move INTO `role`'s column from another (`from`, GitHub's previous value), never a Light edit nor a move within the column. |
+| `light_for(col, cfg=)` | The Light a card dragged into this column should show: its one role's light, '' for a column with none; None when two roles share it (which of them is the pipeline's to say) or the column is not the board's. |
+| `light_fix(data, cfg=)` | The Light this move should leave on its card, or None to leave it: a dragged card takes its column's light (none where the column has none: a working light is a session's own start, never a drag), a shared column is left to the pipeline, the `needs` light is… |
+| `set_fields(item_id, values, token, cfg=, opener=)` | Several fields of the card ({field: value}, '' clears one) in ONE GraphQL request: an aliased update (or clear) per field in one mutation document, so a card is placed in two calls, the add and this. A single-select takes its option's name (one the board lack… |
+| `set_field(item_id, field, value, token, cfg=, opener=)` | One field of the card set to `value` ('' clears it); RuntimeError with the refusal. One field of set_fields; a caller with several writes them in one call. |
+| `set_light(item_id, value, token, cfg=, opener=)` | The card's Light set to `value` ('' clears it); RuntimeError with the refusal. |
+| `is_ship_card(node, cfg=)` | Whether a read item is the ship card: a draft whose title carries the board's `ship_card` `word` (else the module's `ship_card_word`) and is no placeholder. |
+| `is_placeholder(text, cfg=)` | Whether a card's title is a column's placeholder: one of the board's `placeholders`, or any `— … —` (an older wording of one still counts, so a rename never leaves a stray); board.is_placeholder. |
+| `placeholder_role(text, cfg=)` | The role whose column a placeholder card belongs in: by its title in `placeholders`, else by the column its title names; '' for a title that is no placeholder or names no placeholder column (board.placeholder_role). |
+| `right_placeholder(node, token, cfg=, opener=)` | A placeholder card put back in its own column the moment anyone moves it: its role from its title, its Status set back when its column is not that role's (set_field, the one write), nothing when it is where it belongs (its own set-back comes round as a move t… |
+| `shipped_live(node)` | Whether a read item's issue is closed as completed: the board's proof the work is live, where a ticket closes only once its release passes. An open issue, or one closed as not planned or a duplicate, is no proof. |
+| `put_back_to(data, cfg=, marked=)` | (column, why) when a read move breaks one of the board's rules, ('', '') when it stands. `data` is the move event's data with its `node`; only a Status move of a read item counts, from a column it names (the event's `from`, an old name read as its new one; th… |
+| `guarded(data, cfg=)` | Whether a read Status move touches a column the board's rules guard: into or out of the ship, shipment or app-status column. Only such a move can break a rule or be a put-back's echo, so only it costs a record read. |
+| `put_back_echo(data, store, now=, cfg=)` | Whether this Status delivery is the echo of the board's own put-back: the item was put back into this column within PUT_BACK_SECONDS (the `put_backs` collection's record of the item). An unreadable mark is no echo. |
+| `class LazyStore` | A record store made only on its first get or set: most guarded moves stand without a read, and making a store may cost a token. `make()` returns the store; a failure raises on that call, which every reader here takes as "unread" (nothing undone). |
+| `LazyStore.get(*a, **k)` | The store's own get, the store made first if this is its first use. |
+| `LazyStore.set(*a, **k)` | The store's own set, the store made first if this is its first use. |
+| `pipeline_marked(store, now=)` | The `marked(number)` check put_back_to takes: the `board_moves` collection's record of the ticket written within PIPELINE_MARK_SECONDS. An unreadable mark counts as marked, so a move is never undone on a guess. |
+| `put_back(data, token, store=, mail=, cfg=, opener=, now=)` | The board's put-back: put_back_to's column, the echo mark written first (the `put_backs` record of the item), the Status set back (set_field, the one write), and the card's Owner (the captain for none or the lead) told in one line by `mail(to, text, sender)`,… |
+| `issue_node(number, token, cfg=, opener=)` | The ticket's issue node over GitHub's GraphQL API: `id`, `labels` and `blockedBy` ({} when the issue is not found); RuntimeError with the refusal. |
+| `item_for(number, token, cfg=, opener=, issue=)` | The ticket's item id on the board (adding an issue that is not on it yet; GitHub's add answers the card already there), '' when the issue is not found; RuntimeError with the refusal. `issue` is its node when the caller read it. |
+| `unblock(issue, token, opener=)` | A card whose work has landed has no blocker: every open blocked-by link of the issue node removed, whoever made it (GitHub records no author on a link), and the host's `blocked` label taken off (when it named one). The words for the card's line ([] for a card… |
+| `to_dock(numbers, token, cfg=, opener=, read=)` | Every ticket to the dock column with its light, the moment its commit lands: one line each. Never a step back: a card already past the dock (or in the wreck column) stays, and the `needs` light is kept; a card already in the dock column shows the dock's light… |
+| `alert_key(body)` | The card's Alert key from an alert issue's body: `gcp:<key>@<first failure>`, `sentry:<id>`, `gitguardian:<id>` or `workflow:<name>`, the first marker found; '' for a body with none. |
+| `place_alert(number, owner, token, cfg=, opener=, read=, key=)` | An alert issue on the board the moment it is filed: added to the Project in the backlog column, its Kind the host's `alert_kind` (when it named one), its investigator as Owner, no Priority and no Light, and its Alert key (alert_key of its body) when it has on… |
+| `closed_key(number, closed_at)` | The once-only id of one close's telling: the ticket and the close's time, in the `closed_claims` collection. A listener claims it; a sweep reads it, so a close already told is not asked about again. |
+| `is_unplanned(reason)` | Whether a close's reason (GitHub's `not_planned` or `duplicate`, any case) means the ticket will not ship. |
+| `to_unplanned(item, token, cfg=, opener=)` | A card closed as not planned or a duplicate archived off the board, one request (tickets.ARCHIVE_MUTATION), the board's Archived items list able to restore it; RuntimeError with the refusal, or when GitHub answers no item. The caller marks the edit in the `bo… |
+| `restore(number, token, cfg=, opener=)` | A reopened ticket's card back on the board: its item by item_for, which answers the card GitHub keeps even archived and never adds an issue off the board (the issue's own projects first, as closed_card reads them), then tickets.UNARCHIVE_MUTATION, which chang… |
+| `unplanned_line(card, reason)` | (to, text, subject) of the one line a card's owner is told when its ticket closed as not planned or a duplicate: what happened to its card and why, no question. `to` as closed_to resolves it. |
+| `closed_card(number, token, cfg=, opener=, read=)` | One closed ticket's card, read by itself, never the board: {number, title, url, state, reason, closed_at, comment (its newest), item, column (an old name read as its new one), light, owner}; {} when GitHub does not have the issue or it is not on the board (th… |
+| `is_finished(col, cfg=)` | Whether a card's column is one a closed ticket belongs in: the ship column or the wreck column, or the shipment column for a ship's change order, which closes there. An old name is read as its new one. |
+| `to_shipped(item, token, cfg=, opener=)` | A card to the ship column with its `shipped` light; RuntimeError with the refusal. The caller marks the move in the `board_moves` collection first, so no handler takes it for a person's drag. |
+| `closed_question(number, col)` | The scrum master's ask about a ticket closed outside the columns a closed ticket belongs in, the one wording of a listener's letter and a sweep's. |
+| `closed_to(who)` | Who is told about a card: its Owner, or the captain for none or the lead. |
+| `closed_letter(card)` | (to, text, subject) of the scrum master's one letter about a ticket closed outside the columns a closed ticket belongs in: its Owner, or the captain for none or the lead, asked to say it is done or reopen it. |
+| `wake_letter(node, by, cfg=)` | (to, text, subject) of the one letter a card newly in the shipyard column sends: its Owner, or the captain for none or the lead; who moved it, the ticket and its link, and the host's start sentence (`wake_start`). A card carrying the host's `admin_ask` label… |
+
 ## `chuang_sdlc.notes`: A ship's release notes: every ticket the shipped commits name, by its full title, grouped New (the…
 
 | Name | Purpose |
@@ -947,7 +1014,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 |---|---|
 | `class Layered` | A module's wiring table: the host's values (the dict itself), with the current tenant's layered over them. |
 | `Layered.get(name, default=)` | (no docstring) |
-| `using(key, **modules)` | Run the block as tenant `key`, each module's wiring (`tickets=`, `listeners=`, `scrum=`, dicts of the names that module's configure() takes) laid over the host's. A module or a name the module does not take is refused, before anything runs. |
+| `using(key, **modules)` | Run the block as tenant `key`, each module's wiring (`tickets=`, `listeners=`, `scrum=`, `moves=`, dicts of the names that module's configure() takes) laid over the host's. A module or a name the module does not take is refused, before anything runs. |
 | `current()` | The key of the tenant whose layer is in force, '' outside any. |
 
 ## `chuang_sdlc.testing`: A fake GitHub for a host's suites of the ship's pull request (chuang_sdlc.ship_pr) and the shipped…

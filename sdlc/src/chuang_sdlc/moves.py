@@ -539,9 +539,11 @@ class LazyStore:
         return self._store
 
     def get(self, *a, **k):
+        """The store's own get, the store made first if this is its first use."""
         return self._real().get(*a, **k)
 
     def set(self, *a, **k):
+        """The store's own set, the store made first if this is its first use."""
         return self._real().set(*a, **k)
 
 
