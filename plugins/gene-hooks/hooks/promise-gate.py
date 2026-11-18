@@ -14,8 +14,12 @@ held, and the held turn's second stop always ends (stamp-reply's stop_hook_activ
 import re
 
 VERBS = (r'(?:start(?:ing)?|begin(?:ning)?|build(?:ing)?|do(?:ing)?|work(?:ing)? on|pick(?:ing)? up|tak(?:e|ing) (?:on|up)|'
-         r'tackl(?:e|ing)|fix(?:ing)?|implement(?:ing)?|writ(?:e|ing)|mov(?:e|ing) on to|get(?:ting)? (?:on|to))')
+         r'tackl(?:e|ing)|fix(?:ing)?|implement(?:ing)?|writ(?:e|ing)|mov(?:e|ing) on to|get(?:ting)? (?:on|to)|'
+         r'fil(?:e|ing)|send(?:ing)?|run(?:ning)?|ship(?:ping)?|open(?:ing)?|mak(?:e|ing))')
 PROMISES = [
+    # 1.31.1 (SMADPickleBot #1815): "I'm filing it now and will build it next" slipped: no "file" verb, and "and will"
+    # has no "I" before it.
+    re.compile(rf"\band\s+(?:I(?:'ll| will)|will)\s+{VERBS}\b[^.\n]*\b(?:now|next)\b", re.I),
     re.compile(rf"\b(?:now|next),?\s+I(?:'ll| will| am going to|'m going to)?\s+{VERBS}\b", re.I),
     re.compile(r"\b(?:I'm|I am) (?:now )?(?:starting|beginning|building|picking up) (?:on )?#\d+", re.I),
     re.compile(rf"\bI(?:'ll| will)\s+(?:now|next)\s+{VERBS}\b", re.I),

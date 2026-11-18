@@ -44,6 +44,9 @@ HELD = [
     "Still open: #1791, built and on dev but not checked or pushed to the dock; that's my next step.",   # Black Widow, 3:55 AM PT
     'My next step is the dock push.',
     "I'm going to build the gate.",
+    "That saves about 139 s. I'm filing it as a ticket now and will build it next.",   # Snow White, 4:41 AM PT (#1815)
+    'The fix is clear, and will build it next.',
+    "I'm sending Black Widow the finding now.",
 ]
 LET_GO = [
     'The receipt and the profile follow when it lands.',
