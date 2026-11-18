@@ -25,6 +25,9 @@ PROMISES = [
     re.compile(r"\b(?:I'm|I am) on #?\d+ next\b", re.I),
     re.compile(r"\bstarting (?:#\d+|on #?\d+|it|that|the \w+)(?: \w+)? now\b", re.I),
     re.compile(r"\bnext (?:up|for me)(?: is|:)\s", re.I),
+    re.compile(r"\b(?:that's|that is|this is|it's|is)\s+(?:my\s+)?next(?: step| thing| up)?\b", re.I),
+    re.compile(r"\bmy next (?:step|move|task|ticket|card)\b", re.I),
+    re.compile(rf"\bI(?:'m| am) (?:about to|going to)\s+{VERBS}\b", re.I),
 ]
 CONDITION = re.compile(
     r"\b(?:when|whenever|once|after|until|unless|if|on your|your (?:word|yes|go|ok)|wait(?:s|ing)?|later|tomorrow|"

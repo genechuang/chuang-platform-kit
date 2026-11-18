@@ -41,6 +41,9 @@ HELD = [
     "I'll start on #1793 next.",
     'Next I start #1793 your way: one ticket per kind.',   # Snow White, 11/18/26 3:27 AM PT, then nothing until asked
     "Meanwhile I'm starting #1793.",
+    "Still open: #1791, built and on dev but not checked or pushed to the dock; that's my next step.",   # Black Widow, 3:55 AM PT
+    'My next step is the dock push.',
+    "I'm going to build the gate.",
 ]
 LET_GO = [
     'The receipt and the profile follow when it lands.',
