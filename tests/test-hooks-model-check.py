@@ -319,6 +319,20 @@ def main():
     rp = bounded.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'list'],
                         capture_output=True, text=True, encoding='utf-8', env=base_env(), timeout=30)
     check('  with no data folder it exits 3 with one line, so a caller tells unread from none', (rp.returncode, rp.stdout, len(rp.stderr.splitlines())), (3, '', 1))
+    # 1.29.0 (SMADPickleBot #1762): a box's list of the sessions the check moves leaves every other session alone, in
+    # the prompt's records and in the hold's `off` read alike; a list that cannot be read is every session, as before.
+    chosen = os.path.join(d, 'model-check-sessions')
+    write(chosen, '# the standing sessions\nSnow White\n\n')
+    e = base_env(recs)
+    e['CLAUDE_MODEL_CHECK_SESSIONS'] = chosen.replace('\\', '/')
+    off = bounded.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'off', 'opus'],
+                      capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+    e['CLAUDE_MODEL_CHECK_SESSIONS'] = os.path.join(d, 'no-such-list').replace('\\', '/')
+    every = bounded.run([sys.executable, os.path.join(HOOKS, 'model-check-records.py'), 'off', 'opus'],
+                        capture_output=True, text=True, encoding='utf-8', env=e, timeout=30)
+    check('  a box\'s session list: the records name its sessions alone (Black Widow, off the list, is left out); no list is every session',
+          (off.returncode, [l.split('\t')[0] for l in off.stdout.splitlines()],
+           sorted(l.split('\t')[0] for l in every.stdout.splitlines())), (0, ['Snow White'], ['Black Widow', 'Snow White']))
 
     # 1.24.0 (SMADPickleBot #1475): the reading the next check carries, and the late line.
     rstate = os.path.join(d, 'reading.last')

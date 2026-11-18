@@ -40,8 +40,25 @@ def roots():
     return found
 
 
+def chosen():
+    """The session titles the box's model check moves, or None for every session (1.29.0; SMADPickleBot #1762, Gene
+    11/18/26 12:02 AM PT: "only do Snow White, Black Widow, Tim Apple, Dragnet and ChuangFinance - not ALL sessions"):
+    one title a line in ~/.claude/model-check-sessions (CLAUDE_MODEL_CHECK_SESSIONS, the suite's), blank lines and
+    `#` lines skipped. The list lives on the box, never in this public plugin, which names no session."""
+    path = os.environ.get('CLAUDE_MODEL_CHECK_SESSIONS') or os.path.join(os.path.expanduser('~'), '.claude', 'model-check-sessions')
+    try:
+        with open(path, encoding='utf-8') as f:
+            names = {ln.strip() for ln in f if ln.strip() and not ln.strip().startswith('#')}
+    except OSError:
+        return None
+    return names or None
+
+
 def records():
-    """(title, model, session id) for every unarchived record of the signed-in account, or None when none was read."""
+    """(title, model, session id) for every unarchived record of the signed-in account, or None when none was read;
+    only the titles chosen() names when the box has a list, so the prompt's records and the hold's check both leave
+    every other session alone."""
+    names = chosen()
     out, read_any = [], False
     for root in roots():
         try:
@@ -59,6 +76,8 @@ def records():
                 continue
             read_any = True
             if not isinstance(rec, dict) or rec.get('isArchived'):
+                continue
+            if names is not None and str(rec.get('title') or '') not in names:
                 continue
             out.append((str(rec.get('title') or rec.get('sessionId') or '?'), str(rec.get('model') or 'unknown'),
                         str(rec.get('sessionId') or os.path.basename(path)[:-5])))
