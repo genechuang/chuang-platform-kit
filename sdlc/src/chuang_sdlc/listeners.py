@@ -96,6 +96,46 @@ def _claim(now) -> dict:
     return {'at': now, 'expires_at': now + timedelta(days=_SET['claim_ttl_days'])}
 
 
+# ------------------------------------------------------------------ a vendor asked on a session's behalf
+def integration(data: dict, store, adapters: dict, secrets, mail=None, now=None, results: str = 'integration_results',
+                sender: str = 'Integrations', kept: str = '{n} characters, kept as {results}/{id}',
+                max_answer: int = 3000, again: str = 'it is delivered again') -> str:
+    """An integration request run where the vendors' stored tokens are (SMADPickleBot #487, #1683): `data` {id, vendor,
+    action, args, reply_to} runs that vendor's adapter, `adapters[vendor]` being (module, the name of its secret) and
+    `secrets` a mapping the secret is read from; the module answers `run(action, args, token)` and raises its own
+    `Refused`. The answer is kept in `results/<id>` and mailed to `reply_to` (`mail(to, text, sender, subject=)`), whole
+    when it is at most `max_answer` characters, else as `kept`'s words ({n}, {results}, {id}). Claimed once per id; a
+    vendor that did not answer frees the claim and raises the retry exception, and a refusal (a missing argument, a
+    4xx) is kept and told to the asker, never retried. The line."""
+    import json
+    data = data or {}
+    rid = str(data.get('id') or '').strip()
+    vendor, action, reply_to = str(data.get('vendor') or ''), str(data.get('action') or ''), str(data.get('reply_to') or '')
+    if not rid or vendor not in adapters:
+        return f"{_h()}: integration: a request with {'no id' if not rid else f'no adapter for {vendor!r}'}; nothing run"
+    now = _now(now)
+    key = f'integration-{rid}'
+    if not once(store, key, {}, now):
+        return f'{_h()}: integration {rid} was already run'
+    module, secret = adapters[vendor]
+    try:
+        answer, ok = module.run(action, data.get('args') or {}, (secrets.get(secret) or '').strip() or None), True
+    except module.Refused as e:
+        text = str(e) or type(e).__name__
+        if 'did not answer' in text:
+            store.delete(claims(), key)
+            raise _retry(f'WARNING: {_h()}: integration {rid} ({vendor} {action}): {text}; {again}')
+        answer, ok = {'refused': text}, False
+    body = json.dumps(answer, default=str)
+    store.set(results, rid, dict({'vendor': vendor, 'action': action, 'ok': ok, 'answer': body[:900000]}, **_claim(now)))
+    if reply_to and mail is not None:
+        text = f'{vendor} {action} ({rid}): ' + (body if len(body) <= max_answer
+                                                 else kept.format(n=len(body), results=results, id=rid))
+        mail(reply_to, text, sender, subject=f'{vendor} {action} answered')
+    return (f"{_h()}: integration {rid}: {vendor} {action} {'answered' if ok else 'refused'}"
+            + (f', told {reply_to}' if reply_to else ''))
+
+
 # ------------------------------------------------------------------ an event's handlers
 def _lines(got) -> list:
     return [x for x in got if x] if isinstance(got, (list, tuple)) else ([got] if got else [])

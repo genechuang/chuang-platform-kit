@@ -272,6 +272,63 @@ check("an event's type runs its handler, a line or lines; an unknown type is the
        L.dispatch(None, table, lambda kind: f"events: {kind or 'an unreadable event'}; nothing to do")),
       (['events: moved'], ['events: noted'], [], ['events: odd; nothing to do'], [],
        ['events: an unreadable event; nothing to do']))
+
+print("a vendor asked on a session's behalf")
+
+
+class Vendor:
+    """A vendor adapter: run(action, args, token) and its own Refused."""
+
+    class Refused(Exception):
+        pass
+
+    def __init__(self):
+        self.calls = []
+
+    def run(self, action, args, token):
+        self.calls.append((action, args, token))
+        if action == 'slow':
+            raise self.Refused('the vendor did not answer in 20 s')
+        if action == 'bad':
+            raise self.Refused('issue is required')
+        return {'rows': 'x' * 40} if action == 'long' else {'count': 2}
+
+
+vendor, store, sent = Vendor(), Records(), []
+adapters, secrets = {'acme': (vendor, 'ACME_TOKEN')}, {'ACME_TOKEN': ' tok '}
+mail = lambda to, text, sender, subject='': sent.append((to, sender, subject, text))  # noqa: E731
+first = L.integration({'id': 'r1', 'vendor': 'acme', 'action': 'count', 'args': {'q': 1}, 'reply_to': 'Ann'}, store,
+                      adapters, secrets, mail, NOW)
+again_run = L.integration({'id': 'r1', 'vendor': 'acme', 'action': 'count', 'reply_to': 'Ann'}, store, adapters, secrets, mail, NOW)
+check('run once with the stored token, the answer kept with its expiry and mailed whole; a second delivery runs nothing',
+      (first, again_run, vendor.calls, store.get('integration_results', 'r1'), sent),
+      ('events: integration r1: acme count answered, told Ann', 'events: integration r1 was already run',
+       [('count', {'q': 1}, 'tok')],
+       {'vendor': 'acme', 'action': 'count', 'ok': True, 'answer': '{"count": 2}', 'at': NOW,
+        'expires_at': NOW + timedelta(days=7)},
+       [('Ann', 'Integrations', 'acme count answered', 'acme count (r1): {"count": 2}')]))
+sent.clear()
+long_ = L.integration({'id': 'r2', 'vendor': 'acme', 'action': 'long', 'reply_to': 'Bo'}, store, adapters, {}, mail, NOW,
+                      results='answers', sender='The desk', kept='{n} characters, in {results}/{id}: ask for {id}',
+                      max_answer=10)
+refused = L.integration({'id': 'r3', 'vendor': 'acme', 'action': 'bad'}, store, adapters, {}, mail, NOW)
+check("a long answer is mailed as the host's words with no token passed; a refusal is kept and not retried, nobody to tell",
+      (long_, sent, vendor.calls[-2][2], refused, store.get('integration_results', 'r3')['answer'],
+       store.get('integration_results', 'r3')['ok']),
+      ('events: integration r2: acme long answered, told Bo',
+       [('Bo', 'The desk', 'acme long answered', 'acme long (r2): 52 characters, in answers/r2: ask for r2')], None,
+       'events: integration r3: acme bad refused', '{"refused": "issue is required"}', False))
+try:
+    L.integration({'id': 'r4', 'vendor': 'acme', 'action': 'slow'}, store, adapters, {}, mail, NOW, again='Pub/Sub delivers it again')
+    check('a vendor that did not answer is a retry', 'no raise', 'Again')
+except Again as e:
+    check('a vendor that did not answer: the retry, its claim freed and nothing kept',
+          (str(e), store.get('claims', 'integration-r4'), store.get('integration_results', 'r4')),
+          ('WARNING: events: integration r4 (acme slow): the vendor did not answer in 20 s; Pub/Sub delivers it again', None, None))
+check('no id, or a vendor with no adapter, runs nothing',
+      (L.integration({'vendor': 'acme'}, store, adapters, {}), L.integration({'id': 'r5', 'vendor': 'other'}, store, adapters, {})),
+      ('events: integration: a request with no id; nothing run',
+       "events: integration: a request with no adapter for 'other'; nothing run"))
 L.configure(retry=None)
 
 L.configure(moves=Moves(), claims='')

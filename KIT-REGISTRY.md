@@ -778,6 +778,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `configure(**settings)` | The host's settings (the module's _SET says what each is). Unknown names are refused. |
 | `setting(name)` | One of the host's settings (configure). |
 | `claims()` | The claims collection; NotConfigured when the host named none. |
+| `integration(data, store, adapters, secrets, mail=, now=, results=, sender=, kept=, max_answer=, again=)` | An integration request run where the vendors' stored tokens are (SMADPickleBot #487, #1683): `data` {id, vendor, action, args, reply_to} runs that vendor's adapter, `adapters[vendor]` being (module, the name of its secret) and `secrets` a mapping the secret i… |
 | `collect(steps, tail=)` | Every listener of one delivery, run in order: each step's line or lines kept, and a step that raises the retry exception kept as its line while the others still run (each is claimed once, so a redelivery repeats none that finished). `tail()`'s lines, a step t… |
 | `dispatch(kind, table, other=)` | An event's lines by its type: the handler `table` names for `kind`, called with no argument (a host's table of lambdas over its own listeners, read at call time), its answer as a list; `other(kind)` for a type the table names none of, [] when the host passed… |
 | `once(store, key, record=, now=)` | Claim an event's work once: a create-only record `key` in the claims collection, the host's `record` with the claim's `at` and `expires_at`. True when this call took it, False when an earlier delivery did. |

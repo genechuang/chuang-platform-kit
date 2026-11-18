@@ -3,6 +3,17 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.37.0 - 2026-11-17 PT
+
+SMADPickleBot #1683, step 3: one function added to `chuang_sdlc.listeners`; nothing existing changed.
+- **`integration(data, store, adapters, secrets, mail=None, now=None, results=, sender=, kept=, max_answer=,
+  again=)`**: a vendor asked on a session's behalf, where the vendors' stored tokens are. `data` {id, vendor, action,
+  args, reply_to} runs `adapters[vendor]`'s module (`run(action, args, token)`, its own `Refused`) with the secret
+  read from `secrets`; the answer is kept in `results/<id>` and mailed to `reply_to`, whole when short, else as the
+  host's `kept` words. Claimed once per id; a vendor that did not answer frees the claim and raises the retry
+  exception; a refusal is kept and told, never retried.
+- Host call sites: none must change.
+
 ## 0.36.0 - 2026-11-17 PT
 
 SMADPickleBot #1683, step 2: two functions added to `chuang_sdlc.listeners`; nothing existing changed.
