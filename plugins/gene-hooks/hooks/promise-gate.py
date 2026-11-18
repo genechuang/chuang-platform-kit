@@ -37,7 +37,10 @@ SENTENCE = re.compile(r'[^.!?\n]+[.!?]?')
 
 def promise(reply: str) -> str:
     """The first sentence of `reply` that promises work starting now with no condition, '' when there is none."""
-    for raw in SENTENCE.findall(reply or ''):
+    # Quoted words are someone's words, never this reply's promise (1.30.3: the reply describing the gate quoted its
+    # own examples and was held).
+    unquoted = re.sub(r'"[^"\n]*"|“[^”\n]*”|`[^`\n]*`', '""', reply or '')
+    for raw in SENTENCE.findall(unquoted):
         s = raw.strip()
         if not s or s.startswith(('—', '>', '`')):
             continue

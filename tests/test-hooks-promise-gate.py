@@ -56,6 +56,8 @@ LET_GO = [
     '#1708 stays blocked until 11/25/26.',
     'It waits for your next ship word or the next automatic ship.',
     'Black Widow is on #1791 next.',
+    'Examples: "now I\'ll start #N", "moving on to #N", "that\'s my next step".',   # 1.30.3: the gate's own report
+    'It holds replies like `Starting #1801 now.` once.',
 ]
 
 
