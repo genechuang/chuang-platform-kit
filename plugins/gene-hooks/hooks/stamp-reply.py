@@ -94,7 +94,7 @@ def decide(event, read_tail, now=None):
                                   f'"ticket: none" when no ticket owns it), saying the reply above is complete (do not '
                                   f'repeat it). Every stamp, opening and closing, is "{TICKET_FORM}" (Gene, 10/31/26: '
                                   f'"also write the ticket # you\'re working on - if none, then say ticket: none").'}
-            return evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd'))
+            return evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd')) or promised(reply)
         return {'decision': 'block',
                 'reason': f'Your reply\'s stamp is {abs(off)} minute(s) {"ahead of" if off > 0 else "behind"} the clock: it is '
                           f'{stamp} PT now. Send one short line, "— {stamp} PT · ticket: #N", saying the reply above is '
@@ -120,6 +120,20 @@ def evidence(reply, lines, cwd=None, names=None):
         gate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gate)
         return gate.check(reply, lines, gate.session_names(cwd) if names is None else names)
+    except Exception:  # noqa: BLE001 - never trap a session
+        return None
+
+
+def promised(reply):
+    """Once the stamp and the evidence pass, promise-gate.py's check (1.30.0; SMADPickleBot #1802, Gene 11/18/26): a final
+    reply promising work starting now, with no condition, is held once. Loaded from this file's own folder; any failure
+    lets the reply through."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('promise_gate', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'promise-gate.py'))
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        return gate.check(reply)
     except Exception:  # noqa: BLE001 - never trap a session
         return None
 
