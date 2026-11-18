@@ -107,6 +107,46 @@ check("instant: Firestore's nine digits", F.instant('2026-11-06T08:00:00.1234567
 check("instant: epoch seconds", F.instant(NOW.timestamp()), NOW)
 check("instant: text that is not a time is None", F.instant('soon'), None)
 
+# ------------------------------------------------------------------ one name for a write and a read (0.36.0)
+# A store that keeps each document under the name the request carried: a body's name as sent, a URL's path decoded,
+# as Firestore does. Until 0.36.0 set() sent 'a%40b.com' in the commit's body and get() asked for 'a@b.com'.
+kept = {}
+
+
+def keeper(req):
+    url = urllib.parse.unquote(req.full_url)
+    body = json.loads(req.data.decode()) if req.data else None
+    if url.endswith(':commit'):
+        for w in body['writes']:
+            kept[w['update']['name']] = w['update'].get('fields', {})
+        return {}
+    if url.endswith(':batchGet'):
+        return [{'found': {'name': n, 'fields': kept[n]}} if n in kept else {'missing': n} for n in body['documents']]
+    name = url.split('/v1/', 1)[1]
+    if req.get_method() == 'DELETE':
+        kept.pop(name, None)
+        return {}
+    return {'name': name, 'fields': kept[name]} if name in kept else http_error(404, 'NOT_FOUND')
+
+
+ODD = 'a@b.com +x y:z'
+kc, kseen = db(keeper)
+kc.set('c', ODD, {'v': 1})
+check("an id with '@', '+', a space and ':' is read back by get after set", kc.get('c', ODD), {'v': 1})
+check("  stored under the id as it is, never percent-encoded", list(kept), [f'{ROOTNAME}/c/{ODD}'])
+check("  and batch_get finds the same document", kc.batch_get([('c', ODD), ('c', 'none')]), [{'v': 1}, None])
+kc.merge('c', ODD, {'w': 2})
+check("  merge writes that document, not a second one", list(kept), [f'{ROOTNAME}/c/{ODD}'])
+check("  only the URL encodes the id", '%40' in kseen[1][1] and '%40' not in json.dumps(kseen[0][2]), True)
+kc.delete('c', ODD)
+check("  and delete removes what set wrote", kc.get('c', ODD), None)
+try:
+    kc.name('c', 'a/b')
+    slash = 'no error'
+except ValueError as e:
+    slash = str(e)
+check("an id holding '/' is refused: Firestore would read it as a path", slash, "a Firestore document id cannot hold '/'")
+
 # ------------------------------------------------------------------ documents
 c, seen = db(http_error(404, 'NOT_FOUND'))
 check("get: a missing document is None", c.get('config', 'nope'), None)

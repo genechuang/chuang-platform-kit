@@ -188,9 +188,16 @@ class Client:
 
     # -- plumbing
     def name(self, collection: str, doc_id: str) -> str:
-        """The document's full resource name, 'projects/p/databases/(default)/documents/<collection>/<id>' (the id
-        percent-encoded)."""
-        return f'{self.root}/{collection.strip("/")}/{urllib.parse.quote(str(doc_id), safe="")}'
+        """The document's full resource name, 'projects/p/databases/(default)/documents/<collection>/<id>', the id as
+        it is: this is the name a request BODY carries (a commit's write, batchGet), where Firestore takes it
+        literally. Only a URL encodes the id (`_doc_url`). Until 0.36.0 this encoded it, so set(), merge(), the claims
+        and batch_get() addressed 'a%40b.com' while get() and delete() addressed 'a@b.com': a set could not be read
+        back and a claim on such an id could not be released. ValueError for an id holding '/', which Firestore
+        reads as a path."""
+        doc_id = str(doc_id)
+        if '/' in doc_id:
+            raise ValueError("a Firestore document id cannot hold '/'")
+        return f'{self.root}/{collection.strip("/")}/{doc_id}'
 
     def _full(self, name: str) -> str:
         return name if name.startswith('projects/') else f'{self.root}/{name.lstrip("/")}'
@@ -250,7 +257,8 @@ class Client:
             self.sleep(waits.pop(0))
 
     def _doc_url(self, collection: str, doc_id: str) -> str:
-        return f'{API}/{self.name(collection, doc_id)}'
+        """The document's URL: the one place its id is percent-encoded."""
+        return f'{API}/{self.root}/{collection.strip("/")}/{urllib.parse.quote(str(doc_id), safe="")}'
 
     # -- documents
     def get(self, collection: str, doc_id: str, raw: bool = False):

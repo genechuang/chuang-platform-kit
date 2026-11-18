@@ -2,6 +2,22 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.36.0 - 2026-11-18 PT
+
+A fix that changes where a write lands for one kind of document id; no signature changes. `firestore.Client.name()`
+returned the id percent-encoded, which is right in a URL and wrong in a request body, where Firestore takes the name
+literally. So `set()`, `merge()`, `claim()`, the locks and `batch_get()` addressed `a%40b.com` while `get()` and
+`delete()` addressed `a@b.com`: a set could not be read back, and a claim on such an id could not be released
+(SMADPickleBot #1832, found as #1831: a bounce watch whose record every read missed). Now `name()` is the id as it
+is and only the URL builder encodes it.
+
+- Affected ids: any holding a character outside letters, digits and `-._~` (`@`, `:`, `+`, a space). Ids of plain
+  characters are unchanged.
+- **Host action:** a document already written by `set`/`merge`/a claim under an encoded name stays where it is and is
+  no longer the one those calls address. Count them before the bump (a names-only read of each collection for ids
+  holding `%XX`); SMADPickleBot had 13, none live.
+- `name()` raises ValueError for an id holding `/`, which Firestore would read as a path.
+
 ## 0.35.0 - 2026-11-17 PT
 
 Additive; no host call site changes. `play_developer`: Google Play's Developer API (androidpublisher v3), one client
