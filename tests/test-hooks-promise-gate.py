@@ -18,6 +18,7 @@ def load(name, file):
     return mod
 
 
+os.environ['PROMISE_JUDGE_OFF'] = '1'   # the regex cases never reach a real model; the judge's cases fake it
 G = load('promise_gate', 'promise-gate.py')
 S = load('stamp_reply', 'stamp-reply.py')
 FAILS = []
@@ -104,6 +105,71 @@ def test_a_stamp_hold_still_carries_the_promise():
     check('no promise, no change', S.with_promise({'decision': 'block', 'reason': 'r'}, event,
                                                   lambda p: [json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Done.'}]}})])['reason'], 'r')
     check('nothing held stays nothing', S.with_promise(None, event, lambda p: [line]), None)
+
+
+class Ran:
+    """subprocess.run's fake: records the call, answers `out` (or raises `boom`)."""
+    def __init__(self, out='NONE', code=0, boom=None):
+        self.out, self.code, self.boom, self.calls = out, code, boom, []
+
+    def __call__(self, cmd, **kw):
+        self.calls.append((cmd, kw))
+        if self.boom:
+            raise self.boom
+        return type('R', (), {'returncode': self.code, 'stdout': self.out, 'stderr': ''})()
+
+
+def judged(reply, run):
+    os.environ.pop('PROMISE_JUDGE_OFF', None)
+    try:
+        return G.check(reply, run=run)
+    finally:
+        os.environ['PROMISE_JUDGE_OFF'] = '1'
+
+
+def test_haiku_holds_what_the_regex_misses():
+    """the positive case (1.32.0, #1816): a phrasing no pattern knows, judged a promise by Haiku, is held with its words"""
+    reply = 'The finding is clear. Onto the warm fix right after this, then the roster sort.'
+    run = Ran('PROMISE: Onto the warm fix right after this, then the roster sort.')
+    got = judged(reply, run)
+    check('held', (got or {}).get('decision'), 'block')
+    check('its words quoted', 'Onto the warm fix' in got['reason'], True)
+    cmd, kw = run.calls[0]
+    check('Haiku, one turn, no settings, the text on stdin', ('haiku' in cmd, '--setting-sources' in cmd, '-p' in cmd,
+                                                              'Onto the warm fix' in kw['input'], kw['timeout']),
+          (True, True, True, True, G.JUDGE_LIMIT))
+    check('the child turns its own judge off', kw['env'].get('PROMISE_JUDGE_OFF'), '1')
+
+
+def test_haiku_none_or_failure_lets_it_go():
+    """NONE, a non-zero exit, an odd answer, a timeout or a missing claude never holds the reply"""
+    reply = 'Building passed next to the warm.'
+    for label, run in [('NONE', Ran('NONE')), ('exit 1', Ran('PROMISE: x', code=1)), ('odd answer', Ran('maybe?')),
+                       ('timeout', Ran(boom=TimeoutError())), ('no claude', Ran(boom=FileNotFoundError())),
+                       ('a wait Haiku called a promise', Ran("PROMISE: The profile follows once the smoke lands; I'll report it then."))]:
+        check(f'let go: {label}', judged(reply, run), None)
+
+
+def test_no_candidate_word_calls_no_model():
+    """a plain report with none of the candidate words costs no model call"""
+    run = Ran('PROMISE: x')
+    check('let go', judged('#1814 is filed. The suite passed.', run), None)
+    check('no call', run.calls, [])
+
+
+def test_the_regex_answers_first():
+    """a promise the regex holds never waits on the model"""
+    run = Ran('NONE')
+    check('held by the regex', (judged("Now I'll start #1801.", run) or {}).get('decision'), 'block')
+    check('no call', run.calls, [])
+
+
+def test_quotes_and_the_closing_stamp_are_not_judged():
+    """quoted words and the closing stamp line are left out of what Haiku reads"""
+    run = Ran('NONE')
+    judged('Examples: "now I will start it". Done for now.\n\n— 11/18/26 7:41 AM PT · ticket: #1816', run)
+    text = run.calls[0][1]['input'] if run.calls else ''
+    check('quote blanked, stamp dropped', ('now I will start it' in text, '7:41 AM PT' in text), (False, False))
 
 
 if __name__ == '__main__':
