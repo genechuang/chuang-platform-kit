@@ -138,6 +138,24 @@ def promised(reply):
         return None
 
 
+def with_promise(out, event, read_tail):
+    """A stamp or evidence hold that would hide a promise carries it (1.30.0, SMADPickleBot #1802): those holds tell the
+    session to send one short line, and a session that does ends its turn, so the work its reply promised starting now
+    is added to the reason. A held turn's second stop has no promise check, so this is the only chance."""
+    if not out or event.get('stop_hook_active'):
+        return out
+    reply = last_reply(read_tail(event.get('transcript_path') or '')) or ''
+    held = promised(reply)
+    if not held or held is out or held.get('reason') == out.get('reason'):
+        return out
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('promise_gate', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'promise-gate.py'))
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    return {**out, 'reason': out['reason'] + f' Then start the work your reply promised ("{gate.promise(reply)}") in this '
+                                             f'same turn, its first tool call, or name what it waits on.'}
+
+
 AHEAD_OK, BEHIND_OK = 1, 1   # minutes (Gene, 10/20/26 12:22 AM PT: "reject timestamps more than 1 min ahead or behind")
 
 
@@ -189,7 +207,7 @@ def _read_tail(path):
 def main():
     try:
         event = json.loads(sys.stdin.read() or '{}')
-        out = decide(event, _read_tail)
+        out = with_promise(decide(event, _read_tail), event, _read_tail)
         if out:
             print(json.dumps(out))
     except Exception:  # noqa: BLE001 - never trap a session

@@ -85,6 +85,19 @@ def test_stamp_reply_runs_it_after_its_own_checks():
     check('a held turn ends the second time', S.decide({'stop_hook_active': True, 'transcript_path': ''}, lambda p: []), None)
 
 
+def test_a_stamp_hold_still_carries_the_promise():
+    """a reply held for its stamp would be answered by one short line and the turn would end: the hold's reason carries the promise too"""
+    reply = "No stamp here. Now I'll start #1801."
+    line = json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': reply}]}})
+    event = {'transcript_path': 'x', 'stop_hook_active': False}
+    out = S.with_promise({'decision': 'block', 'reason': 'Your reply did not open with the Pacific clock stamp.'}, event,
+                         lambda p: [line])
+    check('carried', ('Now I\'ll start #1801' in out['reason'], out['reason'].startswith('Your reply did not open')), (True, True))
+    check('no promise, no change', S.with_promise({'decision': 'block', 'reason': 'r'}, event,
+                                                  lambda p: [json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Done.'}]}})])['reason'], 'r')
+    check('nothing held stays nothing', S.with_promise(None, event, lambda p: [line]), None)
+
+
 if __name__ == '__main__':
     for name, fn in list(globals().items()):
         if name.startswith('test_') and callable(fn):
