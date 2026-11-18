@@ -189,6 +189,59 @@ try:
     check('no board helpers is NotConfigured', 'ran', 'NotConfigured')
 except T.NotConfigured:
     check('no board helpers is NotConfigured', True, True)
+print('once, here, else the job')
+store = Records()
+L.configure(retry=Again)
+check('the first delivery claims, with the record, its instant and its expiry; the second does not',
+      (L.once(store, 'ship-abc', {'head': 'abc'}, NOW), L.once(store, 'ship-abc', {'head': 'abc'}, NOW),
+       store.get('claims', 'ship-abc')),
+      (True, False, {'head': 'abc', 'at': NOW, 'expires_at': NOW + timedelta(days=7)}))
+check('done here: what the work returned, no job started',
+      L.here_or_job(store, 'ship-abc', 'item 7', lambda: ['filed'], lambda: 1 / 0, 'the filing job'),
+      (True, ['filed']))
+
+
+class NothingWritten(Exception):
+    """The host's own "nothing was written" refusal."""
+
+
+def refused_here():
+    raise NothingWritten('no token')
+
+
+def broke_here():
+    raise KeyError('labels')
+
+
+check("the host's fallback: its words, the job started in its place",
+      L.here_or_job(store, 'ship-abc', 'item 7', refused_here, lambda: {'execution': 'ex-1'}, 'the filing job',
+                    fallbacks=(NothingWritten,), not_here='not filed here ({why}); the job files it'),
+      (False, 'WARNING: events: item 7 not filed here (no token); the job files it: started (ex-1)'))
+check('any other fault here: its type and text, the job started, an answer naming no execution',
+      L.here_or_job(store, 'ship-abc', 'item 7', broke_here, lambda: None, 'the filing job',
+                    fallbacks=(NothingWritten,), failed_here='the filer here failed ({why}); the job files it'),
+      (False, "WARNING: events: item 7 the filer here failed (KeyError: 'labels'); the job files it: started (an execution)"))
+
+
+def no_start():
+    raise OSError('job service down')
+
+
+try:
+    L.here_or_job(store, 'ship-abc', 'item 7', refused_here, no_start, 'the filing job', fallbacks=(NothingWritten,),
+                  not_here='not filed here ({why}); the job files it', again='Pub/Sub delivers it again')
+    check('a job that will not start is a retry', 'no raise', 'Again')
+except Again as e:
+    check("a job that will not start: the host's retry, its line naming the job, and the claim freed",
+          (str(e), store.get('claims', 'ship-abc')),
+          ('WARNING: events: item 7 not filed here (no token); the job files it, and the filing job did not start '
+           '(OSError: job service down); Pub/Sub delivers it again', None))
+check('with no work here, the start alone: its answer, and the next delivery claims afresh',
+      (L.start_or_retry(store, 'ship-abc', lambda: {'execution': 'ex-2'}, 'the notes job did not start'),
+       L.once(store, 'ship-abc', {}, NOW), L.execution({}), L.execution({'execution': 'ex-3'})),
+      ({'execution': 'ex-2'}, True, 'an execution', 'ex-3'))
+L.configure(retry=None)
+
 L.configure(moves=Moves(), claims='')
 try:
     L.scrum_nudge(1, Records(), NOW, start, sweep=lambda: [])

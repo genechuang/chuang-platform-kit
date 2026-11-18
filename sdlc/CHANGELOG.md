@@ -3,6 +3,19 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.35.0 - 2026-11-17 PT
+
+SMADPickleBot #1683, step 1: three functions added to `chuang_sdlc.listeners`; nothing existing changed.
+- **`once(store, key, record=None, now=None)`**: claim an event's work once, a create-only record in the claims
+  collection with the claim's `at` and `expires_at`; True when this call took it.
+- **`start_or_retry(store, key, start, refused, again=)`**: start the job that does the work; a start that raises
+  frees the claim and raises the retry exception, its line `WARNING: <head>: <refused> (<the error>); <again>`.
+- **`here_or_job(store, key, what, here, start, job, fallbacks=, not_here=, failed_here=, again=)`**: do the work in
+  the function, else start its job. `(True, what here() returned)` or `(False, the WARNING line)`; the host passes the
+  exception types that mean nothing was written and the words of each line. `execution(got)` reads a started job's
+  execution from its answer.
+- Host call sites: none must change.
+
 ## 0.34.0 - 2026-11-17 PT
 
 SMADPickleBot #1682: a new module and one more name in the tenant layer; nothing changed in any other.

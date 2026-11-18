@@ -96,6 +96,52 @@ def _claim(now) -> dict:
     return {'at': now, 'expires_at': now + timedelta(days=_SET['claim_ttl_days'])}
 
 
+# ------------------------------------------------------------------ once, here, else the job
+# The shape a host's own listeners repeat (SMADPickleBot #1683): claim the event's work once, do it in the function
+# when there is something to do there, else start the job that does it, and ask for the event again when the job would
+# not start. The host passes its words, so every line reads as its own.
+def once(store, key: str, record: dict = None, now=None) -> bool:
+    """Claim an event's work once: a create-only record `key` in the claims collection, the host's `record` with the
+    claim's `at` and `expires_at`. True when this call took it, False when an earlier delivery did."""
+    return bool(store.create(claims(), key, dict(record or {}, **_claim(_now(now)))))
+
+
+def start_or_retry(store, key: str, start, refused: str, again: str = 'it is delivered again') -> dict:
+    """Start the job (`start()` returns the job's answer, a dict that may carry its `execution`). A start that raises
+    frees the claim `key` and raises the retry exception, its line `WARNING: <head>: <refused> (<the error>); <again>`,
+    so the bus delivers the event again and the next delivery claims it afresh."""
+    try:
+        return start() or {}
+    except Exception as e:   # noqa: BLE001 - the job would not start or the network: the bus delivers it again
+        store.delete(claims(), key)
+        raise _retry(f'WARNING: {_h()}: {refused} ({type(e).__name__}: {str(e)[:200]}); {again}')
+
+
+def execution(got: dict) -> str:
+    """The execution a started job's answer names, 'an execution' when it names none."""
+    return (got or {}).get('execution') or 'an execution'
+
+
+def here_or_job(store, key: str, what: str, here, start, job: str, fallbacks: tuple = (),
+                not_here: str = 'not done here ({why}); the job does it',
+                failed_here: str = 'failed here ({why}); the job does it',
+                again: str = 'it is delivered again') -> tuple:
+    """Do a claimed event's work in the function, else start its job: (True, what `here()` returned) when it was done
+    here; (False, the WARNING line) when the job was started in its place. `fallbacks` are the host's exception types
+    that mean nothing was written (`not_here`'s words, the error's text); any other fault of `here` is `failed_here`'s
+    (the error's type and text), the job being idempotent. A job that would not start frees the claim and raises the
+    retry exception (start_or_retry), its line naming `job`."""
+    try:
+        return True, here()
+    except Exception as e:   # noqa: BLE001 - a fault in the work here: the job, idempotent, does or finishes it
+        if fallbacks and isinstance(e, tuple(fallbacks)):
+            why = not_here.format(why=str(e)[:160])
+        else:
+            why = failed_here.format(why=f'{type(e).__name__}: {str(e)[:160]}')
+    got = start_or_retry(store, key, start, f'{what} {why}, and {job} did not start', again)
+    return False, f'WARNING: {_h()}: {what} {why}: started ({execution(got)})'
+
+
 # ------------------------------------------------------------------ a commit's working time
 def ticket_committed(data: dict, store, token: str, opener=None, record=None) -> list:
     """A commit's working time on each ticket it names: the host's LOE record (`record`, else configure's
