@@ -1013,6 +1013,8 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `warming_letter(owner, items)` | (subject, text) of one owner's warming letter: every Dock card of theirs Warming past the limit, each item (number, title, minutes, url) and, since 0.29.0, the host's warm's last word as an optional fifth, said once. |
 | `wrecked_question(n, col, hours)` | What the owner of a card left in the failed column is asked (0.20.0): re-ship it or drop it, each by the act that moves it (the host's start command, else a move to the shipyard; a close as not planned archives it). |
 | `wrecked_sweep(cfg, gh, store, now, letters, dry=)` | The failed column kept for what it is for (0.20.0; SMADPickleBot #1337): a closed card there whose close was as not planned or a duplicate is archived off the board, and an open card that has sat there WRECKED_HOURS (its `status_at`, the board's updatedAt of… |
+| `unplaced_sweep(cfg, gh, letters, dry=)` | The safety net for a card with no column (0.38.0; SMADPickleBot #1918: two tickets sat on the board with no Status for 16 hours, in no column's read and so in no "what's next", after a filing whose one field write was refused whole). One read with GitHub's ow… |
+| `unplaced_letter(owner, items)` | (subject, text) of the captain's letter for the cards the sweep found with no column and put in the backlog. |
 | `wrecked_letter(owner, items)` | (subject, text) of one owner's wrecked letter: every card of theirs left in the failed column past the limit. |
 
 ## `chuang_sdlc.ship_pr`: One pull request a ship, so each shipped ticket's Development shows the release that shipped it.
@@ -1184,7 +1186,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `report_loe(numbers, store=, run=, now=)` | The one LOE comment of each ticket, at its ship: `LOE: ` and loe_text of its record, once (the record's reported_epoch). A ticket with no record, or one reported already, is skipped. Lines; best effort. |
 | `item_id(number, run=, cfg=)` | The Project item of #number, adding the issue to the Project when it is not on it (GitHub's add is idempotent: addProjectV2ItemById answers the item already there); the issue's node id read once a process. None when GitHub does not answer. |
 | `set_field(item, field, value, run=, cfg=)` | Set a Project field on an item: a single-select by its option's name, a text field by its text, a number field by its value (through set_fields' one request). |
-| `set_fields(item, values, run=, cfg=)` | Several Project fields of one item in ONE request ({field: value}, each as set_field takes it): the kit's project_set_fields through the runner's item_fields. A runner with no item_fields (an older fake) writes them one by one. False when any value is an opti… |
+| `set_fields(item, values, run=, cfg=, refused=)` | Several Project fields of one item in ONE request ({field: value}, each as set_field takes it): the kit's project_set_fields through the runner's item_fields. A runner with no item_fields (an older fake) writes them one by one. False when any value is an opti… |
 | `set_stage(item, role, run=, cfg=)` | A card to a role's column and its Light (each column a phase, the Light its state within it), one request; a column named by its name is its first role. A board with no Light field sets the column alone. |
 | `stage(role, cfg=)` | A column's name on the board by its role (board.stage). |
 | `column(name, cfg=)` | A Status as the board names it now, an old name read as its new one and a role as its column (board.named). |
@@ -1193,6 +1195,7 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `light_for(col, cfg=)` | The Light a card moved into this column should show (board.light_for). |
 | `is_placeholder(title, cfg=)` | Whether a card's title is a column's placeholder (board.is_placeholder). |
 | `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. A card archived off the board (a t… |
+| `add_option(field, name, run=, cfg=, color=, field_id=)` | One option added to a single-select field of the board, every option it has sent back with its own id, color and description (a save without the ids makes new options and clears the field on every card), then read again: an id that changed is an ERROR, and th… |
 | `sync_columns(run=, cfg=, tmp=, merge=, ship_run=)` | The board made what its config says, at every ship: its column labels (_sync_options), then its placeholder cards (placeholders: a deleted one re-made, a strayed one put back) and the ship card (ship_card_keep: its title and its home, left in the ship column… |
 | `filter_columns(names)` | A board filter's Status term for these columns, each name quoted for the ones with spaces. |
 | `board_items(query, run=, cfg=)` | The board's cards that match GitHub's own filter (`is:open is:issue`, a column's `filter_columns`), each in `gh project item-list`'s shape (title, status, light, owner, priority, area and the host's card_fields, labels, content {type, number, url, and a draft… |

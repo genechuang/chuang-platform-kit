@@ -1203,8 +1203,9 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         if not dry:
             store.set(_SET['state'], str(n), state)
         lines.append(f"scrum: #{n} {p['state']}" + (f" ({'; '.join(did)})" if did else ''))
+    unplaced = {}
     if only is None:   # the catch for a close the host's own listener missed
-        shipyard = {(c.get('content') or {}).get('number') for c in cards}   # its closed cards were just moved above
+        shipyard ={(c.get('content') or {}).get('number') for c in cards}   # its closed cards were just moved above
         lines += closed_sweep(cfg, gh, store, now, dry, letters, skip=shipyard)
         lines += closed_needs_sweep(cfg, gh, dry)
         warming, wrecked = {}, {}
@@ -1233,10 +1234,12 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         if train:
             lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
         lines += wrecked_sweep(cfg, gh, store, now, wrecked, dry)   # 0.20.0: the failed column kept for failures
+        lines += unplaced_sweep(cfg, gh, unplaced, dry)   # 0.38.0: a card with no column is in no other read
     else:
         warming, wrecked = {}, {}
     lines += gh.flush()   # #1207: every field write this sweep decided, in one aliased mutation
     gh.batch = False
+    lines += _send(unplaced, mail, dry, compose=unplaced_letter)
     lines += _send(letters, mail, dry)
     lines += _send(warming, mail, dry, compose=warming_letter)
     lines += _send(wrecked, mail, dry, compose=wrecked_letter)
@@ -1393,6 +1396,48 @@ def wrecked_sweep(cfg: dict, gh, store, now: datetime, letters: dict, dry: bool 
             store.set(_SET['state'], str(n), state)
         lines.append(f'scrum: #{n} has sat in {failed} {hours} hours: {to} asked to re-ship or drop it')
     return lines
+
+
+UNPLACED_FILTER = 'no:status is:issue'
+
+
+def unplaced_sweep(cfg: dict, gh, letters: dict, dry: bool = False) -> list:
+    """The safety net for a card with no column (0.38.0; SMADPickleBot #1918: two tickets sat on the board with no
+    Status for 16 hours, in no column's read and so in no "what's next", after a filing whose one field write was
+    refused whole). One read with GitHub's own `no:status` filter; each issue's card is given the backlog column (a
+    closed one too: the closed sweep takes it from there by its own rule) and goes into the captain's one letter,
+    with the fields it still lacks. Drafts and the fixed cards are left alone. Lines."""
+    backlog = _tickets.stage('backlog', cfg)
+    if not backlog:
+        return []
+    cards = _tickets.board_items(UNPLACED_FILTER, gh.run, cfg)
+    if cards is None:
+        return ['scrum: the cards with no column did not answer; next sweep']
+    lines = []
+    for c in cards:
+        n = (c.get('content') or {}).get('number')
+        if not n or c.get('status') or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg):
+            continue
+        gh.remember([c])   # the card's item is in the listing: the write needs no read of its own
+        ok = gh.field(n, 'Status', backlog)
+        lacks = [name for key, name in (('owner', 'Owner'), ('priority', 'Priority'), ('area', 'Area')) if not c.get(key)]
+        if ok:
+            letters.setdefault(captain(), []).append((n, c.get('title') or '', lacks,
+                                                      (c.get('content') or {}).get('url') or ''))
+        lines.append(f'scrum: #{n} had no column: ' + (f'put in {backlog}' if ok else f'the move to {backlog} was refused; '
+                                                       'next sweep tries again')
+                     + (f"; it still has no {', '.join(lacks)}" if lacks else ''))
+    return lines
+
+
+def unplaced_letter(owner: str, items) -> tuple:
+    """(subject, text) of the captain's letter for the cards the sweep found with no column and put in the backlog."""
+    subject = f"Scrum master: {len(items)} card{'s' if len(items) != 1 else ''} had no column"
+    lines = [f'{owner}, each of these was on the board with no column, so no read of the board showed it. '
+             f'Each is in the backlog now; give it what it still lacks:']
+    for n, title, lacks, url in items:
+        lines.append(f"- #{n} {title}: " + (f"no {', '.join(lacks)}" if lacks else 'its other fields are set') + f'\n  {url}')
+    return subject, '\n'.join(lines)
 
 
 def wrecked_letter(owner: str, items) -> tuple:

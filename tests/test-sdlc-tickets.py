@@ -218,7 +218,9 @@ class FakeGH:
             return {'node': {'options': [dict(o) for o in self.options]}}
         if 'updateProjectV2Field' in query:
             self.renames.append(v['options'])
-            self.options = [dict(o) for o in v['options']]
+            # GitHub gives an option sent with no id a new one; `remake` is a save that lost the ids it was sent
+            self.options = [dict(o, id=('re_' + o['name']) if getattr(self, 'remake', False) else o.get('id') or 'new_' + o['name'])
+                            for o in v['options']]
             return {'updateProjectV2Field': {}}
         if 'createLinkedBranch' in query:
             self.links.append((v['issue'], v['name'], v['oid']))
@@ -430,6 +432,39 @@ for label, call in (('no body', lambda: T.new('task', 'T', '', area='Product', r
     except ValueError:
         check(f'{label} is refused', True, True)
 check('an Area the board lacks files nothing', T.new('task', 'T', 'Plan', area='Moon', run=gh), None)
+# 0.38.0 (SMADPickleBot #1918): one value the board lacks never costs a new card its column, and is said
+import contextlib as _ctx  # noqa: E402
+gh, said = fresh(), io.StringIO()
+with _ctx.redirect_stderr(said):
+    n = T.new('task', 'For another project', 'The plan.', 'Zed', area='Product', priority='P3', loe='1h', run=gh)
+wrote = gh.writes[-1][1]
+check("the positive case: an Owner the board lacks is left out and named, the column and the other fields written",
+      (bool(n), 'F_owner' in wrote, wrote.get('F_status'), wrote.get('F_pri'), "Owner 'Zed' is not an option on the board" in said.getvalue(),
+       'ERROR' in said.getvalue()), (True, False, 'o_b', 'p3', True, False))
+gh, said = fresh(), io.StringIO()
+with _ctx.redirect_stderr(said):
+    n = T.new('task', 'No such column', 'The plan.', status='Nowhere', area='Product', priority='P3', loe='1h', run=gh)
+check('  a column the board lacks is an ERROR naming the ticket, never a quiet success',
+      (bool(n), f'ERROR: tickets: #{n} was filed and is on the board with no column' in said.getvalue()), (True, True))
+kept = []
+check('  set_fields with a refused list writes the rest and names what it left out; without one it still writes nothing',
+      (T.set_fields('IT_1', {'Owner': 'Zed', 'Priority': 'P1'}, fresh(), refused=kept), GH.writes, kept,
+       T.set_fields('IT_1', {'Owner': 'Zed', 'Priority': 'P1'}, fresh()), GH.writes),
+      (True, [('IT_1', {'F_pri': 'p1'})], [('Owner', 'Zed')], False, []))
+opts = [{'id': 'u_a', 'name': 'Alice', 'color': 'BLUE', 'description': 'a'}, {'id': 'u_b', 'name': 'Bob', 'color': 'GRAY', 'description': ''}]
+gh = fresh(options=[dict(o) for o in opts])
+line = T.add_option('Owner', 'Cy', gh)
+check('  add_option: every option sent back with its own id, color and description, the new one last; the line names its id',
+      (gh.renames[-1], line), (opts + [{'name': 'Cy', 'color': 'GRAY', 'description': ''}],
+                               'tickets: Owner has the option Cy, id new_Cy; every other option kept its id'))
+check('  a name the field has adds nothing', (T.add_option('Owner', 'Bob', gh), len(gh.renames)),
+      ('tickets: Owner already has the option Bob (u_b)', 1))
+check('  options that cannot be read, or a field the config lacks, add nothing',
+      (T.add_option('Owner', 'Cy', fresh()).startswith('WARNING'), T.add_option('Nope', 'Cy', fresh()).startswith('WARNING'), GH.renames),
+      (True, True, []))
+gh = fresh(options=[dict(o) for o in opts])
+gh.remake = True
+check('  a save that changed an id is an ERROR', T.add_option('Owner', 'Cy', gh).startswith('ERROR: tickets: adding Cy to Owner changed option ids'), True)
 gh = fresh({40: {'title': 'Feature', 'labels': ['area:pipeline']}})
 b = T.bug(40, 'It broke', 'Steps.', run=gh)
 check("a bug: Kind Bug in the feature's Area, a sub-issue of it", (gh.writes[-1][1]['F_kind'], gh.writes[-1][1]['F_area'], gh.subs[-1][0]),

@@ -680,16 +680,21 @@ def set_field(item: str, field: str, value: str, run=None, cfg: dict = None) -> 
     return run.item_field(item, fid, option_id=got)
 
 
-def set_fields(item: str, values: dict, run=None, cfg: dict = None) -> bool:
+def set_fields(item: str, values: dict, run=None, cfg: dict = None, refused: list = None) -> bool:
     """Several Project fields of one item in ONE request ({field: value}, each as set_field takes it): the kit's
     project_set_fields through the runner's item_fields. A runner with no item_fields (an older fake) writes them one
-    by one. False when any value is an option the board lacks (nothing written) or the write failed."""
+    by one. False when any value is an option the board lacks (nothing written) or the write failed. Given a `refused`
+    list (0.38.0), a value the board lacks is left out and named there as (field, value), and the others are still
+    written: one unknown Owner must never cost a new card its column (SMADPickleBot #1918)."""
     run, cfg = _run(run), _cfg(cfg)
     fields = {}
     for field, value in values.items():
         fid, got = _field_value(item, field, value, run, cfg)
         if got is False:
-            return False
+            if refused is None:
+                return False
+            refused.append((field, value))
+            continue
         fields[fid] = got
     if not fields:
         return True
@@ -800,6 +805,44 @@ COLUMNS_UNREAD = "WARNING: tickets: the board's columns could not be read; nothi
 
 
 DRAFTS_UNREAD = "WARNING: tickets: the board's drafts could not be read; no placeholder made"
+
+
+def add_option(field: str, name: str, run=None, cfg: dict = None, color: str = 'GRAY', field_id: str = '') -> str:
+    """One option added to a single-select field of the board, every option it has sent back with its own id, color
+    and description (a save without the ids makes new options and clears the field on every card), then read again:
+    an id that changed is an ERROR, and the line names the new option's id for the board config's `fields`. A name the
+    field already has adds nothing. `field_id` names a field the config does not (a throwaway one, for a proof). The
+    line said (0.38.0; SMADPickleBot #1918)."""
+    run, cfg = _run(run), _cfg(cfg)
+    fid = field_id or (cfg['fields'].get(field) or {}).get('id')
+    name = (name or '').strip()
+    if not fid or not name:
+        return f"WARNING: tickets: no field '{field}' on the board config, or no option name; nothing added"
+
+    def options():
+        data = run.graphql(OPTIONS_QUERY, {'id': fid})
+        try:
+            return list(data['node']['options']) if data else []
+        except (KeyError, TypeError):
+            return []
+    have = options()
+    if not have:
+        return f"WARNING: tickets: the options of {field} could not be read; nothing added"
+    if any(o['name'] == name for o in have):
+        return f"tickets: {field} already has the option {name} ({next(o['id'] for o in have if o['name'] == name)})"
+    sent = [{'id': o['id'], 'name': o['name'], 'color': o['color'], 'description': o.get('description') or ''}
+            for o in have] + [{'name': name, 'color': color, 'description': ''}]
+    if run.graphql(RENAME_MUTATION, {'id': fid, 'options': sent}) is None:
+        return f"WARNING: tickets: {name} was not added to {field} ({(getattr(run, 'error', '') or '').strip()[:160]})"
+    after = options()
+    ids = {o['id']: o['name'] for o in after}
+    lost = [o['id'] for o in have if ids.get(o['id']) != o['name']]
+    if lost:
+        return f"ERROR: tickets: adding {name} to {field} changed option ids {lost}: every card in them lost its {field}"
+    new = next((o['id'] for o in after if o['name'] == name), '')
+    if not new:
+        return f"WARNING: tickets: {field} was saved and has no option {name}; read the board"
+    return f"tickets: {field} has the option {name}, id {new}; every other option kept its id"
 
 
 def sync_columns(run=None, cfg: dict = None, tmp: str = None, merge: bool = False, ship_run=None) -> str:
@@ -1517,7 +1560,19 @@ def new(kind: str, title: str, body: str = '', owner: str = '', status: str = 'b
             est = loe_minutes(body_loe(body))
         if est and 'Estimate' in cfg['fields']:
             values['Estimate'] = estimate_hours(est)
-        set_fields(item, values, run, cfg)
+        refused = []
+        wrote = set_fields(item, values, run, cfg, refused=refused)
+        for field, value in refused:
+            print(f"tickets: {field} '{value}' is not an option on the board: #{number} has no {field}", file=sys.stderr)
+        placed = bool(wrote) and not any(f == 'Status' for f, _v in refused)
+        if placed:   # the filer checks what it wrote: a card with no column is in no "what's next"
+            got = ticket_column(number, run, cfg)
+            placed = got is None or bool(got[1])   # GitHub not answering the check is no proof of a failure
+        if not placed:
+            print(f'ERROR: tickets: #{number} was filed and is on the board with no column: its fields were not '
+                  f'written; set them on the board', file=sys.stderr)
+    else:
+        print(f'ERROR: tickets: #{number} was filed and could not be put on the board', file=sys.stderr)
     return number
 
 

@@ -3,6 +3,24 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.38.0 - 2026-11-19 PT
+
+SMADPickleBot #1918: no card is left on the board with no column. Two tickets sat there 16 hours, in no read of the
+board, after a filing named an Owner the board had no option for: the one field write wrote nothing and nobody was told.
+- **`tickets.set_fields(..., refused=None)`**: given a list, a value the board lacks is left out and named there as
+  (field, value), and the other fields are still written. Without one it answers False and writes nothing, as before.
+- **`tickets.new`** files through it: each refused value is one line on the error stream, the card still gets its
+  column and its other fields, and it reads the card's column once after the write; no column is an `ERROR:` line
+  naming the ticket. Its return is unchanged (the number).
+- **`scrum.unplaced_sweep(cfg, gh, letters, dry=False)`** and **`unplaced_letter`**, run by `sweep` beside the failed
+  column's: one read with GitHub's `no:status is:issue`, each such card put in the backlog column and named in the
+  captain's one letter with the fields it still lacks. Drafts and fixed cards are left alone.
+- **`tickets.add_option(field, name, run=None, cfg=None, color='GRAY', field_id='')`**: one option added to a
+  single-select field, every option sent back with its own id, color and description, then read again; a changed id is
+  an ERROR, and the line names the new option's id for the board config.
+
+No host call site changes.
+
 ## 0.37.0 - 2026-11-17 PT
 
 SMADPickleBot #1683, step 3: one function added to `chuang_sdlc.listeners`; nothing existing changed.

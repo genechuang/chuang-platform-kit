@@ -464,6 +464,34 @@ dry = Board({'is:closed': [dict(card(950), status='Broken')], 'is:open': [dict(c
 dry_store = Records()
 S.wrecked_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), dry_store, NOW, {}, dry=True)
 check('  a dry run writes nothing and keeps no record', (dry.writes, dry_store.get('scrum', '952')), ([], None))
+# 0.38.0 (SMADPickleBot #1918): a card with no column is in no other read, so the sweep places it and tells the captain
+lost = Board({'no:status': [dict(card(960, owner='', prio=''), status=''), dict(card(961), status=''),
+                            dict(card(962), status='Backlog'),
+                            {'number': None, 'title': '— Broken: a card here failed —', 'status': ''}]})
+unplaced = {}
+lines = S.unplaced_sweep(CFG, S.GitHub(CFG, run=lost), unplaced)
+subject, text = S.unplaced_letter(S.captain(), unplaced.get(S.captain(), []))
+check('the positive case: each issue with no column is put in the backlog and goes into the captain\'s one letter; a '
+      'card that has a column and a fixed card are left alone',
+      (lines, [i[0] for i in unplaced.get(S.captain(), [])], len([w for w in lost.writes if w[0] == 'fields']), subject,
+       '#960' in text and 'no Owner, Priority' in text),
+      (['scrum: #960 had no column: put in Backlog; it still has no Owner, Priority, Area',
+        'scrum: #961 had no column: put in Backlog; it still has no Area'],
+       [960, 961], 2, 'Scrum master: 2 cards had no column', True))
+class _Down(Board):
+    def graphql(self, query, variables=None):
+        return None
+
+
+check('  a board that does not answer says so, and a refused move is said for the next sweep and tells nobody',
+      (S.unplaced_sweep(CFG, S.GitHub(CFG, run=_Down()), {}),
+       S.unplaced_sweep(CFG, S.GitHub(CFG, run=Board({'no:status': [dict(card(960), status='')]}, refuse={'fields'})), unplaced)[0][:60],
+       len(unplaced[S.captain()])),
+      (['scrum: the cards with no column did not answer; next sweep'],
+       'scrum: #960 had no column: the move to Backlog was refused; ', 2))
+dry = Board({'no:status': [dict(card(960), status='')]})
+S.unplaced_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), {}, dry=True)
+check('  a dry run writes nothing', dry.writes, [])
 S.configure(start_command='')
 check("  with no start command the question says to move it to the shipyard",
       'move it to the shipyard' in S.wrecked_question(9, 'Broken', 30), True)
