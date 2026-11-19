@@ -15,3 +15,15 @@ moved_elsewhere() {
   case "$text" in *"/hooks/$1"*) return 0 ;; esac
   return 1
 }
+
+#   moved_in_project <script name>   true while the project's own settings still wire its copy of the hook
+#
+# The same stand-down for a hook a project wired in its committed `.claude/settings.json` (1.35.0: the commit-rules
+# hook was one project's own): the file under CLAUDE_PROJECT_DIR (else the working folder), read once, text alone.
+moved_in_project() {
+  local f="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/settings.json" text
+  [ -r "$f" ] || return 1
+  text=$(<"$f") || return 1
+  case "$text" in *"/hooks/$1"*) return 0 ;; esac
+  return 1
+}

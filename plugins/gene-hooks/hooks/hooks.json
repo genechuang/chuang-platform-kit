@@ -17,6 +17,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" no-console-windows.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" catch-up-hook.sh",
+            "timeout": 30
           }
         ]
       }
@@ -33,6 +38,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" unpushed-commits.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" catch-up-hook.sh",
+            "timeout": 30
           }
         ]
       }
@@ -53,6 +63,16 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" no-shell-writes.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" block-git-commits.sh",
             "timeout": 5
           }
         ]
