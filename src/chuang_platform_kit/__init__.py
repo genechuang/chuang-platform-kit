@@ -84,8 +84,11 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      or deleted, its tracks read and put, a bundle and its mapping uploaded, the tracks read in an
                      edit that is always deleted, the keyless publisher account's token, and the readers of Play's
                      answers; the host passes its package name and its publisher account
+  answer_cache       read answers kept in Firestore in front of a database that sleeps: served while their data
+                     version stands, built again at the write in one pass under a lease, and the reader's change
+                     signal asked of the host after, so a write never becomes a database start for each later reader
 
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.36.1'
+__version__ = '0.37.0'

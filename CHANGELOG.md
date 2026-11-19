@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.37.0 - 2026-11-19 PT
+
+New module, no signature changes: `answer_cache`, read answers kept in Firestore in front of a database that sleeps,
+rebuilt at the write and pushed (SMADPickleBot #1708, out of its `services/api/fs_cache.py`). A cache that only drops
+an answer at a write turns one write into a database start for every reader after it; this one builds each ended
+answer again in a pass the host runs right after the write, while the database is awake, then tells the host which
+reader's answer changed so it can bump a signal a view listens to. `AnswerCache` (`answer`, `register`, `bump`,
+`rebuild`), `Bumps` (one request's version bumps), `version_of`, `SKIP`. Suite: `tests/test-answer-cache.py`.
+
 ## 0.36.1 - 2026-11-18 PT
 
 0.36.0's `firestore.Client.name()` refused an id holding `/`; a host keys locks by dates (`name-10/06`), found by

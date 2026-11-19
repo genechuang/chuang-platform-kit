@@ -11,6 +11,28 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned
 only where they run (its own tags, `sdlc-v<version>`).
 
+## `answer_cache`: Read answers kept in Firestore in front of a database that sleeps, rebuilt at the write and pushed…
+
+| Name | Purpose |
+|---|---|
+| `instant(text)` | An ISO stamp as an aware UTC datetime (a naive one is UTC), None for none or unreadable. |
+| `earliest(*stamps)` | The earliest of ISO stamps or datetimes (None and unreadable ones left out), for a route's `until`. |
+| `version_of(signal, domains=)` | What an answer is kept under: the scope's `version` (every write), or for a route that names its `domains` their counters and UNKNOWN's, so a write to another domain leaves it. |
+| `class Route` | One registered route: how its answer is rebuilt with no request in hand, and what it reads. |
+| `Route.domains_of(key)` | The domains this route's answer for `key` reads: its registered ones, or what its function says for the key (a route whose reads depend on what was asked for). |
+| `class AnswerCache` | Kept answers for one scope (a league, a tenant) in one Firestore database. `store` is a callable answering the Firestore client (so a host's test may swap it), `scope` the version document's id and the prefix of every kept document, `revision` the code's (an… |
+| `AnswerCache.register(route, rebuild, domains=, until=, inputs=, keep=)` | Say how `route`'s answer is rebuilt at a write: `rebuild(who, key)` answers what the route's own build would for that caller and key (or raises, or answers SKIP, and the document is left for its next reader), `domains` the domains its build reads (None: the s… |
+| `AnswerCache.doc_id(route, who, key)` | The kept answer's document: '<scope>__<route>__<hash>' over `who` and `key`, so no caller's id is spelled in a document name. |
+| `AnswerCache.usable(kept, version, inputs, now)` | Whether a kept document answers now: built under `version`, by this revision, with the same `inputs`, before its end and within the longest age. |
+| `AnswerCache.answer(route, who, key, build, until=, inputs=, now=, keep=, domains=, mark=)` | (the answer's JSON text, 'kept' or 'built'): the kept one when it is usable, else `build()`'s, kept for next time. `who` is a tuple naming the caller (always part of the key); `key` the route's own, JSON-able. `build()` answers or raises as the route does (no… |
+| `AnswerCache.bump(domains=, now=, what=)` | Move the scope's version, and the counter of each domain named, in one write: every kept answer that reads them stops being served at once. False, never an exception, when Firestore cannot be reached (kept answers may then be a write behind until their end). |
+| `AnswerCache.rebuild(now=, budget=, pushed=, clock=, routes=)` | One rebuild pass, for a host to run after a write while its database is awake: every registered route's kept documents of this scope that are no longer usable (the version moved, or their end passed) and were asked for within keep_days are rebuilt under the c… |
+| `class Bumps` | One request's version bumps: `committed(domains)` on each commit or successful write, `finish()` before the response leaves. One bump runs at a time in its own thread, alongside the rest of the request; a commit while it runs makes it bump once more, so the l… |
+| `Bumps.committed(domains=)` | A commit landed, having written tables of `domains`: start the bump now, or have the running one go once more. |
+| `Bumps.pending()` | Whether this request bumped at all (the host then asks for a rebuild pass). |
+| `Bumps.wrote_nothing()` | This request moved the version and no commit of it named a table it wrote: such a request ends every kept answer for nothing, which a host counts. |
+| `Bumps.finish()` | Wait for the bump, at most finish_seconds, before the response leaves. |
+
 ## `anthropic_api`: Anthropic's Messages API, one client for every project (SMAD PickleBot #573; Gene, 10/31/26 8:56 AM…
 
 | Name | Purpose |
