@@ -20,7 +20,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" catch-up-hook.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" repo-fresh.sh",
             "timeout": 30
           }
         ]
@@ -41,7 +41,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" catch-up-hook.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" repo-fresh.sh",
             "timeout": 30
           }
         ]
