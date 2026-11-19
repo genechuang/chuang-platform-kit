@@ -46,6 +46,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" no-shell-writes.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -70,6 +80,11 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" stamp-reply.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" reminder-gate.sh",
             "timeout": 5
           },
           {
