@@ -94,7 +94,8 @@ def decide(event, read_tail, now=None):
                                   f'"ticket: none" when no ticket owns it), saying the reply above is complete (do not '
                                   f'repeat it). Every stamp, opening and closing, is "{TICKET_FORM}" (Gene, 10/31/26: '
                                   f'"also write the ticket # you\'re working on - if none, then say ticket: none").'}
-            return evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd'))
+            return (evidence(reply, read_tail(event.get('transcript_path') or ''), event.get('cwd'))
+                    or do_now(event))
         return {'decision': 'block',
                 'reason': f'Your reply\'s stamp is {abs(off)} minute(s) {"ahead of" if off > 0 else "behind"} the clock: it is '
                           f'{stamp} PT now. Send one short line, "— {stamp} PT · ticket: #N", saying the reply above is '
@@ -127,6 +128,23 @@ def evidence(reply, lines, cwd=None, names=None):
 # The promise gate (1.30.0 to 1.32.1, promise-gate.py) is gone since 1.33.0 (SMADPickleBot #1827; Gene, 11/18/26 11:04 AM
 # PT: "get rid of all empty-promise hooks with haiku"): the session's next ticket comes to it as a letter from the
 # project's dock push instead, which starts its next turn.
+
+
+def do_now(event):
+    """Once the stamp and the evidence are right, do-now-gate.py's check (1.37.0, SMADPickleBot #1917): a ticket the
+    session's project handed it to do now has a tool call before the turn ends, held once. It reads the activity log,
+    never the reply's words. A helper's Stop (an event naming agent_id) is never the session's. Loaded from this
+    file's own folder, as evidence(); any failure lets the turn end."""
+    try:
+        if event.get('agent_id'):
+            return None
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('do_now_gate', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'do-now-gate.py'))
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        return gate.check(event.get('session_id') or '')
+    except Exception:  # noqa: BLE001 - never trap a session
+        return None
 
 
 AHEAD_OK, BEHIND_OK = 1, 1   # minutes (Gene, 10/20/26 12:22 AM PT: "reject timestamps more than 1 min ahead or behind")
