@@ -142,7 +142,8 @@ def do_now(event):
         spec = importlib.util.spec_from_file_location('do_now_gate', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'do-now-gate.py'))
         gate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gate)
-        return gate.check(event.get('session_id') or '')
+        # The turn's own transcript too (1.40.0, SMADPickleBot #1929): the log can lag a change of ticket by a call or two.
+        return gate.check(event.get('session_id') or '', transcript=str(event.get('transcript_path') or ''))
     except Exception:  # noqa: BLE001 - never trap a session
         return None
 

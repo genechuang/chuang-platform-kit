@@ -107,5 +107,62 @@ check("the Stop hook: a helper's end is never judged; the session's is held once
 check('  the reason speaks of the action, names no project, and says it holds once',
       ('made no tool call' in held['reason'], 'held once' in held['reason'], 'SMAD' in held['reason']), (True, True, False))
 
+# 5. The log lagging a change of ticket (1.40.0, SMADPickleBot #1929): on 11/19/26 the first calls after a session
+#    changed tickets were logged under the ticket of the turn before, and the gate held a turn that had done its work.
+from datetime import datetime, timezone   # noqa: E402
+
+
+def entry(seconds, kind, text=''):
+    """One assistant entry of a transcript, `seconds` after T0: a text block or a tool call, as Claude Code writes them."""
+    stamp = datetime.fromtimestamp(T0 + seconds, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    block = {'type': 'text', 'text': text} if kind == 'text' else {'type': 'tool_use', 'id': 'toolu_1', 'name': 'Bash', 'input': {}}
+    return json.dumps({'type': 'assistant', 'timestamp': stamp, 'message': {'role': 'assistant', 'content': [block]}})
+
+
+def held_with(lines, log=()):
+    """The gate's decision for a record of #1883 at T0, the log given, and a transcript of `lines`."""
+    folder, logp, _path = box({'ticket': '1883', 'at': T0}, log)
+    transcript = os.path.join(folder, 'session.jsonl')
+    with open(transcript, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    return (G.check(SID, now=T0 + 600, folder=folder, log=logp, transcript=transcript) or {}).get('decision')
+
+
+STALE_LOG = [f'{T0 + 205:.0f} {SID} 1868', f'{T0 + 207:.0f} {SID} 1868', f'{T0 + 214:.0f} {SID} stop']
+NEW = '11/19/26 6:02 PM PT · ticket: #1883: reading its body.'
+OLD = '11/19/26 5:55 PM PT · ticket: #1868: done.'
+check("the 11/19/26 shape: the log names the ticket of the turn before, the transcript shows the new ticket's stamp and "
+      "then a tool call, so the turn is not held",
+      held_with([entry(200, 'text', NEW), entry(205, 'tool')], STALE_LOG), None)
+check('  a stamp naming the ticket with no tool call after it is words: held',
+      held_with([entry(200, 'text', NEW)], STALE_LOG), 'block')
+check('  a call under another ticket, a stamped call from before the record, and ticket: none do not count',
+      [held_with([entry(200, 'text', OLD), entry(205, 'tool')], STALE_LOG),
+       held_with([entry(-30, 'text', NEW), entry(-20, 'tool')], STALE_LOG),
+       held_with([entry(200, 'text', NEW), entry(202, 'text', '11/19/26 6:03 PM PT · ticket: none: a question.'), entry(205, 'tool')], STALE_LOG)],
+      ['block'] * 3)
+check('  a later unstamped line changes nothing: the call after it is still charged to the last stamp',
+      held_with([entry(200, 'text', NEW), entry(202, 'text', 'Running the suite.'), entry(205, 'tool')], STALE_LOG), None)
+check('  one stamp naming two tickets counts for each', held_with([entry(200, 'text', '11/19/26 6:02 PM PT · ticket: #1868, #1883: both.'), entry(205, 'tool')]), None)
+check('  an unreadable or missing transcript is no tool call, and never an error',
+      [G.worked('', '1883', T0), G.worked(os.path.join(tempfile.gettempdir(), 'no-such-transcript.jsonl'), '1883', T0),
+       held_with(['{not json', 'null', '[]'], STALE_LOG)], [False, False, 'block'])
+folder, logp, path = box({'ticket': '1883', 'at': T0}, STALE_LOG)
+tpath = os.path.join(folder, 'session.jsonl')
+with open(tpath, 'w', encoding='utf-8') as f:
+    f.write(entry(200, 'text', NEW) + '\n' + entry(205, 'tool') + '\n')
+keep = dict(os.environ)
+os.environ['DO_NOW_DIR'], os.environ['TICKET_ACTIVITY_LOG'] = folder, logp
+try:
+    import time
+    real = time.time
+    time.time = lambda: T0 + 600
+    through_hook = S.do_now({'session_id': SID, 'transcript_path': tpath})
+    time.time = real
+finally:
+    os.environ.clear()
+    os.environ.update(keep)
+check("  the Stop hook hands the gate the turn's transcript: not held, the record gone", (through_hook, os.path.exists(path)), (None, False))
+
 print(f'\n{len(FAILS)} failure(s)' + (': ' + '; '.join(FAILS) if FAILS else ''))
 sys.exit(1 if FAILS else 0)
