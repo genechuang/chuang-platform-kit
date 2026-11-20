@@ -152,5 +152,64 @@ now = datetime(2026, 11, 8, 8, 0, 1, tzinfo=timezone.utc)   # utc-ok: a fixed in
 check('seconds after the change', (W.delivery_age('2026-11-08T08:00:00Z', now), W.delivery_age('', now), W.delivery_age('soon', now)),
       ('; GitHub delivered it 1.0 s after the change', '', ''))
 
+print("what a receiver does (0.41.0, SMADPickleBot #1683)")
+logged = []
+
+
+def boom(kind):
+    def go():
+        raise kind('down')
+    return go
+
+
+ladder = [W.step(boom(RuntimeError), lambda r: 'here', lambda e: (f'WARNING: here failed ({e})', 'not here')),
+          W.step(lambda: 'exec-1', lambda r: f'job started ({r})', lambda e: ('WARNING: no job', 'no job')),
+          W.step(lambda: None, lambda r: 'published', lambda e: ('ERROR: lost', 'lost'))]
+check('the positive case: the first step that works answers, every failure before it logged in its own words',
+      (W.fallback(ladder, logged.append), logged), ('job started (exec-1)', ['WARNING: here failed (down)']))
+logged.clear()
+every = [W.step(boom(RuntimeError), lambda r: 'a', lambda e: ('WARNING: a', 'said a')),
+         W.step(boom(OSError), lambda r: 'b', lambda e: ('', 'said b'))]
+check("  every step failing: the last one's line; a failure with no log line logs nothing",
+      (W.fallback(every, logged.append), logged), ('said b', ['WARNING: a']))
+try:
+    W.fallback([W.step(boom(KeyError), lambda r: 'a', lambda e: ('x', 'x'), catch=(RuntimeError,))], logged.append)
+    raised = False
+except KeyError:
+    raised = True
+check("  a fault a step does not catch is raised, as before the move", raised, True)
+naps = []
+tries = iter([RuntimeError('first'), 'node'])
+
+
+def read():
+    got = next(tries)
+    if isinstance(got, Exception):
+        raise got
+    return got
+value, fails2 = W.read_twice(read, wait=1, pause=naps.append)
+check('read_twice: the second try answers after the pause, the first failure kept',
+      (value, [str(e) for e in fails2], naps), ('node', ['first'], [1]))
+check('  no second try when not allowed; failing both times: None and both failures',
+      (W.read_twice(boom(RuntimeError), again=False, pause=naps.append)[0],
+       [str(e) for e in W.read_twice(boom(RuntimeError), pause=lambda s: None)[1]]),
+      (None, ['down', 'down']))
+seen = []
+
+
+class Layer:
+    def __init__(self, key, cfg):
+        seen.append(('in', key, cfg))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        seen.append(('out',))
+check('for_tenant: a board of no tenant is answered and dropped; a tenant runs inside its layer',
+      (W.for_tenant(None, Layer, lambda key: 'ran', 'ignored: another Project'),
+       W.for_tenant(('cf', {'repo': 'a/b'}), Layer, lambda key: f'ran as {key}', 'x'), seen),
+      ('ignored: another Project', 'ran as cf', [('in', 'cf', {'repo': 'a/b'}), ('out',)]))
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

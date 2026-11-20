@@ -11,9 +11,18 @@ a host's receiver, which then does what the decision says (a sweep, a letter, an
                   ignored; `item_route` after the read: a placeholder put back, a draft that is no move, or a move
   delivery_age    how long after the item's change the delivery came, as a clause for the move's line
 
+And what a receiver does about a route (0.41.0, SMADPickleBot #1683, the push decider's actors; its lead's word,
+11/20/26: "move all"), with every name, event, job and word the host's:
+
+  fallback        each step in turn until one works: do it here, else start the job, else publish for a retry, else
+                  an ERROR line; the line of the first that works, every failure logged in the host's words
+  read_twice      one read tried again after a pause when the first fails, (the value, the failures)
+  for_tenant      a delivery routed to the tenant whose board it is, run inside that tenant's layer, or dropped
+
 Standard library only (and this package's board for the trailers): a receiver's webhook imports it at once.
 """
 import re
+import time
 from datetime import datetime, timezone
 
 from . import board as _board
@@ -148,3 +157,54 @@ def delivery_age(updated_at, now=None) -> str:
         return ''
     now = now or datetime.now(timezone.utc)   # utc-ok: an instant against GitHub's UTC stamp
     return f'; GitHub delivered it {max(0.0, (now - changed).total_seconds()):.1f} s after the change'
+
+
+# ------------------------------------------------------------------ what a receiver does about a route (0.41.0)
+def step(do, ok, failed, catch=(Exception,)) -> tuple:
+    """One step of fallback(): `do()` the work; `ok(result)` its line when it works; `failed(error)` -> (the line to
+    log, '' for none; the line to return when it is the last to fail); `catch` the faults that mean "try the next"
+    (any other is raised to the caller, as before the move)."""
+    return do, ok, failed, catch
+
+
+def fallback(steps, log=print) -> str:
+    """Each step in turn until one works (step()): the line of the first that works; a step that fails logs its line
+    and the next is tried; when every one fails, the last one's returned line. The host's ladders, which are all of
+    this one shape: do it here, else start its job, else publish it for the bus's retry, else say ERROR."""
+    said = ''
+    for do, ok, failed, catch in steps:
+        try:
+            got = do()
+        except catch as e:
+            logged, said = failed(e)
+            if logged:
+                log(logged)
+            continue
+        return ok(got)
+    return said
+
+
+def read_twice(read, wait: float = 1, again: bool = True, pause=None, catch=(RuntimeError,)) -> tuple:
+    """(the value, the failures) of `read()`, tried once more after `wait` seconds when the first fails and `again`
+    allows it (a receiver with no token gains nothing from a second try). (None, [first, second]) when it failed every
+    time; (value, [first]) when the second answered. `pause` is the suite's seam for the wait."""
+    fails = []
+    for n in range(2 if again else 1):
+        if n:
+            (pause or time.sleep)(wait)
+        try:
+            return read(), fails
+        except catch as e:
+            fails.append(e)
+    return None, fails
+
+
+def for_tenant(found, using, run, none_line: str) -> str:
+    """A delivery routed by its board: `found` is (tenant key, its config) or None for a board of no tenant, which is
+    answered `none_line` and dropped; else `run(key)` inside `using(key, config)`, the host's tenant layer
+    (chuang_sdlc.tenant.using with its own modules)."""
+    if found is None:
+        return none_line
+    key, cfg = found
+    with using(key, cfg):
+        return run(key)

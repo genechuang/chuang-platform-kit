@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.41.0 - 2026-11-20 PT
+
+New in `webhooks`, no signature changes: what a receiver does about a route (SMADPickleBot #1683, the push decider's
+actors; the lead's word, 11/20/26: "move all"). `step(do, ok, failed, catch)` and `fallback(steps, log)`: each step in
+turn until one works (here, else the job, else the bus, else an ERROR line), every failure logged in the host's words
+and the last one's line returned; a fault a step does not catch is raised as before. `read_twice(read, wait, again,
+pause)`: one read tried again after a pause. `for_tenant(found, using, run, none_line)`: a delivery run inside its
+tenant's layer, or dropped. The host keeps every word, event, job and store. Suite: `tests/test-sdlc-webhooks.py`.
+
 ## 0.40.0 - 2026-11-20 PT
 
 The scrum master tells an idle owner to start a card, every full sweep (SMADPickleBot #2066; the lead, 11/20/26, after
