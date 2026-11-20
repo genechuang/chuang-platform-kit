@@ -20,18 +20,43 @@ reply's words. It checks one action the project asked for:
                Since 1.40.0 (SMADPickleBot #1929) the turn's own transcript answers too: the log can charge the first
                call or two after a change of ticket to the ticket before (worked() says why), and a turn that did its
                work was held twice on 11/19/26. A stamp naming the ticket and then a tool call, after the record.
-  the hold     none yet: the turn is held ONCE, with the ticket named, and the record is marked so the next Stop lets
-               the turn end whatever happened. A record older than MAX_AGE holds nothing and is removed.
+  the hold     the turn is held with the ticket named, up to HOLDS times a record (once, until 1.41.0), the count kept
+               in the record. A record older than MAX_AGE holds nothing and is removed.
 
 Released (the file removed) the moment the ticket has a tool call after the record. Any failure, a missing file, an
 unreadable log: the turn ends, never trapped.
+
+1.41.0 (SMADPickleBot #2066): a session with work it can do does not end its turn. Gene, 11/20/26 1:25 PM PT, after an
+audit found a session idle 7.9 of 13.4 hours with over 40 cards queued for it, every idle stretch beginning at its own
+end of turn: "Tell me why with all the inbox reminder we built ... that you still are failing miserably??" Three holes:
+the record above exists only after a push, it held once, and the Stop hook never held twice running, so any hold was
+answered by one small act (that day, a "paused" note on the card) and the turn ended. So, with no record holding:
+
+  the project  a project that keeps a `.do-now.json` at its root, {"next": [command ...]}, is asked at each end of turn
+               for the session's next card: the command is run in the project with `--session-id <id>` added, NEXT_S
+               at most, and prints one JSON line, {"ticket": "2066", "title": "...", "how": "<its start command>"} or
+               {} for none. No file, a slow or failing command, anything unreadable: the turn ends.
+  the hold     a ticket named holds the turn: start it, or carry on with it. It holds again at the next end of turn
+               when the session made a tool call since the last hold (it worked, and there is still work), even while
+               Claude Code says it is already continuing from a Stop hook. A hold answered with no tool call at all is
+               let go: that is the bound that keeps a session from being trapped, and it is a refusal in words, on
+               the record, never a loophole.
+  the switch   the box's owner turns this hold off with a file named `idle-off` in DO_NOW_DIR (~/.claude/do-now), or
+               DO_NOW_IDLE_OFF=1 in the environment, and on again by removing it. It is theirs to use, never a
+               session's way out. The record's hold above is not switched by it.
 """
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 
 MAX_AGE = 6 * 3600   # a record this old is yesterday's news: it holds nothing
+HOLDS = 3            # how many times one record holds a turn whose ticket is still untouched
+NEXT_S = 2.5         # the project's command gets this long; the Stop hook's own limit is 5 s
+CONFIG = '.do-now.json'
+OFF = 'idle-off'     # a file of this name in DO_NOW_DIR switches the project's hold off on this box (its owner's switch)
 
 
 def home_dir(env=None) -> str:
@@ -129,38 +154,160 @@ def _remove(path: str) -> None:
         pass
 
 
-def check(session_id: str, now: float = None, folder: str = None, log: str = None, transcript: str = None):
-    """The Stop hook's answer for a session with a do-now record: {'decision': 'block', 'reason'} the first time its
-    turn ends with no tool call on the ticket, else None. See the module's docstring for each case. `transcript` is
-    the turn's own (the Stop event's transcript_path): when the log shows no call on the ticket, the transcript is
-    read for one (worked, 1.40.0)."""
+def check(session_id: str, now: float = None, folder: str = None, log: str = None, transcript: str = None,
+          cwd: str = None, active: bool = False, env=None, ask=None):
+    """The Stop hook's answer: {'decision': 'block', 'reason'} or None. First the session's do-now record (record_hold:
+    a ticket handed over and still untouched), then, with none holding, the project's own answer for the session's
+    next card (idle_hold, 1.41.0). `transcript` is the turn's own (the Stop event's transcript_path), `cwd` the
+    event's, `active` its stop_hook_active; `ask` a suite's stand-in for the project's command."""
     if not session_id:
         return None
+    now = time.time() if now is None else now
+    return (record_hold(session_id, now, folder, log, transcript)
+            or idle_hold(session_id, now, folder, log, cwd, active, env, ask))
+
+
+def record_hold(session_id: str, now: float, folder: str = None, log: str = None, transcript: str = None):
+    """The hold of a session's do-now record: block while its ticket has no tool call after the record, up to HOLDS
+    times; else None, the record removed once it is spent, stale, released or unreadable. See the module's docstring.
+    When the log shows no call on the ticket, the transcript is read for one (worked, 1.40.0)."""
     path = record_path(session_id, folder)
     try:
         with open(path, encoding='utf-8') as f:
             rec = json.load(f)
     except (OSError, ValueError):
         return None
-    ticket = re.sub(r'\D', '', str((rec or {}).get('ticket') or ''))
+    if not isinstance(rec, dict):
+        _remove(path)
+        return None
+    ticket = re.sub(r'\D', '', str(rec.get('ticket') or ''))
     try:
         at = float(rec.get('at') or 0)
     except (TypeError, ValueError):
         at = 0.0
-    now = time.time() if now is None else now
-    if (not ticket or rec.get('held') or now - at > MAX_AGE or touched(_tail(log or log_path()), session_id, ticket, at)
+    held = rec.get('held')
+    held = 1 if held is True else int(held) if isinstance(held, int) else 0   # True: a record held before 1.41.0
+    if (not ticket or held >= HOLDS or now - at > MAX_AGE or touched(_tail(log or log_path()), session_id, ticket, at)
             or worked(transcript, ticket, at)):
         _remove(path)
         return None
     try:
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump(dict(rec, held=True), f)
+            json.dump(dict(rec, held=held + 1), f)
     except OSError:
         _remove(path)
+    left = HOLDS - held - 1
     return {'decision': 'block',
             'reason': f"Your project handed you ticket #{ticket} to do now, and this turn made no tool call on it. Start it "
                       f"in this turn: write a line stamped \"ticket: #{ticket}\" and make its first tool call (reading "
-                      f"its body counts). If another of your own queued cards is truly next, start that one with your "
-                      f"project's ticket tool instead, or say on #{ticket}'s card why it waits. A turn that reads a "
+                      f"its body counts), then build it. If another of your own queued cards is truly next, start that "
+                      f"one with your project's ticket tool instead. A note on the card is not a start, and a full "
+                      f"context, a ship or a reply you are waiting for is no reason to stop. A turn that reads a "
                       f"\"do it now\" and ends without touching the ticket is the empty promise (Gene, 11/19/26: "
-                      f"\"But then proceed to do nothing!\"). You are held once; the next end of turn is yours."}
+                      f"\"But then proceed to do nothing!\"). "
+                      + (f"This holds {left} more time{'s' if left != 1 else ''}." if left else 'This is the last hold.')}
+
+
+def idle_path(session_id: str, folder: str = None) -> str:
+    """Where the session's last idle hold is kept: {at, ticket}."""
+    return record_path(session_id, folder)[:-len('.json')] + '.idle.json'
+
+
+def project_command(cwd: str = None, env=None):
+    """(the project's folder, its next-card command) from the `.do-now.json` at the project's root: CLAUDE_PROJECT_DIR,
+    else the nearest folder at or above `cwd` holding one (six levels at most). None for no file, an unreadable one or
+    one with no command. A first word of `python` runs under this hook's own interpreter."""
+    env = os.environ if env is None else env
+    start = env.get('CLAUDE_PROJECT_DIR') or cwd or ''
+    here = os.path.abspath(start) if start else ''
+    for _ in range(6):
+        if not here:
+            break
+        path = os.path.join(here, CONFIG)
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding='utf-8') as f:
+                    argv = (json.load(f) or {}).get('next')
+            except (OSError, ValueError, AttributeError):
+                return None
+            if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+                return None
+            return here, ([sys.executable] + argv[1:]) if argv[0] in ('python', 'python3') else list(argv)
+        up = os.path.dirname(here)
+        if up == here:
+            break
+        here = up
+    return None
+
+
+def ask_project(folder: str, argv: list, session_id: str) -> dict:
+    """The project's answer for this session's next card: its command run in the project with `--session-id`, NEXT_S
+    at most, no window, the last line of its output read as JSON. {} for anything else."""
+    try:
+        got = subprocess.run(argv + ['--session-id', session_id], cwd=folder, capture_output=True, text=True,
+                             timeout=NEXT_S, encoding='utf-8', errors='replace',
+                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        lines = [ln for ln in (got.stdout or '').splitlines() if ln.strip()]
+        out = json.loads(lines[-1]) if got.returncode == 0 and lines else {}
+        return out if isinstance(out, dict) else {}
+    except Exception:  # noqa: BLE001 - slow, missing or unreadable: no hold
+        return {}
+
+
+def called_since(lines, session_id: str, since: float) -> bool:
+    """Whether the session made any tool call of its own after `since` (an activity line that is no stop and no
+    helper's)."""
+    sid = re.sub(r'[^A-Za-z0-9-]', '', str(session_id or ''))
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 3 or parts[1] != sid or parts[2] in ('stop', 'agent'):
+            continue
+        try:
+            if float(parts[0]) > since:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def idle_hold(session_id: str, now: float, folder: str = None, log: str = None, cwd: str = None, active: bool = False,
+              env=None, ask=None):
+    """1.41.0: the hold for a session whose project says it has a card to work (the module's docstring). Block naming
+    the card; None when the project names none, has no command, or the last hold was answered with no tool call (a
+    continued turn, `active`, with nothing in the activity log since that hold)."""
+    if (os.environ if env is None else env).get('DO_NOW_IDLE_OFF') or os.path.exists(os.path.join(folder or home_dir(), OFF)):
+        return None   # the box's owner switched the hold off (the file, or the variable)
+    found = project_command(cwd, env)
+    if not found:
+        return None
+    path = idle_path(session_id, folder)
+    got = (ask or ask_project)(found[0], found[1], session_id) or {}
+    ticket = re.sub(r'\D', '', str(got.get('ticket') or ''))
+    if not ticket:
+        _remove(path)
+        return None
+    try:
+        with open(path, encoding='utf-8') as f:
+            last = float((json.load(f) or {}).get('at') or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        last = 0.0
+    if active and last and not called_since(_tail(log or log_path()), session_id, last):
+        _remove(path)   # held, and answered in words alone: let go, never trapped
+        return None
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'at': now, 'ticket': ticket}, f)
+    except OSError:
+        return None   # a hold it could not record could not be bounded either
+    title = re.sub(r'\s+', ' ', str(got.get('title') or '')).strip()[:140]
+    how = re.sub(r'\s+', ' ', str(got.get('how') or '')).strip()[:200]
+    return {'decision': 'block',
+            'reason': f"You have work you can do now: #{ticket}{' ' + title if title else ''}. Do not end this turn idle: "
+                      f"write a line stamped \"ticket: #{ticket}\" and start it or carry on with it"
+                      + (f" ({how})" if how else '') + ". A full context, a ship, a warm, a run or a reply you are "
+                      "waiting for is no reason to stop: compaction is automatic, the plan is the ticket's body, and "
+                      "the pipeline watches the rest. A note on a card is not work. If a card truly waits on a person "
+                      "or a date, say so on it with your project's own word for that and take the next one. (Gene, "
+                      "11/20/26: a session idle 7.9 of 13.4 hours with over 40 cards queued, every stretch beginning "
+                      "at its own end of turn.)"}

@@ -11,8 +11,9 @@ turn is checked: the one Gene reads on his phone when the turn ends, and the one
 agent or a peer message used to miss (no prompt fires there).
 
 Cost: it runs once per turn, after the reply is written, never on a prompt or a tool call; it reads only the
-transcript's tail (the last 256 KB). It never blocks twice in a row (`stop_hook_active`), never on a turn with
-no text, and any error exits 0: a broken hook must never trap a session.
+transcript's tail (the last 256 KB). Its stamp and evidence checks never block twice in a row (`stop_hook_active`),
+never on a turn with no text, and any error exits 0: a broken hook must never trap a session. The do-now gate alone
+may hold a continued turn (1.41.0), under its own bound.
 """
 import json
 import os
@@ -76,7 +77,10 @@ def _is_prompt(entry):
 def decide(event, read_tail, now=None):
     """The hook's JSON answer, or None to let the turn end."""
     if event.get('stop_hook_active'):
-        return None
+        # The stamp and the evidence never hold twice running. The do-now gate may (1.41.0, SMADPickleBot #2066): a
+        # session with work to do that answered a hold with one small act used to end its turn here; its own bound
+        # (a hold answered with no tool call is let go) keeps it from trapping one.
+        return do_now(event)
     reply = last_reply(read_tail(event.get('transcript_path') or ''))
     if not reply:
         return None
@@ -132,8 +136,9 @@ def evidence(reply, lines, cwd=None, names=None):
 
 def do_now(event):
     """Once the stamp and the evidence are right, do-now-gate.py's check (1.37.0, SMADPickleBot #1917): a ticket the
-    session's project handed it to do now has a tool call before the turn ends, held once. It reads the activity log,
-    never the reply's words. A helper's Stop (an event naming agent_id) is never the session's. Loaded from this
+    session's project handed it to do now has a tool call before the turn ends, and since 1.41.0 (#2066) a session
+    whose project says it has a card to work does not end its turn idle. It reads the activity log and the project's
+    own answer, never the reply's words. A helper's Stop (an event naming agent_id) is never the session's. Loaded from this
     file's own folder, as evidence(); any failure lets the turn end."""
     try:
         if event.get('agent_id'):
@@ -143,7 +148,8 @@ def do_now(event):
         gate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gate)
         # The turn's own transcript too (1.40.0, SMADPickleBot #1929): the log can lag a change of ticket by a call or two.
-        return gate.check(event.get('session_id') or '', transcript=str(event.get('transcript_path') or ''))
+        return gate.check(event.get('session_id') or '', transcript=str(event.get('transcript_path') or ''),
+                          cwd=str(event.get('cwd') or ''), active=bool(event.get('stop_hook_active')))
     except Exception:  # noqa: BLE001 - never trap a session
         return None
 
