@@ -22,6 +22,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" repo-fresh.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" session-mail.sh",
+            "timeout": 5
           }
         ]
       }
@@ -43,6 +48,16 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" repo-fresh.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" session-mail.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" ticket-start.sh",
+            "timeout": 5
           }
         ]
       }
@@ -89,6 +104,11 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" nanny.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" session-mail.sh",
             "timeout": 5
           }
         ]
