@@ -9,7 +9,8 @@ check, a once-only claim, a sender), read this file. If the kit has it, import i
 kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.
 
 The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned
-only where they run (its own tags, `sdlc-v<version>`).
+only where they run (its own tags, `sdlc-v<version>`). The `chuang_alerts.` sections are chuang-alerts, a
+project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`).
 
 ## `answer_cache`: Read answers kept in Firestore in front of a database that sleeps, rebuilt at the write and pushed…
 
@@ -1460,4 +1461,32 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `reads(fn, project, region, kind=, revision=, bus=, id_token=, token=, impersonate=, env=, opener=)` | {file name: (text, rc)} of the smoke's reads (module docstring), made side by side on one token. Refused when no token answers or any read is refused, but a function's 404, which is a service that was never a Cloud Function. |
 | `write(folder, files)` | Each file and its `.rc` into `folder`, LF-ended (a Windows interpreter's CRLF would leave a '\r' in the script's `$(...)`). |
 | `main(argv=, out=)` | `reads DIR FUNCTION PROJECT REGION KIND [--revision R] [--bus] [--id-token]`: the files written and 0, or 3 with the refusal's reason on the last line and nothing written. |
+
+## `chuang_alerts.backlog`: A Pub/Sub subscription stuck before its dead letters: each subscription's backlog read from Cloud M…
+
+| Name | Purpose |
+|---|---|
+| `is_dead_letter_hold(name)` | A dead-letter topic's own holding subscription (`...dead-letter`, `...-dlq`): read by its own tools, never here. |
+| `read_series(project, token, metric, now, opener=)` | {subscription: its newest value} for a pubsub_subscription `metric` over the ten minutes before `now`, every page of Cloud Monitoring's answer. |
+| `backlogs(project, token, now, opener=)` | {subscription: {'undelivered': n, 'oldest_s': seconds}} for every subscription of `project` but the dead-letter holds. |
+| `minutes(seconds)` | '7 min' from two minutes on, else '45 s': how a backlog's age is said. |
+| `classify(found, quiet=, info=, pulled=, age_s=, count=, in_flight_s=)` | [(kind, subscription, undelivered, oldest seconds)] in subscription order for `found` (backlogs' answer), one finding a subscription that holds anything; `quiet` and `info` are name prefixes, `pulled` names. The kinds are the module's; the host says each at i… |
+
+## `chuang_alerts.digest`: The hourly WARNING digest's logic: a project's WARNING lines folded into kinds, and which kind a pe…
+
+| Name | Purpose |
+|---|---|
+| `kind(service, message)` | The kind a WARNING line is counted under: its service and its message's first line with stamps, hex ids and numbers stripped, cut to 140 characters. Two lines that differ only in a number, an id or a time are one kind. |
+| `kind_id(k)` | The kind's document id: the first 20 hex characters of its SHA-1. |
+| `service_of(entry)` | The emitting service of a Cloud Logging entry: its Cloud Run service, job or function, else its resource type. |
+| `message_of(entry)` | A log entry's text: the JSON payload's message, else the text payload. |
+| `fold(entries)` | {kind: {'count', 'service', 'sample'}} for one hour's entries; the sample is the kind's first line, cut. |
+| `hour_label(epoch)` | The UTC hour an epoch second falls in, as the records key it: '2026-10-27T22:00Z'. |
+| `decide(counts, records, hour, now)` | (fired, records) for one hour. `counts` is fold's answer, `records` {kind_id: record} as kept (missing kinds are new), `hour` the hour's label, `now` epoch seconds. Each kind seen gets this hour's count; a kind fires once by the case it meets (CASES' order),… |
+| `decision(record, verdict, why)` | The record after the investigator's verdict (promote, demote or keep) and reason; ValueError for any other verdict or an empty reason. |
+| `wake_text(fired)` | One line naming what fired, for the investigator's wake and the job's log. |
+| `to_plain(record)` | A record as the document's plain values: a dict (`hours`) as its JSON string, None as ''. |
+| `from_plain(fields)` | A document's plain values as a record; `hours` back to a dict. |
+| `load(project, collection, token, opener=)` | Every kind's record in `collection`, {kind_id: record}: the whole collection, one query. |
+| `save(project, collection, token, kid, record, opener=)` | One kind's record written whole. |
 

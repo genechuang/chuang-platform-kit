@@ -30,7 +30,7 @@ class SuiteItem(pytest.Item):
     def runtest(self):
         env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                    PYTHONPATH=os.pathsep.join(p for p in (os.path.join(ROOT, 'src'), os.path.join(ROOT, 'sdlc', 'src'),
-                                                          os.environ.get('PYTHONPATH', '')) if p))
+                                                          os.path.join(ROOT, 'alerts', 'src'), os.environ.get('PYTHONPATH', '')) if p))
         r = bounded.run([sys.executable, '-B', str(self.path)], cwd=ROOT, capture_output=True, text=True,
                            encoding='utf-8', errors='replace', env=env, timeout=60)
         out = (r.stdout or '') + (r.stderr or '')

@@ -36,8 +36,12 @@ jobs:
       - name: Install chuang-sdlc
         run: pip install -q -e ./sdlc
 
+      # chuang-alerts, the third distribution (alerts/, SMADPickleBot #1964), installed the same way.
+      - name: Install chuang-alerts
+        run: pip install -q -e ./alerts
+
       - name: Lint
-        run: python -m pyflakes src sdlc/src tests
+        run: python -m pyflakes src sdlc/src alerts/src tests
 
       - name: Run the suites
         run: python -m pytest -n auto

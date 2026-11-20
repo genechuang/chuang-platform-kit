@@ -26,7 +26,10 @@ PKG = os.path.join(ROOT, 'src', 'chuang_platform_kit')
 # The second distribution, chuang-sdlc (sdlc/, its own pyproject and tags): its modules listed as `chuang_sdlc.<module>`.
 SDLC_PKG = os.path.join(ROOT, 'sdlc', 'src', 'chuang_sdlc')
 # Its subpackage chuang_sdlc.cicd (SMADPickleBot #235): the generic half of a release pipeline, listed as `chuang_sdlc.cicd.<module>`.
-PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'), (os.path.join(SDLC_PKG, 'cicd'), 'chuang_sdlc.cicd.'))
+# The third, chuang-alerts (alerts/, SMADPickleBot #1964): listed as `chuang_alerts.<module>`.
+ALERTS_PKG = os.path.join(ROOT, 'alerts', 'src', 'chuang_alerts')
+PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'), (os.path.join(SDLC_PKG, 'cicd'), 'chuang_sdlc.cicd.'),
+            (ALERTS_PKG, 'chuang_alerts.'))
 OUT = os.path.join(ROOT, 'KIT-REGISTRY.md')
 SUMMARY_CHARS = 260
 NO_DOC = '(no docstring)'
@@ -90,7 +93,8 @@ def render():
            "check, a once-only claim, a sender), read this file. If the kit has it, import it; if it is close, change the",
            "kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.", "",
            "The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned",
-           "only where they run (its own tags, `sdlc-v<version>`).", ""]
+           "only where they run (its own tags, `sdlc-v<version>`). The `chuang_alerts.` sections are chuang-alerts, a",
+           "project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`).", ""]
     paths = [(p, prefix) for pkg, prefix in PACKAGES for p in sorted(glob.glob(os.path.join(pkg, '*.py')))]
     for path, prefix in paths:
         base = os.path.basename(path)

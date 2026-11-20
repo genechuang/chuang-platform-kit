@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+# chuang-alerts: a project's alerting, a distribution of its own beside chuang-platform-kit and chuang-sdlc in the same
+# repository, so a release of it reaches only the code that runs it (SMADPickleBot #1684, Gene's "full", 11/19/26).
+# Installed from its tag with the subdirectory:
+#   chuang-alerts @ git+https://github.com/genechuang/chuang-platform-kit@alerts-v<version>#subdirectory=alerts
+[project]
+name = "chuang-alerts"
+version = "0.1.0"
+description = "A project's alerting: the hourly WARNING digest's folding into kinds and which kind a person should look at, and a Pub/Sub subscription's backlog read and sorted before its dead letters."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Gene Chuang" }]
+# The main package by range, never a pin: the host's own pin of chuang-platform-kit is the one installed.
+dependencies = ["chuang-platform-kit>=0.38.0"]
+
+[project.urls]
+Homepage = "https://github.com/genechuang/chuang-platform-kit"
+
+[tool.setuptools.packages.find]
+where = ["src"]
