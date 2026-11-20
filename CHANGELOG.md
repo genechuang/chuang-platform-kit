@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.38.0 - 2026-11-19 PT
+
+New in `db`, no signature changes (SMADPickleBot #1849, out of its `services/api/db.py`): what a service on a
+serverless Postgres needs beyond a connection. `idle_out(engine, seconds)` remakes at checkout a pooled connection
+that sat idle `seconds` since its last use and keeps a busy one however old (use with `engine(pre_ping=False,
+pool_recycle=-1)`). `note_drops(engine)`, `dropped`, `on_engine_error`, `note_drop`, `retried_read` and the ASGI
+middleware `RetryDroppedReads` run a GET or HEAD once more when its 5xx followed the far end closing its connection,
+never a write; `retried_read` is the predicate for `monitoring.drop_events_when`. `probe(connect, n)` is the
+connect, query and reconnect latency measurement. Suite: `tests/test-db-retry.py`.
+
 ## 0.37.0 - 2026-11-19 PT
 
 New module, no signature changes: `answer_cache`, read answers kept in Firestore in front of a database that sleeps,

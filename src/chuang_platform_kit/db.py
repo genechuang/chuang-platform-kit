@@ -22,6 +22,11 @@ The URL comes from `url` or, when None, the `DATABASE_URL` environment variable 
 the URL nor its password reaches a log line, an email or an issue (a driver's error quotes the
 password on its own; `redact` masks it on its own). Nothing in this module names a project: the
 application name, the pool size and the timeout are parameters.
+
+Since 0.38.0, what a service needs once it is live: `idle_out(engine, seconds)` (a pooled connection idle that long
+is remade at checkout, a busy one kept), `note_drops(engine)` with the ASGI middleware `RetryDroppedReads` (a GET or
+HEAD whose 5xx followed the far end closing its connection is run once more; `retried_read` tells error reporting
+the first attempt is not news) and `probe(connect)` (the connect and query latency measurement).
 """
 import logging
 import os
@@ -119,3 +124,191 @@ def engine(url: str = None, *, application_name: str = None, pool_size: int = PO
     return create_engine(sqlalchemy_url(url), pool_pre_ping=pre_ping, pool_size=pool_size, max_overflow=max_overflow,
                          creator=lambda: connect(url, timeout=timeout, application_name=application_name, autocommit=False),
                          **kwargs)
+
+
+# ------------------------------------------------------------------ an idle connection is remade, a busy one kept
+_IDLE_SINCE = 'idle_since'
+
+
+def idle_out(engine, seconds, *, say=None, listen=None, disconnect=None, clock=time.monotonic) -> None:
+    """Remake at checkout a pooled connection that sat in the pool `seconds` or more since its last use, and keep
+    every other however old (0.38.0, out of SMAD PickleBot's services/api/db.py). A serverless endpoint suspends only
+    when nobody has used it for a while and takes every connection with it, so a connection in use a minute ago is
+    alive whatever its age: an age-based `pool_recycle` remakes busy connections mid-traffic, and `pool_pre_ping`
+    costs a round trip on every request. Use it with `engine(pre_ping=False, pool_recycle=-1)`.
+
+    `seconds` is a number or a zero-argument callable read at each checkout (a host that changes it at run time).
+    `say(name)`, when given, is told 'idle_out' where a remake begins and 'connect' when a new connection comes up
+    (a request's phase marks); what it raises is swallowed. `listen` (sqlalchemy.event.listen), `disconnect`
+    (sqlalchemy.exc.DisconnectionError, which makes the pool open a new connection) and `clock` are the test seams."""
+    if listen is None or disconnect is None:
+        from sqlalchemy import event, exc
+        listen = listen or event.listen
+        disconnect = disconnect or exc.DisconnectionError
+
+    def _say(name):
+        if say is not None:
+            try:
+                say(name)
+            except Exception:   # noqa: BLE001 - a phase note never fails a connection
+                pass
+
+    def _checked_in(dbapi_conn, record):
+        record.info[_IDLE_SINCE] = clock()
+
+    def _checked_out(dbapi_conn, record, proxy):
+        since = record.info.pop(_IDLE_SINCE, None)
+        limit = seconds() if callable(seconds) else seconds
+        if since is not None and clock() - since >= limit:
+            _say('idle_out')   # the remake starts here; 'connect' below is its end
+            raise disconnect(f'idle {limit}s or more: the endpoint may have suspended it')
+
+    def _connected(dbapi_conn, record):
+        _say('connect')   # a new connection was just opened (the pool had none to give, or remade one)
+
+    listen(engine, 'checkin', _checked_in)
+    listen(engine, 'checkout', _checked_out)
+    listen(engine, 'connect', _connected)
+
+
+# ------------------------------------------------------------------ a dropped connection, read once more
+# A pooled endpoint can close a connection under a statement ("consuming input failed: SSL error: unexpected eof
+# while reading"); the same request seconds later is fine. A route that catches the error and answers its own 5xx
+# cannot replay its read, so the engine notes the drop on the request and RetryDroppedReads runs a GET or HEAD whose
+# 5xx followed one once more.
+DROPPED_WORDS = ('unexpected eof', 'server closed the connection', 'consuming input failed', 'connection reset',
+                 'terminating connection', 'connection is closed', 'ssl syscall error', 'connection not open')
+_noted = __import__('contextvars').ContextVar('db_dropped', default=None)
+
+
+def dropped(exc) -> bool:
+    """Whether `exc` (or what it wraps) is the far end closing the connection under a statement, never a query's own
+    fault: a connection-level OperationalError or InterfaceError whose message says so (DROPPED_WORDS)."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if type(exc).__name__ in ('OperationalError', 'InterfaceError') and any(
+                w in str(exc).lower() for w in DROPPED_WORDS):
+            return True
+        exc = getattr(exc, 'orig', None) or exc.__cause__
+    return False
+
+
+def note_drops(engine, *, listen=None) -> None:
+    """Hook the engine's handle_error: a dropped connection is a disconnect to SQLAlchemy (so that connection is
+    thrown away, never handed out again) and is noted on the request for RetryDroppedReads. `listen` is the test
+    seam (sqlalchemy.event.listen)."""
+    if listen is None:
+        from sqlalchemy import event
+        listen = event.listen
+    listen(engine, 'handle_error', on_engine_error)
+
+
+def on_engine_error(ctx) -> None:
+    """The handle_error listener (note_drops): a dropped connection is marked a disconnect and noted on the request."""
+    if dropped(ctx.original_exception):
+        ctx.is_disconnect = True
+        note_drop()
+
+
+def note_drop() -> None:
+    """Mark the request in flight as one whose database connection dropped (a no-op outside a request)."""
+    mark = _noted.get()
+    if mark is not None:
+        mark[0] = True
+
+
+def retried_read(event=None, hint=None) -> bool:
+    """Whether the request in flight is a read on its first attempt whose connection dropped, so RetryDroppedReads is
+    about to run it once more: its error is not news yet. The predicate for `monitoring.drop_events_when`, so a read
+    the rerun saves files no issue and no alert. False on the rerun (the mark is cleared for it), for a write, for a
+    5xx with no drop and outside a request, so a read that fails twice is reported as before."""
+    mark = _noted.get()
+    return bool(mark is not None and mark[0])
+
+
+class RetryDroppedReads:
+    """Outermost ASGI middleware: a GET or HEAD answered 5xx after its database connection dropped is run once more,
+    on a fresh connection, and its first answer is discarded; a write is never replayed, and a 5xx with no drop is
+    passed on as it is. The mark is a list the request's context carries, so a sync route running in a threadpool
+    (a copied context) still reaches it. `log`, when given, gets one WARNING per rerun."""
+
+    def __init__(self, app, log=None):
+        self.app = app
+        self.log = log
+
+    async def __call__(self, scope, receive, send):
+        if scope.get('type') != 'http' or scope.get('method') not in ('GET', 'HEAD'):
+            return await self.app(scope, receive, send)
+        mark = [False]
+        held = []
+        token = _noted.set(mark)
+
+        async def first(message):
+            if message['type'] == 'http.response.start' and message.get('status', 200) >= 500 and mark[0]:
+                held.append(message)
+                return
+            if held:
+                return   # the rest of the discarded answer
+            await send(message)
+
+        try:
+            await self.app(scope, receive, first)
+        finally:
+            _noted.reset(token)
+        if held:
+            if self.log:
+                self.log.warning('db: %s %s answered %s after its connection dropped: read once more on a fresh one',
+                                 scope.get('method'), scope.get('path'), held[0].get('status'))
+            # The rerun carries no mark (the context variable was reset above), so nothing of it is held back from
+            # error reporting (retried_read) and a drop on it is passed on as the 5xx it is.
+            await self.app(scope, receive, send)
+
+
+# ------------------------------------------------------------------ the latency probe
+def _percentile(sorted_ms, q):
+    if not sorted_ms:
+        return None
+    return sorted_ms[min(len(sorted_ms) - 1, int(round(q * (len(sorted_ms) - 1))))]
+
+
+def probe(connect, n=20, clock=time.perf_counter):
+    """Connect with `connect()`, run `n` `SELECT 1`s, reconnect; the timings as a dict: connect_ms, reconnect_ms,
+    query_ms (first, p50, p95, min, max), the server's version line and the query count, every figure milliseconds
+    rounded to a tenth. The first connect is the cold half, the queries the warm half, the second connect the
+    endpoint awake. `clock` is the test seam."""
+    import statistics
+    t0 = clock()
+    conn = connect()
+    connect_ms = (clock() - t0) * 1000
+    queries = []
+    try:
+        for _ in range(n):
+            t = clock()
+            with conn.cursor() as cur:
+                cur.execute('SELECT 1')
+                cur.fetchone()
+            queries.append((clock() - t) * 1000)
+        with conn.cursor() as cur:
+            cur.execute('SELECT version()')
+            server = (cur.fetchone() or [''])[0]
+    finally:
+        conn.close()
+    t0 = clock()
+    conn = connect()
+    reconnect_ms = (clock() - t0) * 1000
+    conn.close()
+    ordered = sorted(queries)
+    return {
+        'n': n,
+        'connect_ms': round(connect_ms, 1),
+        'reconnect_ms': round(reconnect_ms, 1),
+        'query_ms': {
+            'first': round(queries[0], 1),
+            'p50': round(statistics.median(queries), 1),
+            'p95': round(_percentile(ordered, 0.95), 1),
+            'min': round(ordered[0], 1),
+            'max': round(ordered[-1], 1),
+        },
+        'server': str(server).split(' on ')[0][:80],
+    }
