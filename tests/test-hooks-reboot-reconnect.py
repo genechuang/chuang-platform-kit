@@ -13,10 +13,12 @@ CLAUDE_REBOOT_MARK_DIR for ~/.claude/reboot-reconnect, so the real marker folder
 import json
 import os
 import shutil
-import subprocess
+import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import bounded  # noqa: E402 - the suites' one bounded process runner
 HOOKS = os.path.join(HERE, '..', 'plugins', 'gene-hooks', 'hooks')
 PROJECT = ''   # the temp project whose config names a sessions manifest (main sets it)
 fails = []
@@ -51,7 +53,7 @@ def run(script, event, uptime, mark_dir, extra_env=None):
     env.pop('CLAUDE_NO_REBOOT_RECONNECT', None)
     env.update(extra_env or {})
     payload = json.dumps({'hook_event_name': event, 'session_id': 'x'})
-    r = subprocess.run(['bash', script], input=payload, capture_output=True, text=True, timeout=30, env=env)
+    r = bounded.run(['bash', script], input=payload, capture_output=True, text=True, timeout=30, env=env)
     out = r.stdout.strip()
     return r.returncode, (json.loads(out) if out else None)
 
