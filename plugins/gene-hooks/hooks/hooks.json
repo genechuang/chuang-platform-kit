@@ -27,6 +27,17 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" session-mail.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" reboot-reconnect.sh",
+            "timeout": 10,
+            "statusMessage": "Checking for a fresh reboot"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" session-role.sh start",
+            "timeout": 10
           }
         ]
       }
@@ -58,6 +69,12 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" ticket-start.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" reboot-reconnect.sh",
+            "timeout": 10,
+            "statusMessage": "Checking for a fresh reboot"
           }
         ]
       }
@@ -112,11 +129,26 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|Read|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" release-profile-gate.sh post",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" release-profile-gate.sh stop",
+            "timeout": 30
+          },
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/boot.sh\" stamp-reply.sh",

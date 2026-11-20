@@ -112,9 +112,13 @@ or, committed in a project's `.claude/settings.json`:
 | PreToolUse (Bash) | `block-git-commits.sh` | refuses `git add -A` or `.`, `commit -a` (also as `git -c ... commit -a`), `--no-verify`, a force push without `--force-with-lease` and a commit not authored as Claude; stands down while the project's own `.claude/settings.json` wires its copy (`moved_in_project`); the project's `.claude/hooks/.disabled` or `CLAUDE_GIT_GUARD_OFF=1` turns it off (since 1.35.0) |
 | SessionStart, UserPromptSubmit, PostToolUse | `session-mail.sh` | hands a named session its unread letters from `~/.claude/session-mail/<session>/inbox.jsonl` as context and marks them read, each stamped in Pacific time; reminds a session whose own mail pull is not armed, when its project names a mail script (`[mail] script` in `.claude/gene-hooks.toml`); never inside a subagent; stands down while the box's own settings wire a copy (since 1.38.0) |
 | UserPromptSubmit | `ticket-start.sh` | a prompt of the user's that says to do, fix, build or start ticket numbers starts the project's ticket tool (`[tickets] script` in `.claude/gene-hooks.toml`, else `scripts/tickets.py`) with `start <numbers>`, detached and hidden; never a peer's message or a subagent's hand-back; stands down while the box's own settings wire a copy (since 1.38.0) |
+| PostToolUse (Bash, Read, Agent), Stop | `release-profile-gate.sh post\|stop` | a push to the project's main (`[release] repo`) owes a release profile, and the session that made it, or the release captain's (the clone named `[release] captain_folder`), cannot end a turn once its runs are done until the profile is reported or an agent is started on it; a project with no `[release]` table has no gate; stands down while the box's own settings wire a copy (since 1.39.0) |
+| SessionStart | `session-role.sh start` | tells a session who it is and what it owns, from the sessions manifest its project names (`[sessions] manifest`); says nothing in a project that names none (since 1.39.0) |
+| SessionStart, UserPromptSubmit | `reboot-reconnect.sh` | within minutes of a boot, hands the first session to wake the job of reconnecting the others, once a boot; only in a project that names a sessions manifest (since 1.39.0) |
 
 A project's own facts for these hooks are one committed file, `.claude/gene-hooks.toml` (`hooks/project_config.py` reads
-it): `[mail] script`, `[tickets] script`, and `sessions = true` for the session-notes line. A project without the file,
+it): `[mail] script`, `[tickets] script`, `[release] repo`, `captain_folder`, `ship_logs`, `tf_lock` and
+`profile_command`, `[sessions] manifest`, and `sessions = true` for the session-notes line. A project without the file,
 or without a key, gets nothing from the hook that asked for it.
 
 Every hook exits 0 on anything unexpected, so a broken hook never traps a session. Their suites are

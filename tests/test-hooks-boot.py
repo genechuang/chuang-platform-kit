@@ -86,7 +86,9 @@ def test_every_hook_goes_through_it():
     commands = [h['command'] for groups in hooks.values() for g in groups for h in g['hooks']]
     check("  every hook in hooks.json runs through boot.sh, and every script it names exists",
           (all('/hooks/boot.sh" ' in c for c in commands),
-           all(os.path.isfile(os.path.join(PLUGIN, 'hooks', c.split()[-1])) for c in commands)), (True, True))
+           # the script is the word after the loader; a hook may pass it arguments (`session-role.sh start`)
+           all(os.path.isfile(os.path.join(PLUGIN, 'hooks', (c.split('/hooks/boot.sh" ', 1)[-1].split() or [''])[0]))
+               for c in commands)), (True, True))
 
 
 if __name__ == '__main__':
