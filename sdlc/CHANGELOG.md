@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.39.0 - 2026-11-19 PT
+
+New module, no signature changes: `warning_kinds`, the hourly WARNING digest's logic (SMADPickleBot #1850, out of its
+`picklebot_core/warning_digest.py`). `kind`, `kind_id`, `service_of`, `message_of`, `fold` (lines that differ only in a
+number, an id or a time are one kind), `decide` (a kind fires once when it is new, growing at four times its hourly
+mean, or kept and repeating, once a day), `decision` (promote, demote or keep, with a reason), `wake_text`, and the
+store, `load(project, collection, token)` and `save(project, collection, token, kid, record)` on the kit's Firestore
+client. The host keeps its own Logging read and names. Suite: `tests/test-sdlc-warning-kinds.py`.
+
 ## 0.38.0 - 2026-11-19 PT
 
 SMADPickleBot #1918: no card is left on the board with no column. Two tickets sat there 16 hours, in no read of the

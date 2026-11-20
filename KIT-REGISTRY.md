@@ -1311,6 +1311,24 @@ only where they run (its own tags, `sdlc-v<version>`).
 | `result_record(stdout)` | The run's `result` record from its streamed output (the last line whose type is `result`), or the one JSON document when the output was not streamed; {} when neither parses. |
 | `locked_pass(why, kind, lock, run_pass_, now=)` | The detached process's body: the lock written ({why, kind, pid, started}), `run_pass_(why, kind)` run, the lock removed however it ends; the pass's line, also appended to passes.log beside the lock for the record. |
 
+## `chuang_sdlc.warning_kinds`: The hourly WARNING digest's logic: a project's WARNING lines folded into kinds, and which kind a pe…
+
+| Name | Purpose |
+|---|---|
+| `kind(service, message)` | The kind a WARNING line is counted under: its service and its message's first line with stamps, hex ids and numbers stripped, cut to 140 characters. Two lines that differ only in a number, an id or a time are one kind. |
+| `kind_id(k)` | The kind's document id: the first 20 hex characters of its SHA-1. |
+| `service_of(entry)` | The emitting service of a Cloud Logging entry: its Cloud Run service, job or function, else its resource type. |
+| `message_of(entry)` | A log entry's text: the JSON payload's message, else the text payload. |
+| `fold(entries)` | {kind: {'count', 'service', 'sample'}} for one hour's entries; the sample is the kind's first line, cut. |
+| `hour_label(epoch)` | The UTC hour an epoch second falls in, as the records key it: '2026-10-27T22:00Z'. |
+| `decide(counts, records, hour, now)` | (fired, records) for one hour. `counts` is fold's answer, `records` {kind_id: record} as kept (missing kinds are new), `hour` the hour's label, `now` epoch seconds. Each kind seen gets this hour's count; a kind fires once by the case it meets (CASES' order),… |
+| `decision(record, verdict, why)` | The record after the investigator's verdict (promote, demote or keep) and reason; ValueError for any other verdict or an empty reason. |
+| `wake_text(fired)` | One line naming what fired, for the investigator's wake and the job's log. |
+| `to_plain(record)` | A record as the document's plain values: a dict (`hours`) as its JSON string, None as ''. |
+| `from_plain(fields)` | A document's plain values as a record; `hours` back to a dict. |
+| `load(project, collection, token, opener=)` | Every kind's record in `collection`, {kind_id: record}: the whole collection, one query. |
+| `save(project, collection, token, kid, record, opener=)` | One kind's record written whole. |
+
 ## `chuang_sdlc.webhooks`: What one of GitHub's webhook deliveries means for the ticket tools, decided from the delivery alone…
 
 | Name | Purpose |
