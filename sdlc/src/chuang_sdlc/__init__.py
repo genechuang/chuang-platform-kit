@@ -58,4 +58,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.39.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
+__version__ = '0.40.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)

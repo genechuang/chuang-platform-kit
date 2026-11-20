@@ -272,9 +272,73 @@ check("  review: a commit's start keeps a Shipyard card's Blocked light, and tur
       [('fields', 'IT_971', {'F_status': 'o_y', 'F_light': 'l_busy'})])
 p = plan(card(), {'kind': 'next', 'ref': 12})
 check('next: Queued', (p['actions'], p['change']), ([('light', 'queued')], 'Switched to later: its owner says it is next, after #12.'))
-since = (NOW - timedelta(minutes=S.QUEUED_IDLE_MINUTES + 1)).isoformat()
-p = plan(card(light='later'), state={'queued_idle_since': since})
-check('Queued past its idle clock with nothing building: back', p['actions'], [('move', 'next'), ('forget', 'queued_idle_since')])
+p = plan(card(light='later'), state={'queued_idle_since': (NOW - timedelta(minutes=31)).isoformat()})
+check('0.40.0: a Queued card with nothing of its owner\'s building stays where it was queued: no move back, no question, '
+      'an old idle clock forgotten',
+      (p['actions'], p['question'], 'its owner is told to start a card' in p['state']),
+      ([('forget', 'queued_idle_since')], '', True))
+check('  and with no old clock there is nothing to do to the card at all', plan(card(light='later'))['actions'], [])
+
+print('idle owners (0.40.0, SMADPickleBot #2066)')
+row = lambda n, light='', prio='P2', owner='Ann', labels=(): dict(card(n, light, prio, owner, labels),  # noqa: E731
+                                                                  content={'number': n, 'url': f'https://x/{n}'})
+ago = lambda m: NOW - timedelta(minutes=m)  # noqa: E731
+got = S.idle_owners([row(21, prio='P3'), row(22, light='later', prio='P3'), row(23, prio='P1'), row(24, light='ask'),
+                     row(25, labels=('blocked',)), row(26, prio='')], CFG, {}, NOW)
+check('the positive case: nothing building and cards to work: start the first by Priority, counted without the Needs-you, '
+      'blocked and unranked cards',
+      ({k: (v['kind'], v['number'], v['free']) for k, v in got.items()}), {'Ann': ('start', 23, 3)})
+check('  within a Priority a Queued card comes before one with no Light, then the lowest number',
+      S.idle_owners([row(31), row(32, light='later'), row(30)], CFG, {}, NOW)['Ann']['number'], 32)
+check('  an owner building, with a fresh start or none on record, is not idle',
+      (S.idle_owners([row(41, light='busy'), row(42)], CFG, {41: ago(10)}, NOW),
+       S.idle_owners([row(41, light='busy'), row(42)], CFG, {41: None}, NOW)), ({}, {}))
+stale = S.idle_owners([row(41, light='busy', prio='P3'), row(43, light='busy', prio='P2'), row(42)], CFG,
+                      {41: ago(200), 43: ago(S.STALE_BUILD_MINUTES)}, NOW)
+check('  building cards gone quiet 90 minutes by their newest start or commit: carry on with the first by Priority',
+      ({k: (v['kind'], v['number'], v['minutes']) for k, v in stale.items()}), {'Ann': ('carry on', 43, 90)})
+check('  one minute short of it, nothing',
+      S.idle_owners([row(41, light='busy')], CFG, {41: ago(S.STALE_BUILD_MINUTES - 1)}, NOW), {})
+check('  the lead, a card with no owner, an owner whose every card waits, and an owner mid-push are never told',
+      S.idle_owners([row(51, owner='Lee'), row(52, owner=''), row(53, owner='Cap', light='ask'),
+                     row(54, owner='Cap', labels=('blocked',))], CFG, {}, NOW), {})
+pcfg = dict(CFG, lights=dict(CFG['lights'], pushing='push'))
+check('  a dock push under way is work: nothing told',
+      S.idle_owners([row(61, light='push'), row(62)], pcfg, {}, NOW), {})
+subject, text = S.letter('Ann', [], dict(got['Ann'], sweeps=1, since=NOW.isoformat()))
+check('the letter: the card to start leads, with the count of what can be worked and the reasons that are none',
+      (subject, 'Start #23 t23 now' in text, '3 of your Building cards can be worked' in text,
+       'A full context, a ship, a warm, a run or a reply' in text, 'https://x/23' in text, 'Told' in text),
+      ('Scrum master: start #23 now', True, True, True, True, False))
+subject, text = S.letter('Ann', [(21, 't21', 'is it your next?', 'https://x/21')], dict(got['Ann'], sweeps=3, since=NOW.isoformat()))
+check('  with questions in the same letter, and the sweeps counted from the second on',
+      (subject, 'Told 3 sweeps running; first at ' in text, "And the scrum master's sweep has a question on each of these" in text,
+       '- #21 t21: is it your next?' in text),
+      ('Scrum master: start #23 now (1 Shipyard card needs a word)', True, True, True))
+subject, text = S.letter('Ann', [], dict(stale['Ann'], sweeps=1, since=NOW.isoformat()))
+check('  a quiet build: carry on, and nothing to answer if it is under way',
+      (subject, 'no start or commit has named any card you are building for 90 minutes' in text,
+       'carry on and answer nothing' in text), ('Scrum master: carry on with #43 now', True, True))
+check('  a letter with no idle item is the questions alone, as before',
+      S.letter('Ann', [(21, 't21', 'q?', 'u')]),
+      ('Scrum master: 1 Shipyard card needs a word',
+       "Ann, the scrum master's sweep has a question on each of these. Answer on the ticket with one `Scrum:` line:\n- #21 t21: q?\n  u"))
+irec = Records()
+lines1, idle1 = S.idle_sweep(CFG, [row(23, prio='P1')], {}, irec, NOW)
+lines2, idle2 = S.idle_sweep(CFG, [row(23, prio='P1')], {}, irec, NOW + timedelta(minutes=30))
+check('the sweep of them: the owner\'s spell counted from its first sweep, and said',
+      (lines1, idle2['Ann']['sweeps'], idle2['Ann']['since'], irec.get('scrum', 'idle-ann')),
+      (['scrum: Ann is idle (nothing being built and 1 card to work: told to start #23; sweep 1 of this spell)'], 2,
+       NOW.isoformat(), {'since': NOW.isoformat(), 'sweeps': 2, 'ticket': 23, 'kind': 'start'}))
+lines3, idle3 = S.idle_sweep(CFG, [row(23, light='busy', prio='P1')], {23: NOW + timedelta(minutes=40)}, irec, NOW + timedelta(minutes=60))
+lines4, idle4 = S.idle_sweep(CFG, [row(23, prio='P1')], {}, irec, NOW + timedelta(minutes=90))
+check('  working again empties the record, so the next spell counts from one',
+      (lines3, idle3, irec.get('scrum', 'idle-ann') == {'since': (NOW + timedelta(minutes=90)).isoformat(), 'sweeps': 1,
+                                                        'ticket': 23, 'kind': 'start'}, idle4['Ann']['sweeps']),
+      ([], {}, True, 1))
+drec = Records()
+S.idle_sweep(CFG, [row(23, prio='P1')], {}, drec, NOW, dry=True)
+check('  a dry run keeps no record', drec.docs, {})
 
 print('closed cards')
 closed = {'number': 70, 'status': 'Ready', 'owner': 'Ann', 'title': 't70'}
@@ -354,19 +418,32 @@ first = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW)
 soon = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=29))
 later = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=30))
 third = S.sweep(CFG, S.GitHub(CFG, run=idle), idle_store, now=NOW + timedelta(minutes=61))
-check('the positive case: an unstarted card is asked at once, not at 29 minutes, again at 30 and again 31 later',
-      ([any('#610 no Light' in ln and 'asked Ann' in ln for ln in x) for x in (first, soon, later, third)], len(letters)),
-      ([True, False, True, True], 3))
-check('the second and third letters say how many times and how long',
-      ('Asked 2 times now; first asked 30 minutes ago.' in texts[1], 'Asked 3 times now; first asked 61 minutes ago.' in texts[2],
+check('the positive case: an unstarted card is asked at once, not at 29 minutes, again at 30 and again 31 later; and '
+      '(0.40.0) its owner, building nothing, is told to start it at every one of the four sweeps',
+      ([any('#610 no Light' in ln and 'asked Ann' in ln for ln in x) for x in (first, soon, later, third)], len(letters),
+       [any('Ann is idle' in ln and 'told to start #610' in ln for ln in x) for x in (first, soon, later, third)]),
+      ([True, False, True, True], 4, [True, True, True, True]))
+check('the repeated questions say how many times and how long',
+      ('Asked 2 times now; first asked 30 minutes ago.' in texts[2], 'Asked 3 times now; first asked 61 minutes ago.' in texts[3],
        'Asked' in texts[0], any('asked Ann again (3 times since' in ln for ln in third)), (True, True, False, True))
+check('  0.40.0: the idle word leads each letter, alone at the sweep with no new question, its sweeps counted',
+      (letters[0], letters[1], 'Start #610 t610 now' in texts[1], 'question on each' in texts[1],
+       'Told 2 sweeps running' in texts[1], 'Told 4 sweeps running' in texts[3]),
+      (('Ann', 'Scrum master: start #610 now (1 Shipyard card needs a word)'), ('Ann', 'Scrum master: start #610 now'),
+       True, False, True, True))
+one_card = S.sweep(CFG, S.GitHub(CFG, run=idle), Records(), now=NOW, only=610)
+check('  a one-card run (an event named the card) tells nobody they are idle: the full sweep alone does',
+      (any('is idle' in ln for ln in one_card), letters[-1][1]), (False, 'Scrum master: 1 Shipyard card needs a word'))
+letters.pop()
 started = Board({'status:"Building"': [dict(card(610, light='busy'), status='Building')], 'is:closed': [], 'is:draft': []},
                 issues={610: issue(610, [say('Scrum: building | eta 10/29/26 5 PM PT', 1)])})
 S.sweep(CFG, S.GitHub(CFG, run=started), idle_store, now=NOW + timedelta(minutes=95))
 check('once started, its next question (here its ETA) is a new one with its own count, on the day-long wait again',
-      (len(letters), idle_store.get('scrum', '610').get('asked_count'), 'Asked' in texts[-1]), (4, 1, False))
+      (len(letters), idle_store.get('scrum', '610').get('asked_count'), 'Asked' in texts[-1]), (5, 1, False))
 quiet = S.sweep(CFG, S.GitHub(CFG, run=started), idle_store, now=NOW + timedelta(minutes=95 + 31))
-check('and that one is not asked again 31 minutes on', (len(letters), any('asked Ann' in ln for ln in quiet)), (4, False))
+check('and that one is not asked again 31 minutes on, nor is its owner, now building, told they are idle',
+      (len(letters), any('asked Ann' in ln for ln in quiet), any('is idle' in ln for ln in quiet), idle_store.get('scrum', 'idle-ann')),
+      (5, False, False, {}))
 S.configure(mail=lambda to, text, subject, sender='': letters.append((to, subject)) or f'mailed {to}')
 # 0.14.0 (SMADPickleBot #1233): a Dock card Warming past WARMING_MINUTES is told to its owner once per Warming
 at = lambda minutes: (NOW - timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')  # noqa: E731

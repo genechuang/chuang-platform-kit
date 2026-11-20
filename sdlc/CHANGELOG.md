@@ -3,6 +3,22 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.40.0 - 2026-11-20 PT
+
+The scrum master tells an idle owner to start a card, every full sweep (SMADPickleBot #2066; the lead, 11/20/26, after
+an owner sat idle 7.9 of 13.4 hours with over 40 cards queued). No signature a host calls breaks.
+
+- `scrum.idle_owners(cards, cfg, starts, now)` (pure) and `scrum.idle_sweep(cfg, cards, starts, store, now, dry)`: an
+  owner with nothing carrying the working or pushing light and at least one card to work (no Light with a Priority, or
+  the queued light; no `blocked` label) is told `start #N now`, the first by Priority; an owner whose building cards
+  no start or commit has named for `STALE_BUILD_MINUTES` (90) is told `carry on with #N now`. One letter an owner a
+  sweep, the same letter as any question (`letter(owner, items, idle=None)`: the idle word leads it and its subject),
+  sent again every sweep while it stays true with the sweeps counted (the owner's record, `idle-<owner>` in the sweep's
+  state collection). Never on a one-card run, never to the lead.
+- **Behavior change:** a Queued card with nothing of its owner's being built is no longer moved back to the next
+  column after 30 minutes, and is no longer asked about on its own; it stays where it was queued. `QUEUED_IDLE_MINUTES`
+  is gone (no host read it).
+
 ## 0.39.0 - 2026-11-19 PT
 
 New module, no signature changes: `warning_kinds`, the hourly WARNING digest's logic (SMADPickleBot #1850, out of its

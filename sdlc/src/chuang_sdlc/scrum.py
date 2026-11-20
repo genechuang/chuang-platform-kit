@@ -53,8 +53,16 @@ ASK_AGAIN_HOURS = 24   # an unanswered question is asked again after this
 UNSTARTED_AGAIN_MINUTES = 30
 
 
-# A queued card goes back to the next column once it has waited this long with nothing of its owner's being built.
-QUEUED_IDLE_MINUTES = 30
+# 0.40.0 (SMADPickleBot #2066; the lead, 11/20/26 1:25 PM PT, after an owner sat idle 7.9 of 13.4 hours with over 40
+# cards queued: the "Scrum master who is suppose to sweep and remind you of items assigned to you in Shipyard that you
+# are not working on and to keep you not idle"). An owner with a card it can work and nothing being built is told to
+# start one every full sweep (idle_owners, letter), and so is an owner whose building cards no start or commit has
+# named for this long. A Queued card is never sent back to the next column for its owner's idleness any more (the
+# 30-minute QUEUED_IDLE_MINUTES rule of 0.x, SMADPickleBot #697): it stays where the lead queued it.
+STALE_BUILD_MINUTES = 90
+
+
+IDLE_KEY = 'idle-{owner}'   # an owner's idle record in the sweep's state collection: {since, sweeps, ticket, kind}
 
 
 CLOSED_EVERY_HOURS = 24   # a closed card outside the finished columns is asked about at most once a day
@@ -600,20 +608,11 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
                                    f"while you build #{building[0]}: start #{n} (`Scrum: building | eta <when>`) or say what "
                                    f"it waits on now (`Scrum: next | after #{building[0]}`).")
             return out
-        since = state.get('queued_idle_since')
-        due = (datetime.fromisoformat(since) if since else now) + timedelta(minutes=QUEUED_IDLE_MINUTES)
-        if not since:
-            out['actions'].append(('remember', ('queued_idle_since', now.isoformat())))
-        if now >= due:
-            out['actions'] += [('move', 'next'), ('forget', 'queued_idle_since')]
-            out['state'] = (f"{lights['queued']} {QUEUED_IDLE_MINUTES} minutes with nothing of its owner's being built: "
-                            f"back to {back}")
-            out['change'] = (f"Moved back to {back}: {lights['queued']} for {QUEUED_IDLE_MINUTES} minutes while its "
-                             "owner built nothing.")
-            return out
-        out['state'] = f"{lights['queued']}, and nothing of its owner's is being built"
-        out['question'] = (f"#{n} is {lights['queued']}, but nothing of yours is being built: start it (`Scrum: building "
-                           f"| eta <when>`), or it goes back to {back} at {pt(due)}.")
+        # 0.40.0 (SMADPickleBot #2066): it stays where the lead queued it. Its owner's idleness is the owner's to end, and
+        # the sweep tells them to start a card every pass (idle_owners), where this used to send the card back.
+        if state.get('queued_idle_since'):
+            out['actions'].append(('forget', 'queued_idle_since'))   # a clock from before 0.40.0
+        out['state'] = f"{lights['queued']}, and nothing of its owner's is being built: its owner is told to start a card"
         return out
 
     if not light:
@@ -852,12 +851,113 @@ def question_key(question: str) -> str:
     return hashlib.sha256(question.encode()).hexdigest()[:16] if question else ''
 
 
-def letter(owner: str, items) -> tuple:
-    """(subject, text) of one owner's letter: every card of theirs with a new question."""
-    subject = f"Scrum master: {len(items)} Shipyard card{'s' if len(items) != 1 else ''} need{'s' if len(items) == 1 else ''} a word"
-    lines = [f"{owner}, the scrum master's sweep has a question on each of these. Answer on the ticket with one `Scrum:` line:"]
-    for n, title, q, url in items:
-        lines.append(f"- #{n} {title}: {q}\n  {url}")
+def idle_owners(cards, cfg: dict, starts: dict, now: datetime) -> dict:
+    """0.40.0 (SMADPickleBot #2066): {owner: {kind, number, title, url, free, minutes}} for each owner of a shipyard
+    card who is not working by the board's own evidence. Pure: `cards` the column's open rows, `starts` {number: the
+    datetime of its last start or commit, None for none on record}.
+
+      kind 'start'      nothing of theirs carries the working or pushing light, and at least one card can be worked: no
+                        Light with a Priority, or the queued light, and no blocked label. The card named is the first
+                        by Priority, a queued one before one with no Light, then the lowest number; `free` how many.
+      kind 'carry on'   something of theirs is being built, none of it is pushing, and the newest start or commit on
+                        any of their building cards is STALE_BUILD_MINUTES old or more (`minutes`). A building card
+                        with no start on record says nothing either way.
+
+    The lead is never told (their cards get the needs light), nor is a card with no owner."""
+    lights = cfg['lights']
+    working, pushing, queued = lights.get('working') or None, lights.get('pushing') or None, lights.get('queued') or None
+    who_leads = lead()
+    by = {}
+    for c in cards:
+        n, owner = (c.get('content') or {}).get('number'), c.get('owner') or ''
+        if n and owner and owner != who_leads:
+            by.setdefault(owner, []).append(c)
+
+    def rank(c):
+        return (c.get('priority') or 'P9', 0 if c.get('light') else 1, c['content']['number'])
+
+    def item(kind, c, free=0, minutes=0):
+        return {'kind': kind, 'number': c['content']['number'], 'title': c.get('title') or '',
+                'url': (c.get('content') or {}).get('url') or '', 'free': free, 'minutes': minutes,
+                'column': _tickets.stage('shipyard', cfg), 'light': working or ''}
+    out = {}
+    for owner, rows in by.items():
+        building = [c for c in rows if working and c.get('light') == working]
+        if pushing and any(c.get('light') == pushing for c in rows):
+            continue   # a dock push of theirs is running
+        if not building:
+            free = [c for c in rows if BLOCKED_LABEL not in (c.get('labels') or [])
+                    and ((queued and c.get('light') == queued) or (not c.get('light') and c.get('priority')))]
+            if free:
+                out[owner] = item('start', min(free, key=rank), free=len(free))
+            continue
+        seen = [starts.get(c['content']['number']) for c in building]
+        seen = [s for s in seen if s]
+        quiet = (now - max(seen)).total_seconds() / 60 if seen else 0
+        if quiet >= STALE_BUILD_MINUTES:
+            out[owner] = item('carry on', min(building, key=rank), minutes=int(quiet))
+    return out
+
+
+def idle_sweep(cfg: dict, cards, starts: dict, store, now: datetime, dry: bool = False) -> tuple:
+    """(lines, {owner: item}) of a full sweep's idle owners (idle_owners), each item carrying `sweeps`, how many full
+    sweeps in a row found the owner idle, and `since`, the first of them (the owner's record, IDLE_KEY in the sweep's
+    state collection). An owner found working again has the record emptied, so the next spell counts from one."""
+    idle = idle_owners(cards, cfg, starts, now)
+    lines = []
+    owners = {c.get('owner') for c in cards if c.get('owner')} | set(idle)
+    for owner in sorted(owners):
+        key = IDLE_KEY.format(owner=re.sub(r'[^a-z0-9]+', '-', owner.lower()).strip('-'))
+        rec = store.get(_SET['state'], key) or {}
+        got = idle.get(owner)
+        if not got:
+            if rec and not dry:
+                store.set(_SET['state'], key, {})
+            continue
+        got['sweeps'] = int(rec.get('sweeps') or 0) + 1
+        got['since'] = rec.get('since') or now.isoformat()
+        if not dry:
+            store.set(_SET['state'], key, {'since': got['since'], 'sweeps': got['sweeps'], 'ticket': got['number'],
+                                           'kind': got['kind']})
+        what = (f"nothing being built and {got['free']} card{'s' if got['free'] != 1 else ''} to work: told to start"
+                if got['kind'] == 'start' else
+                f"no start or commit on a building card in {got['minutes']} minutes: told to carry on with")
+        lines.append(f"scrum: {owner} is idle ({what} #{got['number']}; sweep {got['sweeps']} of this spell)")
+    return lines, idle
+
+
+def letter(owner: str, items, idle: dict = None) -> tuple:
+    """(subject, text) of one owner's letter: every card of theirs with a new question, and, when the sweep found the
+    owner idle (0.40.0, idle_sweep's item), the one card to start or carry on with now, said first and in the
+    subject."""
+    lines, subject = [], ''
+    if idle:
+        n, title = idle['number'], idle.get('title') or ''
+        cmd = _SET['start_command'].format(n=n) if _SET['start_command'] else ''
+        how = f' (`{cmd}`)' if cmd else ''
+        if idle['kind'] == 'start':
+            subject = f'Scrum master: start #{n} now'
+            free = idle.get('free') or 1
+            lines.append(f"{owner}, nothing of yours is being built, and {free} of your {idle.get('column') or 'working-column'} "
+                         f"card{'s' if free != 1 else ''} can be worked. Start #{n} {title} now{how}, in this turn. A "
+                         "full context, a ship, a warm, a run or a reply you are waiting for is no reason to wait: the "
+                         "plan is the ticket's body, and the pipeline watches the rest.")
+        else:
+            subject = f'Scrum master: carry on with #{n} now'
+            lines.append(f"{owner}, #{n} {title} is {idle.get('light') or 'being built'}, and no start or commit has named "
+                         f"any card you are building for {idle.get('minutes')} minutes. Carry on with it now{how}. If you "
+                         "are in the middle of it, carry on and answer nothing.")
+        if int(idle.get('sweeps') or 1) > 1:
+            lines.append(f"(Told {idle['sweeps']} sweeps running; first at {pt(datetime.fromisoformat(idle['since']))}.)")
+        if idle.get('url'):
+            lines.append(idle['url'])
+    if items:
+        word = f"{len(items)} Shipyard card{'s' if len(items) != 1 else ''} need{'s' if len(items) == 1 else ''} a word"
+        subject = f'{subject} ({word})' if subject else f'Scrum master: {word}'
+        lines.append(f"{'And the' if idle else f'{owner}, the'} scrum master's sweep has a question on each of these. "
+                     "Answer on the ticket with one `Scrum:` line:")
+        for n, title, q, url in items:
+            lines.append(f"- #{n} {title}: {q}\n  {url}")
     return subject, '\n'.join(lines)
 
 
@@ -1038,6 +1138,7 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         store = _store()
     who_leads = lead()
     letters, lines = {}, []
+    open_rows, starts, idling = [], {}, {}   # 0.40.0: what the idle read takes from this pass
     if only is not None:
         cards = [c for c in cards if (c.get('content') or {}).get('number') == int(only)]
         if not cards:
@@ -1069,6 +1170,8 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         blockers = [(b['number'], b['state']) for b in (issue.get('blockedBy') or {}).get('nodes') or []]
         mark = store.get(_tickets.collection('starts'), str(n)) or {}
         last = datetime.fromtimestamp(mark['at_epoch'], timezone.utc) if mark.get('at_epoch') else None
+        open_rows.append(c)
+        starts[n] = last
         login = cfg['repo'].split('/')[0]   # every session comments as the repository's owner
         line = scrum_line(comments, login, skip=('done',))   # `done` is a closed card's word, read past here
         closed = ()
@@ -1235,12 +1338,19 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
             lines += warming_sweep(cfg, gh, store, now, warming, dry)   # 0.14.0: a Dock card stuck Warming
         lines += wrecked_sweep(cfg, gh, store, now, wrecked, dry)   # 0.20.0: the failed column kept for failures
         lines += unplaced_sweep(cfg, gh, unplaced, dry)   # 0.38.0: a card with no column is in no other read
+        # 0.40.0 (SMADPickleBot #2066): an owner with a card to work and nothing being built is told to start one, every
+        # full sweep, in the same letter as any question (the rows as this pass read them: a light this pass set shows
+        # at the next).
+        idle_lines, idling = idle_sweep(cfg, open_rows, starts, store, now, dry)
+        lines += idle_lines
+        for owner in idling:
+            letters.setdefault(owner, [])
     else:
         warming, wrecked = {}, {}
     lines += gh.flush()   # #1207: every field write this sweep decided, in one aliased mutation
     gh.batch = False
     lines += _send(unplaced, mail, dry, compose=unplaced_letter)
-    lines += _send(letters, mail, dry)
+    lines += _send(letters, mail, dry, compose=lambda to, items: letter(to, items, idling.get(to)))
     lines += _send(warming, mail, dry, compose=warming_letter)
     lines += _send(wrecked, mail, dry, compose=wrecked_letter)
     return lines or [f'scrum: the {_tickets.stage("shipyard", cfg)} is empty']

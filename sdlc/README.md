@@ -17,7 +17,8 @@ ship card (a draft the lead drags into the ship column to ship), kept at its hom
 (`tickets.ship_card_keep`). And the scrum master (`scrum`): a sweep of the shipyard column that reads each owner's one
 `Scrum:` line (building with an ETA, next, blocked by, depends on, needs the lead, paused, done), asks each owner only
 what the board cannot say, in one letter a sweep, keeps one comment a card, and catches the closed cards outside the
-finished columns. And the one backlog read from the board and rendered by state, P1 first (`backlog`). And an alert's
+finished columns; and tells an owner who has a card to work and nothing being built to start one, every full sweep
+(`idle_owners`, 0.40.0). And the one backlog read from the board and rendered by state, P1 first (`backlog`). And an alert's
 incident as a GitHub issue, filed once per opening and closed once it is fixed, with a triage pass's create-only claim
 (`alerts`); the project's watcher, its words, its repository and collections are configured. And the board's event
 listeners (`listeners`): each board or ticket event told once, a commit's working time, the owner of a card newly in the

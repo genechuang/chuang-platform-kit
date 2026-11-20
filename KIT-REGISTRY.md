@@ -998,7 +998,9 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `closed_needs_filter(cfg)` | GitHub's own filter for the closed cards still carrying the needs-the-lead Light, in any column. |
 | `closed_needs_sweep(cfg, gh, dry=)` | A closed ticket never keeps the needs-the-lead Light (0.8.2; SMADPickleBot #1133: a Needs you set on a shipped card sat there three days, outside every column the other sweeps read): each closed card carrying it, read with closed_needs_filter in any column, h… |
 | `question_key(question)` | A question's short fingerprint ('' for none): a card is asked again only when its question changes. |
-| `letter(owner, items)` | (subject, text) of one owner's letter: every card of theirs with a new question. |
+| `idle_owners(cards, cfg, starts, now)` | 0.40.0 (SMADPickleBot #2066): {owner: {kind, number, title, url, free, minutes}} for each owner of a shipyard card who is not working by the board's own evidence. Pure: `cards` the column's open rows, `starts` {number: the datetime of its last start or commit… |
+| `idle_sweep(cfg, cards, starts, store, now, dry=)` | (lines, {owner: item}) of a full sweep's idle owners (idle_owners), each item carrying `sweeps`, how many full sweeps in a row found the owner idle, and `since`, the first of them (the owner's record, IDLE_KEY in the sweep's state collection). An owner found… |
+| `letter(owner, items, idle=)` | (subject, text) of one owner's letter: every card of theirs with a new question, and, when the sweep found the owner idle (0.40.0, idle_sweep's item), the one card to start or carry on with now, said first and in the subject. |
 | `comment_body(when, found, did)` | The card's one scrum master comment, edited in place each sweep: when, what it found and what it did. |
 | `class GitHub` | The sweep's GitHub reads and writes, through the ticket tools' runner (chuang_sdlc.tickets' configure(runner=) unless one is given) and the board helpers. A dry run writes nothing and answers every write True. |
 | `GitHub.remember(cards)` | The Project items of a board listing's cards, kept so a field write needs no item read of its own. |
