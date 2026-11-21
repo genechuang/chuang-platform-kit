@@ -2,6 +2,20 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.48.0 - 2026-11-21 PT
+
+New module `site_page` (SMADPickleBot #1852): a dashboard builder's fragment as a whole document for a host's site,
+`standalone(html, site, path=, description=, title=, nav=)` with `Site(name, url, og_image=, og_image_alt=,
+description=, icon=, touch_icon=)`, `head` and `page_title`; the host's nav bar is passed in as markup or a function
+of the path. It is SMADPickleBot's `scripts/site_page.py` shell with the site's names taken out, so SMPDReport builds
+/police without a SMADPickleBot checkout. Suite: `tests/test-site-page.py`.
+
+Additions to `gmail`, no signature changes (SMADPickleBot #1852): `Mailbox.address()` (the profile's address),
+`message_ids(query, limit=)` (every page of matching message ids), `attachments(message_id, suffix=)` (a message's
+attachments listed: filename, type, id, size) and `attachment(message_id, attachment_id)` (its bytes), with the
+module function `attachment_parts(payload, suffix=)`. Client-library transport only, like `search`. Suite:
+`tests/test-gmail.py`.
+
 ## 0.47.0 - 2026-11-21 PT
 
 Additions to `keepalive`, no signature changes (SMADPickleBot #1933): `request(retry=, redirects=)` and

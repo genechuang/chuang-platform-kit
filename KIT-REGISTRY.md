@@ -324,12 +324,17 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `class NoMailbox` | No usable token for the mailbox (none stored, unreadable, or the client library missing where a read needs it). |
 | `class SendFailed` | The message was not sent over REST: Google's code ("Google answered 401") or the error's kind ("Google could not be reached (TimeoutError)"), never a token or an address. |
 | `message(msg)` | One Gmail message as a plain dict: id, thread_id, from (the address), from_raw, to, cc (addresses), subject, date, message_id, references, snippet, internal_date (ms). |
+| `attachment_parts(payload, suffix=)` | A full message's attachments, in the message's own order, from its MIME tree (`payload`, users.messages.get format=full): [{'filename', 'mime_type', 'attachment_id', 'size'}], only the parts Gmail holds as an attachment (a filename and an attachmentId), and o… |
 | `class Mailbox` | One Gmail mailbox on a stored token (`sources` as `google_auth.credentials` takes them), or on a ready `service` (a suite's fake, or a host's own). `scopes` None (the default, 0.15.1) uses the token's own granted scopes: asking a refresh for one it was never… |
 | `Mailbox.uses_rest()` | Whether this mailbox is on the REST transport: `rest` True, or an `opener` given, or google-api-python-client not installed; a ready `service`, or `rest` False, is the client library. |
 | `Mailbox.service()` | (no docstring) |
 | `Mailbox.access_token()` | The REST transport's bearer token: the stored token (the same sources) refreshed through `google_auth.refresh_access_token` and kept until a minute before Google says it expires; NoMailbox without a token, SendFailed when Google refuses the refresh. |
 | `Mailbox.search(query, limit=)` | The threads Gmail's own search finds, newest first: [{'id', 'snippet'}]. |
 | `Mailbox.thread(thread_id)` | The thread's messages, oldest first, as `message()` dicts (headers only, no bodies). |
+| `Mailbox.address()` | The mailbox's own address, from Gmail's profile (the "signed in as" line a script prints). |
+| `Mailbox.message_ids(query, limit=)` | The ids of every message Gmail's own search finds, newest first, every page read (100 a page), at most `limit` when it is given; messages, not threads, since attachments are read one message at a time. |
+| `Mailbox.attachments(message_id, suffix=)` | One message's attachments as `attachment_parts` lists them (names, types, ids and sizes; no bytes), only names ending in `suffix` when one is given: read the bytes of the ones wanted with `attachment`. |
+| `Mailbox.attachment(message_id, attachment_id)` | One attachment's bytes (users.messages.attachments.get, decoded from Gmail's URL-safe base64). |
 | `Mailbox.has_message_from(thread, address)` | Whether any message in the thread was sent from `address` (the "never send twice" check). |
 | `Mailbox.send(to, subject, text=, html=, cc=, thread_id=, headers=)` | Send a message (plain text, with an HTML alternative when given) and answer its id; `headers` are set as given (a From with a display name, In-Reply-To). |
 | `Mailbox.reply_all(msg, text=, html=, to=, cc=)` | Reply in `msg`'s thread (a `message()` dict): `to` the addresses given (else the message's sender), `cc` as given; the subject "Re: " once; In-Reply-To and References so every mail client threads it. Its id. |
@@ -734,6 +739,15 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `signature(key, value, length=)` | The signature of `value` under `key`: HMAC-SHA256, its first `length` hex characters. The value is signed as given: a host that reads an id in any case normalizes it before it signs and before it checks. |
 | `verify(key, value, sig, length=)` | Whether `sig` is `value`'s signature under `key`, compared in constant time; False without a key or a signature. |
 | `signed_url(base, path, key, value, param=, length=)` | `base` + `path` with `?<param>=<signature of value>` ('' without a key). `path` starts with a slash and is already quoted; `base`'s trailing slash is dropped. |
+
+## `site_page`: A dashboard builder's page as a whole document for a site, its link preview included (SMADPickleBot…
+
+| Name | Purpose |
+|---|---|
+| `class Site` | The site a page is published on: its `name` (og:site_name, and the title of a page with none), its `url` (the origin, no trailing slash), the preview image's address and alt text (1200 by 630), the tab icons' paths and the description a page given none gets. |
+| `page_title(html, default=)` | The fragment's <title>, unescaped, or `default`. |
+| `head(site, title, path=, description=)` | The head tags every page of `site` carries (inside <head>, which the caller opens): charset, viewport, description, the tab icons and the Open Graph and Twitter preview tags; `path` is the page's path on the site. |
+| `standalone(html, site, path=, description=, title=, nav=)` | The page as a whole document on `site`, with an explicit <head> and <body> and `nav` first in the body (the host's nav bar: its markup, or a function of `path` that returns it; '' for none). `title` overrides the preview title only; the tab keeps the page's o… |
 
 ## `slack`: Slack, one client for every project: a message posted as a bot to a channel, a post redrawn, any ot…
 

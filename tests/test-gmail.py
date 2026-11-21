@@ -232,6 +232,86 @@ check("refusals name Google's code or the error's kind, never a token; no token 
        'NoMailbox: reading a mailbox needs google-api-python-client (chuang-platform-kit[gmail]); the REST transport sends only',
        False, False, True))
 
+
+# -- 0.48.0 (SMADPickleBot #1852): the address, every matching message id, a message's attachments and their bytes
+PDF = b'%PDF-1.7 weekly report'
+FULL = {'id': 'w1', 'payload': {'mimeType': 'multipart/mixed', 'parts': [
+    {'mimeType': 'multipart/alternative', 'parts': [{'mimeType': 'text/plain', 'body': {'size': 5}}]},
+    {'mimeType': 'application/pdf', 'filename': 'Weekly Report 11-16.PDF', 'body': {'attachmentId': 'a1', 'size': 22}},
+    {'mimeType': 'message/rfc822', 'filename': '', 'parts': [
+        {'mimeType': 'image/png', 'filename': 'logo.png', 'body': {'attachmentId': 'a2', 'size': '9'}}]},
+    {'mimeType': 'application/pdf', 'filename': 'inline.pdf', 'body': {'data': 'eA'}}]}}
+
+
+class ReadFake:
+    def __init__(self, pages):
+        self.pages, self.calls = pages, []
+
+    def users(self):
+        fake = self
+
+        class Exe:
+            def __init__(self, kind, kw):
+                self.kind, self.kw = kind, kw
+
+            def execute(self):
+                fake.calls.append((self.kind, self.kw))
+                if self.kind == 'profile':
+                    return {'emailAddress': 'gene@x.com'}
+                if self.kind == 'list':
+                    return fake.pages[self.kw.get('pageToken')]
+                if self.kind == 'get':
+                    return FULL
+                return {'data': base64.urlsafe_b64encode(PDF).decode().rstrip('=')}
+
+        class Users:
+            def getProfile(self, **kw):
+                return Exe('profile', kw)
+
+            def messages(self):
+                class M:
+                    def list(self, **kw):
+                        return Exe('list', kw)
+
+                    def get(self, **kw):
+                        return Exe('get', kw)
+
+                    def attachments(self):
+                        class A:
+                            def get(self, **kw):
+                                return Exe('attachment', kw)
+                        return A()
+                return M()
+        return Users()
+
+
+pages = {None: {'messages': [{'id': 'w3'}, {'id': 'w2'}], 'nextPageToken': 'p2'}, 'p2': {'messages': [{'id': 'w1'}]}}
+rf = ReadFake(pages)
+rbox = G.Mailbox(service=rf)
+ids = rbox.message_ids('from:city.gov has:attachment')
+pdfs = rbox.attachments('w1', suffix='.pdf')
+data = rbox.attachment('w1', 'a1')
+check("reads (the positive case): every page of matching message ids, a message's PDF attachments listed, one's bytes decoded",
+      (rbox.address(), ids, [c[1].get('pageToken') for c in rf.calls if c[0] == 'list'], pdfs, data,
+       [c[1] for c in rf.calls if c[0] in ('get', 'attachment')]),
+      ('gene@x.com', ['w3', 'w2', 'w1'], [None, 'p2'],
+       [{'filename': 'Weekly Report 11-16.PDF', 'mime_type': 'application/pdf', 'attachment_id': 'a1', 'size': 22}], PDF,
+       [{'userId': 'me', 'id': 'w1', 'format': 'full'}, {'userId': 'me', 'messageId': 'w1', 'id': 'a1'}]))
+check("attachment_parts: the message's order, nested parts too, no suffix lists all; an inline part with no attachmentId is not one",
+      ([p['filename'] for p in G.attachment_parts(FULL['payload'])], G.attachment_parts(FULL['payload'])[1]['size'],
+       G.attachment_parts({}), G.attachment_parts(None)),
+      (['Weekly Report 11-16.PDF', 'logo.png'], 9, [], []))
+check("message_ids stops at `limit`, reading no page past it",
+      (G.Mailbox(service=ReadFake(pages)).message_ids('q', limit=2), G.Mailbox(service=ReadFake(pages)).message_ids('q', limit=3)),
+      (['w3', 'w2'], ['w3', 'w2', 'w1']))
+try:
+    G.Mailbox(token_json=tok, rest=True).attachments('w1')
+    rest_read = 'read'
+except G.NoMailbox as e:
+    rest_read = str(e)
+check("a REST mailbox does not read attachments either",
+      rest_read, 'reading a mailbox needs google-api-python-client (chuang-platform-kit[gmail]); the REST transport sends only')
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

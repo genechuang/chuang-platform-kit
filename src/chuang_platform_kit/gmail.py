@@ -7,7 +7,8 @@ a setup token carries none (Dragnet, 10/31/26 9:51 AM PT). A mailbox's stored OA
 survives both. `Mailbox(**sources)` is one mailbox on the kit's `google_auth` token readers (`token_json`,
 `token_file`, `token_env`, `secret=(project, name)`; the refreshed token written back): `search` threads, read a
 `thread`'s messages (sender, recipients, subject, date, ids), `has_message_from` an address, `reply_all` to a message
-with an explicit `to`, `send`. `mailbox(name, mailboxes, project)` opens one by a host's own map of mailbox to secret
+with an explicit `to`, `send`; and (0.48.0, SMADPickleBot #1852) the mailbox's own `address`, every matching
+`message_ids`, a message's `attachments` listed and one `attachment`'s bytes. `mailbox(name, mailboxes, project)` opens one by a host's own map of mailbox to secret
 name, so each project names its mailboxes once.
 
 Two transports (0.19.0). The Google client library (the `gmail` extra: google-api-python-client, google-auth) reads
@@ -65,6 +66,23 @@ def message(msg: dict) -> dict:
             'date': h.get('Date', ''), 'message_id': h.get('Message-ID', '') or h.get('Message-Id', ''),
             'references': h.get('References', ''), 'snippet': msg.get('snippet', ''),
             'internal_date': int(msg.get('internalDate') or 0)}
+
+
+def attachment_parts(payload: dict, suffix: str = '') -> list:
+    """A full message's attachments, in the message's own order, from its MIME tree (`payload`, users.messages.get
+    format=full): [{'filename', 'mime_type', 'attachment_id', 'size'}], only the parts Gmail holds as an attachment
+    (a filename and an attachmentId), and of those only names ending in `suffix` (case-blind) when one is given."""
+    out, stack = [], [payload or {}]
+    want = (suffix or '').lower()
+    while stack:
+        part = stack.pop(0)
+        name = part.get('filename') or ''
+        body = part.get('body') or {}
+        if name and body.get('attachmentId') and name.lower().endswith(want):
+            out.append({'filename': name, 'mime_type': part.get('mimeType', ''), 'attachment_id': body['attachmentId'],
+                        'size': int(body.get('size') or 0)})
+        stack[0:0] = list(part.get('parts') or [])
+    return out
 
 
 class Mailbox:
@@ -132,6 +150,35 @@ class Mailbox:
                                                     metadataHeaders=list(HEADERS)).execute() or {}
         msgs = sorted((message(m) for m in got.get('messages') or []), key=lambda m: m['internal_date'])
         return {'id': got.get('id') or thread_id, 'messages': msgs}
+
+    def address(self) -> str:
+        """The mailbox's own address, from Gmail's profile (the "signed in as" line a script prints)."""
+        return (self.service().users().getProfile(userId='me').execute() or {}).get('emailAddress', '')
+
+    def message_ids(self, query: str, limit: int = 0) -> list:
+        """The ids of every message Gmail's own search finds, newest first, every page read (100 a page), at most
+        `limit` when it is given; messages, not threads, since attachments are read one message at a time."""
+        ids, page = [], None
+        while True:
+            got = self.service().users().messages().list(userId='me', q=query, pageToken=page,
+                                                         maxResults=100).execute() or {}
+            ids += [m.get('id') for m in got.get('messages') or [] if m.get('id')]
+            page = got.get('nextPageToken')
+            if not page or (limit and len(ids) >= limit):
+                return ids[:limit] if limit else ids
+
+    def attachments(self, message_id: str, suffix: str = '') -> list:
+        """One message's attachments as `attachment_parts` lists them (names, types, ids and sizes; no bytes), only
+        names ending in `suffix` when one is given: read the bytes of the ones wanted with `attachment`."""
+        got = self.service().users().messages().get(userId='me', id=message_id, format='full').execute() or {}
+        return attachment_parts(got.get('payload') or {}, suffix)
+
+    def attachment(self, message_id: str, attachment_id: str) -> bytes:
+        """One attachment's bytes (users.messages.attachments.get, decoded from Gmail's URL-safe base64)."""
+        got = self.service().users().messages().attachments().get(userId='me', messageId=message_id,
+                                                                  id=attachment_id).execute() or {}
+        data = got.get('data') or ''
+        return base64.urlsafe_b64decode(data + '=' * (-len(data) % 4))
 
     @staticmethod
     def has_message_from(thread: dict, address: str) -> bool:
