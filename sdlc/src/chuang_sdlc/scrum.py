@@ -83,7 +83,7 @@ LIGHT_CLEAR = 'light {n} clear'   # the host's command that clears a card's Ligh
 WORDS = ('MARKER', 'SENDER', 'BLOCKED_LABEL', 'PRIORITY_ASK', 'LIGHT_CLEAR')
 
 
-CARD_FIELDS = ('id state stateReason closedAt blockedBy(first: 20) { nodes { id number state } } '
+CARD_FIELDS = ('id state stateReason closedAt blockedBy(first: 20) { nodes { id number state closedAt } } '
                'comments(last: 60) { nodes { databaseId body createdAt author { login } } }')
 CARD_QUERY = ('query($owner: String!, $repo: String!, $n: Int!) { repository(owner: $owner, name: $repo) { '
               f'issue(number: $n) {{ {CARD_FIELDS} }} }} }}')
@@ -427,7 +427,15 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         named = [int(m) for m in re.findall(r'#(\d+)', what) if int(m) != n]
         linked_now = [b for b, _s in blockers]
         missing = [r for r in named if r not in linked_now]
-        if (named or linked_now) and not missing and not open_blockers:
+        # The wait's own ETA only: a line with none never borrows the field's, which may still hold a build's date.
+        eta, write = card_eta(card, line, now, state) if line.get('eta') else (None, '')
+        # 0.45.0 (SMADPickleBot #2146): a wait that names no ticket is read as waiting on its links only when the last of
+        # them closed after the wait was written (the wait was on them: #230), or once the wait's ETA has passed or when
+        # it has none. #2106 and #2027 were unblocked by links that had closed before their waits were written, with
+        # their ETAs days ahead.
+        closed_since = (facts.get('blockers_closed') or '') > (line.get('at') or '')
+        decides = bool(named) or (bool(linked_now) and (closed_since or not (eta and eta > now)))
+        if decides and not missing and not open_blockers:
             closed = sorted(set(named) | set(linked_now))
             out['state'] = 'every ticket its wait names or links is closed'
             if BLOCKED_LABEL in labels:
@@ -444,8 +452,6 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
             out['change'] = f'Switched to {blocked}: its owner says it waits on {what}.'
         if BLOCKED_LABEL not in labels:
             out['actions'].append(('label', BLOCKED_LABEL))
-        # The wait's own ETA only: a line with none never borrows the field's, which may still hold a build's date.
-        eta, write = card_eta(card, line, now, state) if line.get('eta') else (None, '')
         if write and 'ETA' in (cfg.get('fields') or {}):
             out['actions'].append(('eta', (write, line.get('at') or '')))
         out['state'] = f'blocked on {what}' + (f', ETA {pt(eta)}' if eta else ', no ETA')
@@ -1193,6 +1199,8 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
             continue
         comments = (issue.get('comments') or {}).get('nodes') or []
         blockers = [(b['number'], b['state']) for b in (issue.get('blockedBy') or {}).get('nodes') or []]
+        # 0.45.0 (#2146): when the last linked blocker closed, so a wait written after it is not read as waiting on it
+        blockers_closed = max([b.get('closedAt') or '' for b in (issue.get('blockedBy') or {}).get('nodes') or []] or [''])
         mark = store.get(_tickets.collection('starts'), str(n)) or {}
         last = datetime.fromtimestamp(mark['at_epoch'], timezone.utc) if mark.get('at_epoch') else None
         open_rows.append(c)
@@ -1228,7 +1236,8 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         asked_at = (line.get('at') if line.get('kind') == NEEDS_KIND else '') or state.get('needs_at') or ''
         answer = lead_answer(comments, login, gh_stamp(asked_at)) if asked_at else {}
         p = plan(card, {'line': line, 'blockers': blockers, 'last_commit': last, 'closed': closed, 'answer': answer,
-                        'owner_building': owner_building, 'after': after}, state, now, cfg)
+                        'owner_building': owner_building, 'after': after, 'blockers_closed': blockers_closed},
+                 state, now, cfg)
         did = []
         needs = cfg['lights']['needs']
         for kind, value in p['actions']:

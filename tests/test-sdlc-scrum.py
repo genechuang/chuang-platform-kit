@@ -302,8 +302,26 @@ check('  every ticket it names closed: the label and the blocked light off, its 
       (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question'], '#2079' in p['change']),
       ([('light', 'shipyard'), ('unlabel', 'blocked')], True, True))
 watch = S.scrum_line([say("Scrum: blocked on the Watch app's store build | eta 11/22/26")], LOGIN)
-p = bplan(card(light='stop', labels=('blocked',)), watch, blockers=[(2118, 'CLOSED'), (1616, 'CLOSED')])
-check('  every linked blocker closed, none named: unblocked the same way (#230)',
+after_line = (NOW - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ')   # the line is 5 minutes old (say())
+p = bplan(card(light='stop', labels=('blocked',)), watch, blockers=[(2118, 'CLOSED'), (1616, 'CLOSED')],
+          blockers_closed=after_line)
+check('  every linked blocker closed after the wait was written, none named: unblocked the same way (#230)',
+      (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question']),
+      ([('light', 'shipyard'), ('unlabel', 'blocked')], True))
+# 0.45.0 (SMADPickleBot #2146): #2106 and #2027 waited on events outside the board, their ETAs days ahead, and each
+# carried a link that had closed before its wait was written; 0.43.0 unblocked them at once.
+before_line = (NOW - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+game = S.scrum_line([say("Scrum: blocked on the Sunday game's Neon reading | eta 11/22/26")], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), game, blockers=[(2109, 'CLOSED')], blockers_closed=before_line)
+check('0.45.0: a wait naming no ticket, its only link closed before the wait was written, its ETA ahead: still blocked, asked nothing',
+      ([a for a in p['actions'] if a[0] in ('unlabel', 'light')], p['state'].startswith('blocked on'), p['question']),
+      ([], True, ''))
+p = bplan(card(light='stop', labels=('blocked',)), game, blockers=[(2109, 'CLOSED')])
+check('  with no close time known, an ETA ahead keeps it blocked too',
+      ([a for a in p['actions'] if a[0] == 'unlabel'], p['state'].startswith('blocked on')), ([], True))
+gone = S.scrum_line([say("Scrum: blocked on the club's reply | eta 10/20/26")], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), gone, blockers=[(2109, 'CLOSED')], blockers_closed=before_line)
+check('  its ETA passed: every link closed unblocks it, as 0.43.0',
       (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question']),
       ([('light', 'shipyard'), ('unlabel', 'blocked')], True))
 p = bplan(card(light='stop', labels=('blocked',)), watch, blockers=[(2118, 'CLOSED'), (1616, 'OPEN')])
