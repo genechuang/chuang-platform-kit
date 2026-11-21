@@ -57,9 +57,12 @@ VERSIONS = {'data': [{'id': 'v1', 'attributes': {'versionString': '1.0.0', 'appV
 SUBMISSIONS = {'data': [{'id': 'r1', 'attributes': {'state': 'WAITING_FOR_REVIEW', 'submittedDate': '2026-10-22T18:00:00Z'}},
                         {'id': 'r0', 'attributes': {'state': 'COMPLETE', 'submittedDate': '2026-10-01T00:00:00Z'}}]}
 GROUPS = {'data': [{'id': 'g1', 'attributes': {'isInternalGroup': True}}, {'id': 'g2', 'attributes': {'isInternalGroup': False}}]}
-TESTERS = {'data': [{'id': 't-gene', 'attributes': {'firstName': 'Gene', 'lastName': 'Chuang'}}, {'id': 't-x', 'attributes': {}}]}
+TESTERS = {'data': [{'id': 't-gene', 'attributes': {'firstName': 'Gene', 'lastName': 'Chuang', 'email': ' Gene@Example.com '}},
+                    {'id': 't-x', 'attributes': {}}]}
+OUTSIDE = {'data': [{'id': 't-ann', 'attributes': {'firstName': 'Ann', 'email': 'ann@example.com'}},
+                    {'id': 't-gene2', 'attributes': {'firstName': 'Gene', 'email': 'gene@example.com'}}]}
 ANSWERS = {'/builds': BUILDS, f'/apps/{APP}/appStoreVersions': VERSIONS, f'/apps/{APP}/reviewSubmissions': SUBMISSIONS,
-           f'/apps/{APP}/betaGroups': GROUPS, '/betaGroups/g1/betaTesters': TESTERS}
+           f'/apps/{APP}/betaGroups': GROUPS, '/betaGroups/g1/betaTesters': TESTERS, '/betaGroups/g2/betaTesters': OUTSIDE}
 
 
 def opener_for(answers, calls, fail=None, body=b'{"errors": [{"detail": "The token has expired"}]}'):
@@ -81,10 +84,16 @@ snap = A.snapshot(APP, 'tok', limit=2, opener=opener_for(ANSWERS, calls))
 check("the positive case: snapshot reads the builds, the store versions with their builds and the open review's time, and the internal testers",
       (snap['builds']['12'], '11' in snap['builds'], snap['store'], snap['store_builds'], snap['store_submitted'], snap['internal'],
        sorted(c[1].split('?')[0] for c in calls), all(c[2] == 'Bearer tok' for c in calls)),
-      ({'version': '0.2.0', 'beta_review': 'IN_REVIEW', 'external': 'IN_BETA_REVIEW', 'uploaded': '2026-10-09T01:00:00Z',
+      ({'version': '0.2.0', 'beta_review': 'IN_REVIEW', 'external': 'IN_BETA_REVIEW', 'internal': 'IN_BETA_TESTING',
+        'uploaded': '2026-10-09T01:00:00Z',
         'processing': 'VALID', 'submitted': '2026-10-09T02:00:00Z'}, True, {'1.0.0': 'WAITING_FOR_REVIEW'}, {'1.0.0': '12'},
        '2026-10-22T18:00:00Z', {'t-gene': 'Gene Chuang', 't-x': 'a tester'},
-       ['/apps/6819574789/appStoreVersions', '/apps/6819574789/betaGroups', '/apps/6819574789/reviewSubmissions', '/betaGroups/g1/betaTesters', '/builds'], True))
+       ['/apps/6819574789/appStoreVersions', '/apps/6819574789/betaGroups', '/apps/6819574789/reviewSubmissions',
+        '/betaGroups/g1/betaTesters', '/betaGroups/g2/betaTesters', '/builds'], True))
+check("  0.49.0: testers by email key, no address kept; internal wins for a tester in both groups; a tester with no email left out",
+      (snap['testers'], A.email_key(' Gene@Example.com ') == A.email_key('gene@example.com'),
+       any('@' in k for k in snap['testers'])),
+      ({A.email_key('gene@example.com'): 'internal', A.email_key('ann@example.com'): 'external'}, True, False))
 query = dict(urllib.parse.parse_qsl(next(c[1] for c in calls if c[1].startswith('/builds')).split('?')[1]))
 check("  the builds query: the app, newest first, the limit, the three includes",
       (query['filter[app]'], query['sort'], query['limit'], query['include']),

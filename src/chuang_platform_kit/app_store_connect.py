@@ -10,6 +10,7 @@ the host's business (`private_key` reads the environment, else Secret Manager).
 
 PyJWT with its crypto extra signs the bearer (`pip install chuang-platform-kit[asc]`); the rest is the standard library.
 """
+import hashlib
 import json
 import os
 import time
@@ -137,16 +138,42 @@ def store_versions(app_id: str, bearer: str, opener=None, with_builds: bool = Fa
     return out, built, submitted
 
 
-def internal_testers(app_id: str, bearer: str, opener=None) -> dict:
-    """Everyone in the app's internal TestFlight groups, {tester id: "First Last"}; an internal tester gets every
-    build before Apple reviews it, one dropped to an external group only the reviewed ones."""
-    out = {}
+def group_testers(app_id: str, bearer: str, opener=None) -> list:
+    """Every tester of the app's TestFlight groups: [(internal: bool, tester id, attributes)], one read of the groups
+    and one of each group's testers; internal_testers and tester_groups are both made from it."""
+    out = []
     for g in get(f'/apps/{app_id}/betaGroups', bearer, {'limit': '50'}, opener).get('data', []):
-        if not (g.get('attributes') or {}).get('isInternalGroup'):
-            continue
+        internal = bool((g.get('attributes') or {}).get('isInternalGroup'))
         for t in get(f"/betaGroups/{g['id']}/betaTesters", bearer, {'limit': '200'}, opener).get('data', []):
-            a = t.get('attributes') or {}
-            out[t['id']] = ' '.join(p for p in (a.get('firstName'), a.get('lastName')) if p) or 'a tester'
+            out.append((internal, t['id'], t.get('attributes') or {}))
+    return out
+
+
+def email_key(email: str) -> str:
+    """The key a tester's email is kept under: the SHA-256 hex of the trimmed, lowercased address, so a record holds
+    no address and a caller with a member's email finds their group (0.49.0)."""
+    return hashlib.sha256((email or '').strip().lower().encode()).hexdigest()
+
+
+def internal_testers(app_id: str, bearer: str, opener=None, rows=None) -> dict:
+    """Everyone in the app's internal TestFlight groups, {tester id: "First Last"}; an internal tester gets every
+    build before Apple reviews it, one dropped to an external group only the reviewed ones. `rows` is group_testers'
+    answer when the caller already read it."""
+    rows = group_testers(app_id, bearer, opener) if rows is None else rows
+    return {tid: ' '.join(p for p in (a.get('firstName'), a.get('lastName')) if p) or 'a tester'
+            for internal, tid, a in rows if internal}
+
+
+def tester_groups(app_id: str, bearer: str, opener=None, rows=None) -> dict:
+    """Every TestFlight tester's group by email, {email_key(email): 'internal' | 'external'}, internal winning for a
+    tester in both; a tester with no email is left out (0.49.0, SMADPickleBot #2151: the update card sends a tester to
+    the newest build their group has). `rows` is group_testers' answer when the caller already read it."""
+    rows = group_testers(app_id, bearer, opener) if rows is None else rows
+    out = {}
+    for internal, _tid, a in rows:
+        if a.get('email'):
+            key = email_key(a['email'])
+            out[key] = 'internal' if internal or out.get(key) == 'internal' else 'external'
     return out
 
 
@@ -158,13 +185,15 @@ def snapshot(app_id: str, bearer: str, limit: int = 5, opener=None) -> dict:
     with ThreadPoolExecutor(max_workers=3, thread_name_prefix='app-store-read') as pool:
         rows = pool.submit(builds, app_id, bearer, limit, opener)
         store = pool.submit(store_versions, app_id, bearer, opener, True)
-        internal = pool.submit(internal_testers, app_id, bearer, opener)
-        rows, (store, store_builds, store_submitted), internal = rows.result(), store.result(), internal.result()
+        testers = pool.submit(group_testers, app_id, bearer, opener)
+        rows, (store, store_builds, store_submitted), testers = rows.result(), store.result(), testers.result()
     return {'builds': {str(r['number']): {'version': r['version'], 'beta_review': r['beta_review'],
-                                          'external': r['external'], 'uploaded': r.get('uploaded'),
+                                          'external': r['external'], 'internal': r.get('internal'),
+                                          'uploaded': r.get('uploaded'),
                                           'processing': r.get('processing'), 'submitted': r.get('submitted')}
                        for r in rows if r.get('number')},
             'store': store,
             'store_builds': store_builds,
             'store_submitted': store_submitted,
-            'internal': internal}
+            'internal': internal_testers(app_id, bearer, rows=testers),
+            'testers': tester_groups(app_id, bearer, rows=testers)}

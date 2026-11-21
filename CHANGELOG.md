@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.49.0 - 2026-11-21 PT
+
+Additions to `app_store_connect`, no signature changes (SMADPickleBot #2151): `group_testers(app_id, bearer)` reads
+every TestFlight group's testers once; `tester_groups(...)` is {`email_key(email)`: 'internal' | 'external'} (the
+SHA-256 of the lowercased address, so a record holds none; internal wins for a tester in both); `internal_testers`
+takes `rows=` to reuse the read. `snapshot` carries `testers` and each build's `internal` state beside `external`, so
+a host can tell which build each group is testing. Suite: `tests/test-app-store-connect.py`.
+
 ## 0.48.0 - 2026-11-21 PT
 
 New module `site_page` (SMADPickleBot #1852): a dashboard builder's fragment as a whole document for a host's site,
