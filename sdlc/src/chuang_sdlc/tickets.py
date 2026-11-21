@@ -750,10 +750,12 @@ def is_placeholder(title: str, cfg: dict = None) -> bool:
     return B.is_placeholder(title, _cfg(cfg))
 
 
-def start(numbers, run=None, cfg: dict = None) -> list:
+def start(numbers, run=None, cfg: dict = None, eta: str = '') -> list:
     """A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while
     it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`.
-    A card archived off the board (a ticket closed as not planned, then reopened) is restored first (0.20.0).
+    A card archived off the board (a ticket closed as not planned, then reopened) is restored first (0.20.0). `eta`
+    (0.42.0, SMADPickleBot #2035; a YYYY-MM-DD day) goes in the same field write as the Light when the card has no ETA,
+    so the scrum master, which the Light's own event wakes, never finds a Building card with none and asks for it.
     [(number, ok)]."""
     run, cfg = _run(run), _cfg(cfg)
     lights = cfg.get('lights', {})
@@ -779,6 +781,8 @@ def start(numbers, run=None, cfg: dict = None) -> list:
         keep = (lights.get('working'), lights.get('needs')) + ((lights['blocked'],) if lights.get('blocked') and at == target else ())
         if 'Light' in cfg['fields'] and light not in keep:
             values['Light'] = lights['working']
+        if eta and 'ETA' in cfg['fields'] and not getattr(got, 'eta', ''):
+            values['ETA'] = eta
         ok = bool(item) and set_fields(item, values, run, cfg)
         out.append((n, ok))
     return out
@@ -1249,7 +1253,8 @@ UNARCHIVE_MUTATION = 'mutation($p: ID!, $i: ID!) { unarchiveProjectV2Item(input:
 
 ITEM_STATUS_QUERY = ('query($id: ID!) { node(id: $id) { ... on ProjectV2Item { id isArchived '
                      'status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
-                     'light: fieldValueByName(name: "Light") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }')
+                     'light: fieldValueByName(name: "Light") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
+                     'eta: fieldValueByName(name: "ETA") { ... on ProjectV2ItemFieldDateValue { date } } } } }')
 
 
 class Place(tuple):
@@ -1276,6 +1281,7 @@ def ticket_place(number: int, run=None, cfg: dict = None):
     raw = (node.get('status') or {}).get('name') or ''
     place = Place((item, column(raw, cfg), ((node.get('light') or {}).get('name') or ''), raw))
     place.archived = bool(node.get('isArchived'))
+    place.eta = (node.get('eta') or {}).get('date') or ''   # 0.42.0: the card's ETA field, '' for none
     return place
 
 

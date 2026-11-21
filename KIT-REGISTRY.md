@@ -279,6 +279,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `class GitHubError` | A call GitHub refused or could not answer: `status` (0 for no answer) and GitHub's `message`. |
 | `class RateLimited` | A call not sent, or refused by GitHub, because `resource`'s quota is spent, under its floor or over this process's cap: `remaining` (GitHub's count, -1 unknown) and `reset_at` (epoch seconds) say when it returns. Status 429 whatever GitHub answered, so an `ex… |
 | `resource_of(path)` | GitHub's rate-limit resource a path draws on: graphql, code_search, search or core. |
+| `scope_calls()` | The GitHub calls this request scope has sent so far, {resource: count} (core, graphql, search, code_search), a copy; {} outside a scope or before any call (0.45.0: a host logs it per delivery, so a burst's spenders are read from its logs, SMADPickleBot #1994)… |
 | `limits()` | GitHub's last count per resource as the answers gave it: {resource: {'remaining', 'reset', 'limit'}}, a copy. |
 | `reset_limits()` | Forget every count, spent mark and cap (a suite's seam; nothing in production calls it). |
 | `wait_until(resource, cap=, sleep=)` | For a script that can afford it: sleep until `resource` is back (its spent mark, or its reset while it is under the floor), at most `cap` seconds; the seconds slept. |
@@ -388,6 +389,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `live_allowed(env=)` | True where a real call is meant: a platform variable is set (on Cloud Run) or the configured opt-in variable is `1`. `env` is os.environ unless given. |
 | `call(method, url, token=, body=, opener=, timeout=, guard=, label=, what=, error=, refused=, data=, content_type=, raw=)` | One Google REST call, JSON both ways: `body` (a dict, or None for no body) sent as JSON, the answer parsed ({} for an empty one). The live guard first (module docstring; `guard` 'writes', 'all' or 'none'), then the token (a string, a callable, or None for goo… |
 | `list_all(url, key, token=, page_size=, limit=, **kw)` | Every item under `key` of a Google list answer, following `nextPageToken` (pageSize and pageToken added to `url`'s query), up to `limit` items when given. `kw` goes to `call` (opener, timeout, guard, error...). A GET, so the default guard lets it read from an… |
+| `log_entries(project, flt, token=, order=, page_size=, limit=, **kw)` | Cloud Logging's entries in `project` matching the filter `flt`, every page (entries:list is a POST, so not list_all), in `order` ('timestamp desc' or 'timestamp asc'), up to `limit` when given. `kw` goes to `call` (opener, timeout, guard, error...); it only r… |
 | `queue_path(project, location, queue)` | A queue's resource name, `projects/<p>/locations/<l>/queues/<q>`. |
 | `task_name(queue, name)` | A task's full resource name from its queue and its short name; a name already full is kept. |
 | `http_task(url, body=, queue=, name=, at=, method=, headers=, oidc=, oauth=)` | A Cloud Tasks task that sends one HTTP request: `body` (bytes, str, or a dict sent as JSON) base64'd, `headers` (JSON's content type by default), due `at` (a datetime, naive read as UTC, or Google's own stamp; now when None), named `name` in `queue` when give… |
@@ -405,6 +407,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `run_url(project, region, job)` | The Cloud Run Admin API's run endpoint for `job` (what a scheduler job or task POSTs to start it). |
 | `service_url(project, region, service)` | The Cloud Run Admin API's address of a service (v2). |
 | `run_body(args=, env=, timeout_seconds=)` | The `:run` request body: `args` (a list handed to the container as its argv, never a shell line; it replaces ALL of the job's deployed arguments, so a job deployed as `python -u <file>` needs its file first) and `env` as one container override, `timeout_secon… |
+| `set_service_min(project, region, service, count, token, dry_run=, timeout=, **kw)` | A Cloud Run Service's service-level minimum set to `count` (0.45.0, SMADPickleBot #1940): read the Service in the v1 (Knative) API, change its one annotation (0 removes it, as `--min=default` does), replace it with `dryRun=all` for a dry run, which Cloud Run… |
 | `console_url(project, region, execution)` | An execution's page in the Cloud console (its tasks and their logs), or '' for no execution. |
 | `run_job(project, region, job, args=, env=, timeout_seconds=, token=, **kw)` | Start one execution of `job` (run_body's `args`, `env`, `timeout_seconds`): {'job', 'execution' (its short name, '' when the answer named none), 'url' (console_url)}. Guarded on every transport but a stand-in (a start is a write); GoogleError headed by the jo… |
 | `get_job_spec(project, region, job, token=, **kw)` | One Cloud Run job as Google gives it (its template, image and settings). |
@@ -737,6 +740,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 |---|---|
 | `class SlackError` | A call Slack refused or could not answer: `status` (the HTTP status; 200 with Slack's `ok: false`; 0 for no answer) and `error` (Slack's error string, else the failure's kind). The text never carries a token or a URL. |
 | `SlackError.unreachable()` | True when nothing answered (a connection, DNS or timeout failure), as opposed to a refusal. |
+| `verify_request(headers, body, secret, now=, max_skew=)` | True when the request is Slack's (0.45.0, SMADPickleBot #1940): `X-Slack-Signature` is v0=HMAC-SHA256 of `v0:<timestamp>:<body>` under the app's signing secret, and the timestamp is within `max_skew` seconds, so a replayed request is refused. No secret, no ti… |
 | `call(method, token, payload, opener=, timeout=)` | One Web API call (`chat.postMessage`, `chat.update`, `chat.unfurl`, `files.completeUploadExternal`, …) as JSON under the bot token; Slack's answer. SlackError when Slack refuses (`ok: false`, its `error`), answers a non-2xx status, or cannot be reached; a bla… |
 | `form(method, token, params, opener=, timeout=)` | A Web API call that takes form fields, not JSON (`files.getUploadURLExternal`); the same answer and refusals as call(). |
 | `post(token, channel, text, blocks=, thread_ts=, unfurl_links=, unfurl_media=, opener=, timeout=)` | One message to `channel` (an id, or a name the bot can resolve) as the bot: `text` the notification's own words and the message when there are no `blocks`; `blocks` (Block Kit) draw it instead; `thread_ts` makes it a reply under that post. Links are not unfur… |
@@ -926,6 +930,35 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `text(rec, tz=, start_hint=)` | One record as words: `estimated 2h, actual 1h 10m of work (-42%), 3h 20m elapsed, from the first start 11/2/26 12:50 PM PT to the last commit 11/2/26 4:10 PM PT (2 commits)`, with `, 45m of it by delegates` after the work when the record holds delegated minut… |
 | `record(data, store, estimate_of, write_actual, records=, starts=, tz=, start_hint=)` | Each ticket of one commit's EVENT into the store's `records`/<n> and the board: the estimate (`estimate_of(n)`, else the one kept), the working time the event carries (`active`, and of it the delegates' `delegated`, kept as delegated_min, None when the event… |
 
+## `chuang_sdlc.mirrors`: A vendor's open findings mirrored as GitHub issues: a Sentry issue or a GitGuardian incident filed…
+
+| Name | Purpose |
+|---|---|
+| `marker(tag, item_id)` | The body line that ties an issue to its vendor item, `<!-- <tag>: <id> -->` (never the title, which a person or the investigator may retitle). |
+| `marked_id(tag, body)` | The vendor item id an issue body carries under `tag`, or None. |
+| `plan(items, gh_issues, tag, item_id, is_open)` | (to_file, to_close). to_file: each open item (`is_open(item)`) no issue, open or closed, carries the marker of. to_close: (issue, the item's status) for each OPEN marked issue whose item is known and no longer open. `item_id` gives an item's id as the marker… |
+| `commit_session(repo, sha, get)` | The `Session:` trailer of a commit (who pushed it), read with `get('/repos/<repo>/commits/<sha>')`; '' when the commit has none or cannot be read (no token, no such commit, GitHub down: not known). |
+| `close_all(gh, to_close, vendor, noun, dry, out=)` | Close each (issue, status) with the host's one comment, `Closed by the Workflow Watchdog: the <noun> is <status> in <vendor>.`; a dry run prints the plan alone. |
+| `sentry_is_open(issue, states=)` | Whether Sentry still shows the issue as unresolved. |
+| `sentry_id(issue)` | A Sentry issue's numeric id, or None. |
+| `sentry_title(issue, prefix)` | `<prefix><short id>: <title, cut to fit an email subject>`. |
+| `event_tags(event)` | An event's tags as a dict. |
+| `event_exception(event, max_value=, max_frames=)` | (type, value, frames) of the last exception in the event, the value cut to `max_value`, the innermost `max_frames` frames as `file:line in function`; the event's message when it has no exception. |
+| `event_crumbs(event, max_crumbs=)` | The event's last `max_crumbs` breadcrumbs as `level: text`, each text cut to 160. |
+| `event_release(event)` | The event's release version, '' when it has none. |
+| `release_commit(event, app_prefix=)` | The commit an event's code came from: the release when it is a sha, else the sha after a `+` in a release that is not an app's (`20261014-2118+cf8b3c8`), else the `build` tag (an app's release is its version, and it tags the bundle's commit as `build`), else… |
+| `line_change(repo, sha, path, line, graphql, session_of)` | The commit that last changed `path`:`line` as of `sha` ({sha, subject, who, url}, `who` its session by `session_of(message)`, else its author), from GitHub's blame through `graphql(query, variables)`; {} when any of it is unknown or GitHub refuses. |
+| `sentry_body(issue, event, repo, session, cause, footer, tag, pt, max_value=, max_frames=, max_crumbs=)` | What the investigator needs to find and judge the failure: the Sentry link, counts and times (`pt(stamp)`, the host's reading), the release as a commit link, who raised it (`session`, the release commit's), what broke it (`cause`, the host's lines), the lates… |
+| `sentry_sweep(gh, issues, gh_issues, tag, latest_event, is_alarm, title, body, misses, dry, out=)` | File and close one pass: the plan over `issues` and `gh_issues`, each item to file read for its latest event (`latest_event(id)`: {} for none, None when it could not be read, and then nothing is filed for it), kept only when `is_alarm(issue, event)` says (ala… |
+| `gg_is_open(incident, states=)` | Whether the incident still waits on someone: TRIGGERED or ASSIGNED. |
+| `gg_title(incident, prefix, home, detector, files)` | `<prefix><id>: <detector> in <first file> (+N more)`; the file is `<repo>/<file>` when the incident is in a repo other than `home` (`incident['_repo']`), so another repo's fixture is not read as a leak in this one. |
+| `in_head(path, repo, local, isfile, get, not_found)` | Whether `path` is on `repo`'s default branch now: 'yes', 'no', or 'not measured'. With `local` (a checkout of that repo) `isfile(path)` answers; otherwise `get('/repos/<repo>/contents/<path>')`, `not_found(e)` telling a 404 from any other refusal. Anything th… |
+| `gg_body(incident, origin, session, head, detector, tag, footer, max_occurrences=)` | What the investigator needs to find and judge the finding, and nothing that repeats it: no match, no author, no hash. `head(path, repo)` is in_head's answer for each occurrence; `footer` the host's resolve line. Redacted. |
+| `class VendorDown` | The vendor itself did not answer a listing (a 5xx, a network error or a timeout): its outage, not the host's, so a pass files and closes nothing on a partial read. |
+| `vendor_down(e)` | A 5xx answer, or no answer at all; a 4xx (a key without its scope) is the host's, never this. |
+| `gg_fetch(repos, ids, list_open, read_one, down=, out=)` | The open incidents of each repo (`list_open(repo)`), each tagged with its repo in `_repo`, plus each id in `ids` (`read_one(id)`, a marked open issue's incident). A repo the vendor does not watch (its RuntimeError) is a notice and skipped; the vendor not answ… |
+| `gg_sweep(gh, incidents, gh_issues, tag, attach, title, body, refiled, scanned, dry, out=)` | File and close one pass: the plan over `incidents` and `gh_issues`, each incident to file given its occurrences (`attach(incident)`) and filed as `title` / `body` unless `refiled(id)` says another run has filed it since the issues were read (a webhook's run a… |
+
 ## `chuang_sdlc.moves`: A Project board's item helpers: one card read by itself, its fields written in one request, and the…
 
 | Name | Purpose |
@@ -1072,7 +1105,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `class GitHub` | The sweep's GitHub reads and writes, through the ticket tools' runner (chuang_sdlc.tickets' configure(runner=) unless one is given) and the board helpers. A dry run writes nothing and answers every write True. |
 | `GitHub.remember(cards)` | The Project items of a board listing's cards, kept so a field write needs no item read of its own. |
 | `GitHub.prefetch(numbers)` | Every issue's CARD_QUERY fields in ONE aliased query a PREFETCH_CHUNK of issues, kept for card(); the count read. A chunk GitHub does not answer leaves its cards to card()'s own read. |
-| `GitHub.card(n)` | One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY), from prefetch's read when it has it; {} when GitHub does not answer. |
+| `GitHub.card(n, repo=)` | One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY), from prefetch's read when it has it; {} when GitHub does not answer. `repo` (owner/name, 0.42.0) reads another repository's issue (a `Scrum:` line's full reference, SMADPickleBot #2… |
 | `GitHub.flush()` | The queued field writes in ONE aliased mutation a tickets.MOVE_CHUNK of cards, a card's writes merged (the later wins); a WARNING line a card GitHub refused. Nothing queued is nothing sent. |
 | `GitHub.assign(n, on=)` | The repository's owner (the lead's login) assigned to the card or not. |
 | `GitHub.label(n, name, add=)` | A label added to the card, or taken off. |
@@ -1094,6 +1127,28 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `unplaced_sweep(cfg, gh, letters, dry=)` | The safety net for a card with no column (0.38.0; SMADPickleBot #1918: two tickets sat on the board with no Status for 16 hours, in no column's read and so in no "what's next", after a filing whose one field write was refused whole). One read with GitHub's ow… |
 | `unplaced_letter(owner, items)` | (subject, text) of the captain's letter for the cards the sweep found with no column and put in the backlog. |
 | `wrecked_letter(owner, items)` | (subject, text) of one owner's wrecked letter: every card of theirs left in the failed column past the limit. |
+
+## `chuang_sdlc.sentry_slack`: A Sentry alarm as a Slack card: the post, its buttons, what a tap changes in Sentry, and the redraw…
+
+| Name | Purpose |
+|---|---|
+| `verify_slack(headers, body, secret, now=)` | True when the request is Slack's: `X-Slack-Signature` is v0=HMAC-SHA256 of `v0:<timestamp>:<body>` under the app's signing secret, and the timestamp is within five minutes (a replayed request is refused). The kit's one copy, `slack.verify_request` (chuang-pla… |
+| `issue_id_of(resource, payload)` | The Sentry issue id a Sentry webhook is about (a new issue, a lifecycle change, a fired alert rule), or None for one a card does not act on. The action itself is `payload['action']`. |
+| `is_feedback(issue)` | A Sentry User Feedback item (an issue of category `feedback`): never an alarm card. |
+| `tapped(payload)` | (action_id, value, who, channel, ts) of a Slack block_actions payload, or None. |
+| `issue_ids(event)` | The Sentry issue ids in a Slack link_shared event's links, each with its link as Slack sent it: [(url, id)]. |
+| `first_section(message)` | The text of a Slack message's first section block (a card posted before its record was kept). |
+| `status_line(issue, last=)` | Where the issue stands, who it is assigned to, and the last thing done to it from Slack or Sentry and by whom. |
+| `blocks(issue, text, last=, actions=, people=, sessions=)` | The card: the alarm's text, where it stands, and (unless `actions` is False) the buttons and the assign menu, `people` [(name, key)] assigned in Sentry, then `sessions` handed a note. |
+| `change_for(action_id, value, people=, sessions=)` | (issue id, Sentry change, what to say) for a tapped button or menu choice; (id, None, …) for a hand-off to a session, which is a note, not a change; None for anything else (Open in Sentry is only a link). A person's change is `{'assignedTo': <their key>}`, wh… |
+| `change_kind(update)` | The Sentry webhook action a change will echo back as ('assigned', 'resolved', 'archived', 'unresolved'), '' for none. |
+| `assignee_for(members, first_name)` | Sentry's `user:<id>` for the project member whose name starts with `first_name`, '' when none (a membership row's own `id` is the membership's; the assignee is its `user.id`). |
+| `is_echo(action, last, now, window=)` | Whether a Sentry lifecycle webhook is the echo of the card's own last change from Slack: the same kind (archive and ignore being one) within `window` seconds of it. |
+| `api(method, token, payload, opener=)` | One Slack Web API call as JSON through the kit's client; {'ok': False, 'error': …} (Slack's error, else the failure's kind) when Slack refuses or cannot be reached. |
+| `claim(doc, record)` | True when this call is the first to post the issue (the document did not exist and now does). |
+| `kept(doc, warn=)` | What the record keeps about a post ({channel, ts, text, last}); {} when there is none or it cannot be read (`warn(line)` says so). |
+| `keep(doc, fields, warn=)` | Merge `fields` into the record (the post's channel and ts, its text, the last change). |
+| `redraw(issue, record, token, slack_api=, people=, sessions=, warn=)` | Draw the issue's card again from Sentry's current state; False when there is no post to redraw or Slack refused it. |
 
 ## `chuang_sdlc.ship_pr`: One pull request a ship, so each shipped ticket's Development shows the release that shipped it.
 
@@ -1272,7 +1327,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `rank(col, light=, raw=, cfg=)` | A card's place along the flow as a role's index (board.rank); None off the flow. |
 | `light_for(col, cfg=)` | The Light a card moved into this column should show (board.light_for). |
 | `is_placeholder(title, cfg=)` | Whether a card's title is a column's placeholder (board.is_placeholder). |
-| `start(numbers, run=, cfg=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. A card archived off the board (a t… |
+| `start(numbers, run=, cfg=, eta=)` | A session picks these tickets up, planning included: each to the shipyard column (never a step back) and, while it is there, its Light the `working` one. A card already past the shipyard keeps its light, and so does `needs`. A card archived off the board (a t… |
 | `add_option(field, name, run=, cfg=, color=, field_id=)` | One option added to a single-select field of the board, every option it has sent back with its own id, color and description (a save without the ids makes new options and clears the field on every card), then read again: an id that changed is an ERROR, and th… |
 | `sync_columns(run=, cfg=, tmp=, merge=, ship_run=)` | The board made what its config says, at every ship: its column labels (_sync_options), then its placeholder cards (placeholders: a deleted one re-made, a strayed one put back) and the ship card (ship_card_keep: its title and its home, left in the ship column… |
 | `filter_columns(names)` | A board filter's Status term for these columns, each name quoted for the ones with spaces. |
@@ -1372,6 +1427,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | Name | Purpose |
 |---|---|
 | `request(why, topic, kind=, number=, title=, kinds=, source=, publish=, project=, event=)` | Publish one `event` on `topic` in `project` for `why` (an issue number, a digest's kinds, a sweep): the line the caller logs. `kind` is issue, warnings or sweep. Never raises: a refused publish is the line. `publish` is the test seam for chuang_platform_kit.p… |
+| `untriaged(issue_lists, now, wait_minutes, window_hours, skip_titles=, skip_labels=, needs_label=, area_prefix=)` | (recent, old): the open issues nobody has triaged, by number, from GitHub's issue lists (each a page of the REST answer; a number in two lists counts once; a pull request never). An issue counts once it is `wait_minutes` old: within `window_hours` while it st… |
 | `prompt_text(path, note=)` | The pass's prompt: the file at `path` verbatim, then a blank line and the host's `note` (what asked for this pass, where it runs) when it gave one. |
 | `prepare_worktree(root, worktree, run=, keep_on_failed_fetch=, detail=, timeout=)` | origin/main's head checked out detached in `worktree` (added on first use from the clone at `root`, `--force` taking over a registration whose folder was deleted; a folder in the way still refuses), reset whatever it holds (`checkout --force`, its edits to tr… |
 | `stamp(now=)` | An instant as a log file's name part, `20261030T220000Z`. |

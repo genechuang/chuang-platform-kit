@@ -3,6 +3,32 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.42.0 - 2026-11-20 PT
+
+New module `mirrors`, no signature changes elsewhere (SMADPickleBot #1943): a vendor's open findings mirrored as GitHub
+issues, filed once by the marker their body carries and closed once the vendor shows them resolved. Shared: `marker`,
+`marked_id`, `plan(items, gh_issues, tag=, item_id=, is_open=)`, `commit_session(repo, sha, get)`, `close_all`. Sentry:
+`sentry_title`, `event_exception`, `event_crumbs`, `release_commit`, `line_change`, `sentry_body` and `sentry_sweep`
+(an unread event files nothing; after its misses the rest wait). GitGuardian: `gg_title`, `in_head`, `gg_body` (never
+the match, the committer or the hash), `gg_fetch` (a vendor 5xx is `VendorDown`, an unwatched repo skipped) and
+`gg_sweep` (a second run's filing skipped). The host passes its words, repositories, footer and seams at each call.
+Suite: `tests/test-sdlc-mirrors.py`.
+
+New module `sentry_slack` (SMADPickleBot #1944): a Sentry alarm as a Slack card. `blocks(issue, text, last, actions,
+people=, sessions=)` with Resolve, Resolve in next release, Archive, Unresolve and an Assign menu of the host's people
+and sessions; `change_for` (what a tap changes in Sentry and the words for it), `change_kind`, `status_line`,
+`verify_slack` (the signature and its five-minute replay window), `issue_id_of`, `is_feedback`, `tapped`, `issue_ids`,
+`first_section`, `assignee_for`, `is_echo` (a Slack tap's own change coming back within `ECHO_SECONDS`), and the post
+record on any document (`claim` once, `kept`, `keep`, `redraw`). Suite: `tests/test-sdlc-sentry-slack.py`.
+`verify_slack` is the main package's `slack.verify_request`, so chuang-sdlc now needs chuang-platform-kit >= 0.45.0.
+
+`scrum` (SMADPickleBot #2006): a `Scrum:` line's full reference, `owner/repo#N`, is read in its own repository
+(`scrum_line` returns `ref_repo`; `GitHub.card(n, repo=)`); another repository's open issue is waited on by its state
+alone. `tickets.start(numbers, eta=)` (SMADPickleBot #2035) writes a day into the ETA field in the Light's own write
+when the card has none (`ticket_place(...).eta`). `triage.untriaged(issue_lists, now, wait_minutes, window_hours, ...)`
+(SMADPickleBot #1942): the open issues nobody has triaged, (recent, old), lifted from a host's watchdog. No signature
+changes. Suites: `tests/test-sdlc-scrum.py`, `tests/test-sdlc-tickets.py`, `tests/test-sdlc-triage.py`.
+
 ## 0.41.0 - 2026-11-20 PT
 
 New in `webhooks`, no signature changes: what a receiver does about a route (SMADPickleBot #1683, the push decider's

@@ -44,6 +44,25 @@ class SlackError(RuntimeError):
         return self.status == 0
 
 
+MAX_SKEW = 300   # seconds: Slack's own replay window for a signed request
+
+
+def verify_request(headers, body: bytes, secret: str, now=None, max_skew: int = MAX_SKEW) -> bool:
+    """True when the request is Slack's (0.45.0, SMADPickleBot #1940): `X-Slack-Signature` is v0=HMAC-SHA256 of
+    `v0:<timestamp>:<body>` under the app's signing secret, and the timestamp is within `max_skew` seconds, so a
+    replayed request is refused. No secret, no timestamp or a signature of another version is False, never a pass."""
+    import time
+    from . import webhook_auth
+    secret = (secret or '').strip()
+    stamp = str(headers.get('X-Slack-Request-Timestamp') or '')
+    signature = str(headers.get('X-Slack-Signature') or '')
+    if not secret or not stamp.isdigit() or not signature.startswith('v0='):
+        return False
+    if abs((now if now is not None else time.time()) - int(stamp)) > max_skew:
+        return False
+    return webhook_auth.hmac_sha256(secret, b'v0:' + stamp.encode() + b':' + body, signature, prefix='v0=')
+
+
 def _send(req, method: str, opener=None, timeout=TIMEOUT) -> dict:
     """One request to Slack, its JSON answer; SlackError for a non-2xx status, an `ok: false`, or no answer."""
     try:

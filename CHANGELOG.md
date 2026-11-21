@@ -2,6 +2,27 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.45.0 - 2026-11-20 PT
+
+Addition to `google_rest`, no signature changes (SMADPickleBot #1939): `log_entries(project, filter, token, order=,
+page_size=, limit=, **kw)` reads Cloud Logging's entries:list (a POST, so not `list_all`) every page, in order, up to
+`limit`, through the one `call` (its guard 'none' by default, since it only reads). Suite: `tests/test-log-entries.py`.
+
+Addition to `google_rest` (SMADPickleBot #1940): `set_service_min(project, region, service, count, token,
+dry_run=, timeout=)` sets a Cloud Run Service's service-level minimum through the v1 API, `dryRun=all` for a dry run;
+(was, changed), nothing written when it already holds `count`. Suite: `tests/test-google-rest.py`.
+
+Addition to `slack` (SMADPickleBot #1940): `verify_request(headers, body, secret, now=, max_skew=)`, Slack's v0
+signature and its five-minute replay window. Suite: `tests/test-slack.py`.
+
+Addition to `github` (SMADPickleBot #1994): every call that passes the throttle is counted against the current
+`request_scope` by resource, and `scope_calls()` returns the scope's tally, so a host logs a delivery's spend. Suite:
+`tests/test-github.py`.
+
+Addition to `answer_cache` (SMADPickleBot #2029): `AnswerCache(refused=)`, a test of a rebuild's exception; a
+caller's own refusal drops the kept answer (`dropped` in the pass's report) instead of failing it every pass. No
+signature changes. Suite: `tests/test-answer-cache.py`.
+
 ## 0.44.0 - 2026-11-20 PT
 
 Additions to `gcs`, no signature changes (SMADPickleBot #2095): `Client.stat(bucket, name)` reads an object's

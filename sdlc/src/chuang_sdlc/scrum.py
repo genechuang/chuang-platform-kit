@@ -193,7 +193,9 @@ def scrum_line(comments, login: str, skip=()) -> dict:
             continue
         m = found[-1]
         kind, rest = m.group(1).lower(), m.group(2)
-        ref = re.search(r'#(\d+)', rest)
+        # A full reference keeps its repository (`owner/repo#N`, SMADPickleBot #2006: the ChuangFinance session's
+        # "after genechuang/ChuangFinance#26" on a SMAD card was read as SMAD's #26); a bare #N is the card's own.
+        ref = re.search(r'(?:\b([\w.-]+/[\w.-]+))?#(\d+)', rest)
         parts = [p.strip() for p in rest.split('|')]
         eta = next((p[3:].strip() for p in parts if p.lower().startswith('eta')), '')
         who = parts[1] if kind == 'blocked by' and len(parts) > 1 else ''
@@ -203,8 +205,8 @@ def scrum_line(comments, login: str, skip=()) -> dict:
             # wait, never the line's ETA or ref); the ETA only from a later part.
             ask, ref = parts[0], None
             eta = next((p[3:].strip() for p in parts[1:] if p.lower().startswith('eta')), '')
-        return {'kind': kind, 'ref': int(ref.group(1)) if ref else None, 'who': who, 'eta': eta, 'ask': ask,
-                'at': c.get('createdAt')}
+        return {'kind': kind, 'ref': int(ref.group(2)) if ref else None, 'ref_repo': (ref.group(1) or '') if ref else '',
+                'who': who, 'eta': eta, 'ask': ask, 'at': c.get('createdAt')}
     return {}
 
 
@@ -1008,12 +1010,15 @@ class GitHub:
                     got += 1
         return got
 
-    def card(self, n: int) -> dict:
+    def card(self, n: int, repo: str = '') -> dict:
         """One issue's state, close, blocked-by links and last 60 comments (CARD_QUERY), from prefetch's read when it
-        has it; {} when GitHub does not answer."""
-        if int(n) in self._cards:
+        has it; {} when GitHub does not answer. `repo` (owner/name, 0.42.0) reads another repository's issue (a
+        `Scrum:` line's full reference, SMADPickleBot #2006); none, or this board's own, reads this board's."""
+        owner, name = repo.split('/', 1) if repo and '/' in repo else (self.owner, self.repo)
+        foreign = (owner.lower(), name.lower()) != (self.owner.lower(), self.repo.lower())
+        if not foreign and int(n) in self._cards:
             return self._cards[int(n)]
-        data = self.run.graphql(CARD_QUERY, {'owner': self.owner, 'repo': self.repo, 'n': int(n)})
+        data = self.run.graphql(CARD_QUERY, {'owner': owner, 'repo': name, 'n': int(n)})
         try:
             return (data['repository']['issue'] or {}) if data else {}
         except (KeyError, TypeError):
@@ -1175,8 +1180,11 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         login = cfg['repo'].split('/')[0]   # every session comments as the repository's owner
         line = scrum_line(comments, login, skip=('done',))   # `done` is a closed card's word, read past here
         closed = ()
+        theirs = line.get('ref_repo') or ''   # #2006: a full reference is read in its own repository
+        if theirs and theirs.lower() == cfg['repo'].lower():
+            theirs = ''
         if line.get('kind') == 'depends on' and line.get('ref'):
-            dep = gh.card(line['ref'])
+            dep = gh.card(line['ref'], repo=theirs)
             closed = (line['ref'],) if (dep or {}).get('state') == 'CLOSED' else ()
         card = dict(c, number=n)
         state = store.get(_SET['state'], str(n)) or {}
@@ -1184,10 +1192,13 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                           if (x.get('owner') or '') == (c.get('owner') or '') and x.get('light') == cfg['lights']['working']]
         after = {}
         if line.get('kind') == 'next' and line.get('ref'):
-            ref_card = gh.card(line['ref']) or {}
-            where = gh.place(line['ref']) if ref_card.get('state') == 'OPEN' else None
+            ref_card = gh.card(line['ref'], repo=theirs) or {}
+            # another repository's issue is on another board: judged by its state alone, never this board's columns
+            where = gh.place(line['ref']) if ref_card.get('state') == 'OPEN' and not theirs else None
             if ref_card.get('state') == 'CLOSED':
                 after = {'status': 'closed'}
+            elif theirs and ref_card.get('state') == 'OPEN':
+                after = {'status': 'building', 'column': theirs}
             elif where:
                 col, lit = where
                 past = _tickets.rank(col, lit, col, cfg)

@@ -170,6 +170,30 @@ def list_all(url: str, key: str, token=None, *, page_size: int = 100, limit: int
             return out[:limit] if limit is not None else out
 
 
+LOGGING_API = 'https://logging.googleapis.com/v2/entries:list'
+
+
+def log_entries(project: str, flt: str, token=None, *, order: str = 'timestamp desc', page_size: int = 1000,
+                limit: int = None, **kw) -> list:
+    """Cloud Logging's entries in `project` matching the filter `flt`, every page (entries:list is a POST, so not
+    list_all), in `order` ('timestamp desc' or 'timestamp asc'), up to `limit` when given. `kw` goes to `call` (opener,
+    timeout, guard, error...); it only reads, so its guard is 'none' unless the caller says otherwise."""
+    out, page = [], ''
+    if callable(token):
+        token = token()
+    kw.setdefault('guard', 'none')   # entries:list is a POST that only reads
+    while True:
+        body = {'resourceNames': [f'projects/{project}'], 'filter': flt, 'orderBy': order,
+                'pageSize': min(page_size, limit - len(out)) if limit is not None else page_size}
+        if page:
+            body['pageToken'] = page
+        got = call('POST', LOGGING_API, token, body, **kw)
+        out += got.get('entries') or []
+        page = got.get('nextPageToken') or ''
+        if not page or (limit is not None and len(out) >= limit):
+            return out[:limit] if limit is not None else out
+
+
 def _b64(body) -> str:
     if isinstance(body, (dict, list)):
         body = json.dumps(body)
@@ -372,6 +396,31 @@ def run_body(args=None, env: dict = None, timeout_seconds: int = None) -> dict:
     if timeout_seconds:
         body['timeout'] = f'{int(timeout_seconds)}s'
     return {'overrides': body} if body else {}
+
+
+MIN_SCALE = 'run.googleapis.com/minScale'   # a Cloud Run Service's own minimum, the service-level annotation
+
+
+def set_service_min(project: str, region: str, service: str, count: int, token, dry_run: bool = False,
+                    timeout: float = 20, **kw) -> tuple:
+    """A Cloud Run Service's service-level minimum set to `count` (0.45.0, SMADPickleBot #1940): read the Service in
+    the v1 (Knative) API, change its one annotation (0 removes it, as `--min=default` does), replace it with
+    `dryRun=all` for a dry run, which Cloud Run validates and does not apply. (was, changed): the minimum it held
+    before, and False when it already held `count`, so nothing was written. call()'s errors on a refusal or no answer,
+    and its guard on the write; `kw` passes call()'s opener, error and refused through."""
+    url = f'https://{region}-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/{project}/services/{service}'
+    svc = call('GET', url, token, label=f'GET {service}', timeout=timeout, **kw)
+    notes = svc.setdefault('metadata', {}).setdefault('annotations', {})
+    was = notes.get(MIN_SCALE)
+    if str(was or '0') == str(count):
+        return int(was or 0), False
+    if count:
+        notes[MIN_SCALE] = str(count)
+    else:
+        notes.pop(MIN_SCALE, None)
+    svc.pop('status', None)
+    call('PUT', url + ('?dryRun=all' if dry_run else ''), token, svc, label=f'PUT {service}', timeout=timeout, **kw)
+    return int(was or 0), True
 
 
 def console_url(project: str, region: str, execution: str) -> str:

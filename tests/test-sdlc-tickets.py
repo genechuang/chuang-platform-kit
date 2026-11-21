@@ -209,7 +209,8 @@ class FakeGH:
             card = self.cards.get(v['id'])
             if card is None or card.get('unread'):
                 return None
-            return {'node': {'id': v['id'], 'status': {'name': card['status']}, 'light': {'name': card['light']}}}
+            return {'node': {'id': v['id'], 'status': {'name': card['status']}, 'light': {'name': card['light']},
+                             'eta': {'date': card['eta']} if card.get('eta') else None}}
         if 'estimate: fieldValueByName' in query and 'node(id:' in query:
             return {'node': {'id': v['id'], 'estimate': {'number': self.cards.get(v['id'], {}).get('estimate')}}}
         if 'content { ... on Issue { number } }' in query:
@@ -354,6 +355,18 @@ gh = fresh({6: {}, 7: {}}, {'IT_6': {'number': 6, 'status': 'Up Next', 'light': 
                             'IT_7': {'number': 7, 'status': 'Building', 'light': 'ask'}})
 check('start: to the shipyard with the working light; needs is kept', T.start([6, 7], gh), [(6, True), (7, True)])
 check('start lights', (gh.cards['IT_6']['light'], gh.cards['IT_7']['light']), ('busy', 'ask'))
+# 0.42.0 (SMADPickleBot #2035): the default ETA in the same write as the Light, so the Light's own event never finds a
+# Building card with none; a card with an ETA keeps it.
+ETA_CFG = dict(CFG, fields=dict(CFG['fields'], ETA={'id': 'F_eta', 'type': 'date'}))
+gh = fresh({8: {}, 9: {}}, {'IT_8': {'number': 8, 'status': 'Up Next', 'light': ''},
+                            'IT_9': {'number': 9, 'status': 'Up Next', 'light': '', 'eta': '2026-11-25'}})
+started = T.start([8, 9], gh, ETA_CFG, eta='2026-11-20')
+by_item = {}
+for item, fields in gh.writes:
+    by_item.setdefault(item, {}).update(fields)
+check("  0.42.0 start: a card with no ETA gets it in the write that sets its Light; one with an ETA keeps it",
+      (started, 'F_eta' in by_item.get('IT_8', {}), 'F_light' in by_item.get('IT_8', {}), 'F_eta' in by_item.get('IT_9', {})),
+      ([(8, True), (9, True)], True, True, False))
 
 print('moves, batched (0.9.0)')
 cards = {f'IT_{n}': {'number': n, 'status': 'Ready', 'light': 'ok'} for n in range(10, 30)}

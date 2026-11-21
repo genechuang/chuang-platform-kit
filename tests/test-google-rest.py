@@ -303,6 +303,26 @@ check("service and job reads", (G.get_service('p', 'r', 's', 't', opener=fake([]
       ({'name': 's'}, {'name': 'j'}))
 
 print()
+print("0.45.0 (SMADPickleBot #1940): set_service_min reads the Service, changes its one annotation and replaces it")
+SVC = 'https://us-west1-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/p/services/event-worker'
+calls = []
+held = {'metadata': {'name': 'event-worker', 'annotations': {'other': 'x'}}, 'spec': {}, 'status': {'url': 'u'}}
+warmed = G.set_service_min('p', 'us-west1', 'event-worker', 1, 'tok', opener=fake(calls, [(('GET', SVC), held)]))
+put = [c for c in calls if c[0] == 'PUT']
+check("the positive case: 0 to 1 writes the annotation, keeps the others, drops status, and says it changed",
+      (warmed, put[0][1], put[0][2]['metadata']['annotations'], 'status' in put[0][2]),
+      ((0, True), SVC, {'other': 'x', G.MIN_SCALE: '1'}, False))
+calls = []
+same = G.set_service_min('p', 'us-west1', 'event-worker', 1, 'tok',
+                         opener=fake(calls, [(('GET', SVC), {'metadata': {'annotations': {G.MIN_SCALE: '1'}}})]))
+calls2 = []
+cooled = G.set_service_min('p', 'us-west1', 'event-worker', 0, 'tok', dry_run=True,
+                           opener=fake(calls2, [(('GET', SVC), {'metadata': {'annotations': {G.MIN_SCALE: '1'}}})]))
+put2 = [c for c in calls2 if c[0] == 'PUT']
+check("  already there writes nothing; 1 to 0 removes the annotation, and a dry run says dryRun=all",
+      (same, [c[0] for c in calls], cooled, put2[0][1].endswith('?dryRun=all'), G.MIN_SCALE in put2[0][2]['metadata']['annotations']),
+      ((1, False), ['GET'], (1, True), True, False))
+
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
     print(f"  - {f}")

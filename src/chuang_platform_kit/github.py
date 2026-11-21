@@ -116,6 +116,27 @@ def _check(resource: str, path: str = '') -> None:
                               f'this process sent {len(recent)} in a minute, its cap', path)
         recent.append(now)
         _recent[resource] = recent
+    _tally(resource)
+
+
+SCOPE_KEY = 'github.calls'   # request_scope's key for the scope's tally
+
+
+def _tally(resource: str) -> None:
+    """Count one call against the current request scope (request_scope.scope), by resource; nothing outside one."""
+    from . import request_scope
+    if request_scope.active():
+        got = dict(request_scope.peek(SCOPE_KEY) or {})
+        got[resource] = got.get(resource, 0) + 1
+        request_scope.put(SCOPE_KEY, got)
+
+
+def scope_calls() -> dict:
+    """The GitHub calls this request scope has sent so far, {resource: count} (core, graphql, search, code_search), a
+    copy; {} outside a scope or before any call (0.45.0: a host logs it per delivery, so a burst's spenders are read
+    from its logs, SMADPickleBot #1994). Every call counts, a `gh` run included, once it passed the throttle."""
+    from . import request_scope
+    return dict(request_scope.peek(SCOPE_KEY) or {})
 
 
 def _note(resource: str, headers, status: int = 200, message: str = '') -> str:

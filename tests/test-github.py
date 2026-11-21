@@ -284,6 +284,33 @@ check('a 403 with remaining 0 spends core until the reset; the next call is not 
       (('core', 0, True, 30), 'core', 1))
 
 GH.reset_limits()
+from chuang_platform_kit import request_scope  # noqa: E402
+with request_scope.scope():
+    GH.get('t', f'/repos/{REPO}/issues/3', opener=limited({}))
+    GH.get('t', f'/repos/{REPO}/issues/4', opener=limited({}))
+    GH.graphql('t', '{ viewer { login } }', opener=limited({}, body={'data': {'viewer': {'login': 'x'}}}))
+    inside = GH.scope_calls()
+outside = GH.scope_calls()
+GH.get('t', f'/repos/{REPO}/issues/5', opener=limited({}))
+check('0.45.0: a request scope counts its GitHub calls by resource; outside a scope there is no tally',
+      (inside, outside, GH.scope_calls()), ({'core': 2, 'graphql': 1}, {}, {}))
+
+GH.reset_limits()
+with request_scope.scope():
+    try:
+        GH.get('t', f'/repos/{REPO}/issues', opener=limited({'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': str(clock[0] + 30)},
+                                                            403, {'message': 'API rate limit exceeded for user'}))
+    except GH.RateLimited:
+        pass
+    try:
+        GH.get('t', f'/repos/{REPO}/issues/2', opener=limited({}))
+    except GH.RateLimited:
+        pass
+    refused = GH.scope_calls()
+check('a call the throttle refuses before sending is not counted; one GitHub answered, even a 403, is',
+      refused, {'core': 1})
+
+GH.reset_limits()
 sent = []
 for _ in range(GH.LOCAL_CAP['search']):
     GH.get('t', '/search/issues?q=a', opener=limited({}, calls=sent))

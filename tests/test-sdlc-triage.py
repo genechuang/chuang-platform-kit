@@ -200,5 +200,28 @@ check('  a stale lock is ignored: the host module started detached',
       (TR.start_pass('#3', 'issue', 'host.triage', '/repo', lock, '/logs', popen, now=5000.0), started),
       ('triage pass for #3 (issue): started, pid 42; its log lands in /logs', [(['-m', 'host.triage', 'pass', '#3', 'issue'], '/repo')]))
 
+# 0.42.0 (SMADPickleBot #1942): untriaged, the watchdog's read of who still waits on a triage.
+from datetime import timedelta  # noqa: E402
+
+_now = datetime(2026, 11, 20, 20, 0, tzinfo=timezone.utc)  # utc-ok: GitHub's created_at stamps are UTC instants
+
+
+def _issue(n, minutes, labels=(), title='Sentry issue X', pr=False):
+    it = {'number': n, 'title': title, 'labels': [{'name': name} for name in labels],
+          'created_at': (_now - timedelta(minutes=minutes)).isoformat().replace('+00:00', 'Z')}
+    if pr:
+        it['pull_request'] = {}
+    return it
+
+
+newest = [_issue(1, 45), _issue(2, 45, ('needs-triage', 'area:Product')), _issue(3, 45, ('area:Product',)),
+          _issue(4, 10), _issue(5, 45, ('machine',)), _issue(6, 45, title='TEST alert'), _issue(7, 45, pr=True)]
+oldest = [_issue(1, 45), _issue(8, 60 * 30), _issue(9, 60 * 30, ('needs-triage', 'area:Pipeline')),
+          _issue(10, 60 * 30, ('area:Pipeline',))]
+check("  0.42.0 untriaged, the positive case: an untriaged alert and a needs-triage ticket in the window, an old alert "
+      "with no area; never a triaged one, a young one, a machine or TEST issue, a pull request, or a repeat",
+      TR.untriaged([newest, oldest], _now, wait_minutes=30, window_hours=24, skip_titles=('TEST', 'Log diagnostic')),
+      ([1, 2], [8]))
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

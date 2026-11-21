@@ -87,6 +87,10 @@ class Store:
         self.locked.discard((collection, doc_id))
         return True
 
+    def delete(self, collection, doc_id):
+        self._up()
+        self.docs.pop((collection, doc_id), None)
+
 
 NOW = datetime(2026, 11, 19, 20, 0, tzinfo=timezone.utc)  # utc-ok: a fixed instant for the cases, noon Pacific
 
@@ -251,6 +255,43 @@ built.clear()
 ticks = iter([0, 0] + [50] * 20)   # the pass's start, one document within the budget, then the budget is spent
 report = cache.rebuild(now=NOW, budget=45, clock=lambda: next(ticks))
 check("  a pass stops at its budget and says what it left", (len(built), report['left'] > 0, report['rounds']), (1, True, 1))
+
+# 6b. 0.45.0 (SMADPickleBot #2029): a rebuild refused for its caller is dropped, never tried every pass.
+store, cache = fresh()
+tries = []
+
+
+class Gone(Exception):
+    pass
+
+
+def picky(who, key):
+    tries.append(who[0])
+    if who[0] == 'gone':
+        raise Gone('this sign-in is linked to nobody')
+    if who[0] == 'flaky':
+        raise RuntimeError('the database blinked')
+    return home(who, key)
+
+
+cache.refused = lambda e: isinstance(e, Gone)
+cache.register('home', picky, domains=('games',))
+for i, member in enumerate(('gone', 'flaky', 'a')):
+    cache.answer('home', (member, ''), {'year': 2026}, lambda m=member: home((m, ''), {'year': 2026}),
+                 now=NOW - timedelta(minutes=10 * (3 - i)), until=lambda answer, now: now + timedelta(days=30))
+cache.day_end = None
+cache.max_age = timedelta(days=30)
+cache.bump(['games'], now=NOW)
+tries.clear()
+first = cache.rebuild(now=NOW)
+gone_id = cache.doc_id('home', ('gone', ''), {'year': 2026})
+gone_left = (cache.collection, gone_id) in store.docs
+cache.bump(['games'], now=NOW)
+tries.clear()
+second = cache.rebuild(now=NOW)
+check("  0.45.0: the refused caller's answer is dropped (counted apart), never built again; another error stays and is tried again",
+      (first.get('dropped'), first['failed'], gone_left, 'gone' in tries, 'flaky' in tries, second.get('dropped')),
+      (1, 1, False, False, True, None))
 
 # 7. One pass at a time; a write during a pass makes it go round once more.
 store, cache = fresh()

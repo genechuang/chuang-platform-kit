@@ -57,6 +57,36 @@ def request(why: str, topic: str, kind: str = 'issue', number: int = None, title
         return f'triage wake: not requested for {why} ({type(e).__name__}: {str(e)[:160]}); the next pass finds it'
 
 
+def untriaged(issue_lists, now: datetime, wait_minutes: float, window_hours: float, skip_titles=(),
+              skip_labels=('machine',), needs_label: str = 'needs-triage', area_prefix: str = 'area:') -> tuple:
+    """(recent, old): the open issues nobody has triaged, by number, from GitHub's issue lists (each a page of the
+    REST answer; a number in two lists counts once; a pull request never). An issue counts once it is `wait_minutes`
+    old: within `window_hours` while it still carries `needs_label` or no `area_prefix` label, and past the window
+    only with no `area_prefix` label at all (an alert never put on the board; a `needs_label` ticket that old is its
+    triager's). An issue with a `skip_labels` label or a title opening with a `skip_titles` word is never one. Both
+    lists sorted (0.42.0, SMADPickleBot #1942, lifted from its watchdog's untriaged_alerts)."""
+    seen, recent, old = set(), [], []
+    for issues in issue_lists:
+        for it in issues or []:
+            number = int(it.get('number') or 0)
+            if 'pull_request' in it or number in seen:
+                continue
+            seen.add(number)
+            labels = {(label.get('name') or '').lower() for label in it.get('labels') or [] if isinstance(label, dict)}
+            title = (it.get('title') or '').strip()
+            if labels & set(skip_labels) or (skip_titles and title.startswith(tuple(skip_titles))):
+                continue
+            created = datetime.fromisoformat(str(it.get('created_at') or '').replace('Z', '+00:00'))
+            age = (now - created).total_seconds()
+            if age < wait_minutes * 60:
+                continue
+            in_window = age <= window_hours * 3600
+            if any(label.startswith(area_prefix) for label in labels) and not (in_window and needs_label in labels):
+                continue
+            (recent if in_window else old).append(number)
+    return sorted(recent), sorted(old)
+
+
 def prompt_text(path: str, note: str = '') -> str:
     """The pass's prompt: the file at `path` verbatim, then a blank line and the host's `note` (what asked for this
     pass, where it runs) when it gave one."""

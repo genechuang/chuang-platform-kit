@@ -150,5 +150,28 @@ check("no answer", (gone.status, gone.error), (0, 'TimeoutError'))
 none = []
 check("a blank URL is refused before any call", (raised(lambda: S.webhook_post('', {}, opener=fake(none))).error, none), ('no webhook url', []))
 
+# 0.45.0 (SMADPickleBot #1940): verify_request, Slack's v0 signature and its replay window.
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+
+SECRET, NOW, BODY = 'shh', 1_800_000_000, b'payload=%7B%7D'
+
+
+def signed(stamp, body=BODY, secret=SECRET):
+    mac = hmac.new(secret.encode(), b'v0:' + str(stamp).encode() + b':' + body, hashlib.sha256).hexdigest()
+    return {'X-Slack-Request-Timestamp': str(stamp), 'X-Slack-Signature': f'v0={mac}'}
+
+
+check("the positive case: Slack's own signature on a fresh request passes; a replay, a changed body, another secret, "
+      "no secret, no timestamp and another version are refused",
+      [S.verify_request(signed(NOW), BODY, SECRET, now=NOW),
+       S.verify_request(signed(NOW - 301), BODY, SECRET, now=NOW),
+       S.verify_request(signed(NOW), b'payload=other', SECRET, now=NOW),
+       S.verify_request(signed(NOW, secret='nope'), BODY, SECRET, now=NOW),
+       S.verify_request(signed(NOW), BODY, '', now=NOW),
+       S.verify_request({'X-Slack-Signature': signed(NOW)['X-Slack-Signature']}, BODY, SECRET, now=NOW),
+       S.verify_request(dict(signed(NOW), **{'X-Slack-Signature': 'v1=abc'}), BODY, SECRET, now=NOW)],
+      [True, False, False, False, False, False, False])
+
 print(f"{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)

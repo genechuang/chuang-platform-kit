@@ -109,7 +109,10 @@ class AnswerCache:
 
     def __init__(self, store, scope, revision='', collection='api_answers', versions='data_versions',
                  locks='answer_cache_locks', day_end=None, encode=None, enabled=True, max_age=MAX_AGE,
-                 max_bytes=MAX_BYTES, keep_days=KEEP_DAYS):
+                 max_bytes=MAX_BYTES, keep_days=KEEP_DAYS, refused=None):
+        # `refused(error)` (0.45.0, SMADPickleBot #2029): whether a rebuild's exception is the caller's own refusal (a
+        # sign-in no longer linked, a member gone), so the pass drops the kept answer instead of trying it every pass
+        self.refused = refused
         self.store, self.scope, self.revision = store, scope, revision
         self.collection, self.versions, self.locks = collection, versions, locks
         self.day_end, self.enabled = day_end, enabled
@@ -285,6 +288,12 @@ class AnswerCache:
         log.info("answer_cache: rebuild pass for %s: %s", self.scope, report)
         return report
 
+    def _refused(self, error) -> bool:
+        try:
+            return bool(self.refused(error))
+        except Exception:   # noqa: BLE001 - a test that fails is no refusal: the answer is kept and tried again
+            return False
+
     def _rebuild_route(self, reg, signal, now, report, pushed, spent) -> None:
         stamp = reg.inputs() if reg.inputs else ''
         since = now - timedelta(days=self.keep_days)
@@ -315,6 +324,15 @@ class AnswerCache:
                         continue
                     body = self.encode(answer)
                 except Exception as e:   # noqa: BLE001 - one caller's answer never stops the pass; its next read builds
+                    if self.refused is not None and self._refused(e):
+                        # 0.45.0: the caller's own refusal never changes by trying again: the kept answer goes, so no
+                        # later pass opens the database for it (SMADPickleBot #2029: 23 a pass, 844 in two hours)
+                        try:
+                            self.store().delete(self.collection, doc_id)
+                        except Exception:   # noqa: BLE001 - left for its age to end, as before
+                            pass
+                        report['dropped'] = report.get('dropped', 0) + 1
+                        continue
                     report['failed'] += 1
                     log.info("answer_cache: %s could not be rebuilt for one caller (%s)", reg.name, type(e).__name__)
                     continue

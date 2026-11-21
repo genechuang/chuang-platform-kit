@@ -102,6 +102,31 @@ got = S.scrum_line(comments, LOGIN)
 check("the positive case: the owner's newest line, never another account's or the sweep's", (got['kind'], got['eta']),
       ('building', '5 PM'))
 check("the lead's ask", S.scrum_line([say('Scrum: needs Lee | pick A or B')], LOGIN)['ask'], 'pick A or B')
+full = S.scrum_line([say('Scrum: next | after genechuang/ChuangFinance#26')], LOGIN)
+bare = S.scrum_line([say('Scrum: depends on #26')], LOGIN)
+check("  0.42.0 (SMADPickleBot #2006): a full reference keeps its repository; a bare number is the card's own",
+      ((full['ref'], full['ref_repo']), (bare['ref'], bare['ref_repo'])), ((26, 'genechuang/ChuangFinance'), (26, '')))
+
+
+class _Cards:
+    """GitHub.card's GraphQL stand-in: the owner, repository and number asked, one issue state each."""
+    def __init__(self, states):
+        self.asked, self.states = [], states
+
+    def graphql(self, query, variables):
+        key = (variables['owner'], variables['repo'], variables['n'])
+        self.asked.append(key)
+        return {'repository': {'issue': {'number': key[2], 'state': self.states.get(key, 'OPEN')}}}
+
+
+_gh = S.GitHub.__new__(S.GitHub)
+_gh.owner, _gh.repo, _gh._cards = 'genechuang', 'SMADPickleBot', {26: {'number': 26, 'state': 'CLOSED'}}
+_gh.run = _Cards({('genechuang', 'ChuangFinance', 26): 'OPEN'})
+check("  0.42.0: GitHub.card reads another repository's issue in that repository, never this board's prefetched one; "
+      "its own repository's number reads as before",
+      (_gh.card(26, repo='genechuang/ChuangFinance')['state'], _gh.card(26)['state'],
+       _gh.card(26, repo='GeneChuang/SMADPickleBot')['state'], _gh.run.asked),
+      ('OPEN', 'CLOSED', 'CLOSED', [('genechuang', 'ChuangFinance', 26)]))
 check('paused and its why', (S.scrum_line([say('Scrum: paused | after the launch')], LOGIN)['kind'],
                              S.scrum_line([say('Scrum: paused | after the launch')], LOGIN)['ask']), ('paused', 'after the launch'))
 check('`done` read past when skipped', S.scrum_line([say('Scrum: building', 3), say('Scrum: done', 1)], LOGIN, skip=('done',))['kind'],
