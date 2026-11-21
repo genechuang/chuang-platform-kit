@@ -1523,6 +1523,18 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `minutes(seconds)` | '7 min' from two minutes on, else '45 s': how a backlog's age is said. |
 | `classify(found, quiet=, info=, pulled=, age_s=, count=, in_flight_s=)` | [(kind, subscription, undelivered, oldest seconds)] in subscription order for `found` (backlogs' answer), one finding a subscription that holds anything; `quiet` and `info` are name prefixes, `pulled` names. The kinds are the module's; the host says each at i… |
 
+## `chuang_alerts.catalog`: An alert catalog's shape and its lookups: what each system does, who is hurt when it fails, and wha…
+
+| Name | Purpose |
+|---|---|
+| `job_entry(jobs, job, variant=, unknown=, twin_suffix=)` | A job's entry with its variant's keys over the job's own. A job named `<listed job><twin_suffix>` is that job's dev twin, which only a deploy's smoke runs: its entry says a release failed on its dev rung and was rolled back. A job not listed gets an entry tha… |
+| `schedule_entry(schedules, job_id, prefixes=, unknown=)` | A scheduler job's entry by its id, else by the first of `prefixes` its id starts with, else one that names it. |
+| `task_entry(actions, action, unknown=)` | A queued task's entry by the action its name begins with, else one that names the action. |
+| `line_rule(rules, service, line)` | The index of the first of `rules` ((service, pattern, entry), ...) for `service` whose pattern `line` matches, or None. A rule names the actual failure where the service's own entry guesses at the usual one. |
+| `service_entry(services, service, line=, rules=, unknown=)` | A service's entry: the rule the error line matches (line_rule), else the service's own, else one that names it. |
+| `dead_letter_entry(dead_letters, topic, unknown=)` | A dead-letter topic's entry, else one that names the topic and says it is not catalogued. |
+| `build_entry(builds, tag)` | A build's entry by its first tag; an unknown tag reads as the untagged one (`builds['']`). |
+
 ## `chuang_alerts.digest`: The hourly WARNING digest's logic: a project's WARNING lines folded into kinds, and which kind a pe…
 
 | Name | Purpose |
