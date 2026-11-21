@@ -72,6 +72,8 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      key, posted with no redirect followed; gone on a 404 or 410 (the `webpush` extra)
   expo_push          push to phones through Expo, stdlib: batches with tickets and the gone list, receipts, which
                      errors are one phone's and which the sender's, tokens scrubbed from every error, the dedupe key
+  outbox             the transactional outbox: an event written with its record, published after the commit, swept
+                     when a publish fails; Postgres over the host's model, Firestore over a store seam
   public_text        text bound for a public page or ticket: emails and phone numbers scrubbed, or listed for a check
                      that refuses the text
   signed_link        a link that carries its own proof: an HMAC-SHA256 signature of a value as a query parameter,
@@ -93,4 +95,4 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.39.0'
+__version__ = '0.40.0'

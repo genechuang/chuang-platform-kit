@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.40.0 - 2026-11-20 PT
+
+New module, no signature changes: `outbox`, the transactional outbox (SMADPickleBot #1935, out of its
+`services/api/events.py`). An event written in its record's own transaction, published after the commit, swept when
+a publish fails. Postgres over the host's SQLAlchemy model (`emit`, `drop`, `dispatch`, `sweep`, `send_rows`: emit
+order kept, attempts counted, an ERROR at `stuck`, the sweep flag kept while rows are left) and Firestore over a
+store the host adapts (`stage`, `fs_writes`, `publish_staged`, `sweep_fs`; the store has `pending(limit)` and
+`mark_sent(ids, now)`). The kit keeps no state: the host passes its publish, attribute rule, failure class, topic
+and its own `{'sweep': bool}` at each call. SQLAlchemy is the host's own pin, imported only by the Postgres half.
+Suite: `tests/test-outbox.py`.
+
 ## 0.39.0 - 2026-11-20 PT
 
 New module, no signature changes: `expo_push`, push notifications to phones through Expo's push service on the

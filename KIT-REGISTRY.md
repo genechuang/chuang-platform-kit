@@ -510,6 +510,20 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `transfer_budget(totals, budget_bytes=)` | (used_bytes, percent, line) for the month's `data_transfer_bytes` against a budget (the free plan's 5 GB by default): the line is printable, and `percent` is None when Neon reported no transfer metric, so a sweep says 'not measured', never 0%. |
 | `main(argv=)` | `python -m chuang_platform_kit.neon --name X --database Y [--store project/SECRET]`: provision and, with `--store`, write the connection URL as a new version of that Secret Manager secret (created when missing). Prints ids, host and the version name only. |
 
+## `outbox`: The transactional outbox: an event written with its record, published after the commit, swept when…
+
+| Name | Purpose |
+|---|---|
+| `emit(s, model, envelope, ordering_key=, key=, **columns)` | One event in `s`'s transaction: its `model` row, for `dispatch` after the commit. The envelope's id, which the row keeps as its own; the ids are remembered in `s.info[key]` in emit order. |
+| `drop(s, model, key=)` | Take back the events `s` emitted and has not dispatched (the caller commits): its write was undone. |
+| `send_rows(s, rows, publish, topic, attributes, failure, state, stuck=, log=, label=)` | Publish each row in order, stamp the sent ones' `published_at` and count a refused one's `attempts` (an ERROR line once it reaches `stuck`), then commit. (sent, failed). |
+| `dispatch(s, model, publish, topic, attributes, failure, state, key=, sweep_after_s=, limit=, stuck=, log=, label=)` | After the commit: publish the events `s` emitted, in the order it emitted them, and stamp them; then, when the state asks (a failure or a start left rows behind) and none failed now, sweep. {sent, failed, swept}. Never raises. |
+| `sweep(s, model, publish, topic, attributes, failure, state, now=, after_s=, limit=, stuck=, log=, label=)` | Publish every unstamped row older than `after_s`, oldest first, at most `limit`. {sent, failed, left}: `left` the unstamped rows still there after it. The state keeps asking while any are left, or the limit was reached, or one failed (a sweep within `after_s`… |
+| `stage(envelope, ordering_key=, attributes=)` | One event for the Firestore outbox: {id, envelope, ordering_key, attributes}, for `fs_writes` in the record's own commit and `publish_staged` after the answer. |
+| `fs_writes(collection, staged, now, keep_days=)` | The Firestore writes that keep `staged` events pending, for the record's own commit: each its `<collection>/<id>` document, created only (a second write of one id is refused with its commit), with the TTL field `keep_days` ahead. |
+| `publish_staged(staged, publish, store, topic, failure, state, after_s=, limit=, log=, label=)` | After the answer: publish the events a record's commit kept (`stage`, `fs_writes`) and mark them; then, when the state asks and none failed now, sweep. {sent, failed, swept}. Never raises. |
+| `sweep_fs(store, publish, topic, failure, state, now=, after_s=, limit=, scan=, log=, label=)` | Publish every pending document older than `after_s`, oldest first, at most `limit` (reading at most `scan`). {sent, failed, left}, `left` the pending ones it did not send (too young, or past the limit). |
+
 ## `phone_utils`: Phone number utilities for WhatsApp and SMS integration.
 
 | Name | Purpose |
