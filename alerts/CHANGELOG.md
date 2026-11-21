@@ -1,6 +1,6 @@
 # chuang-alerts changelog
 
-## Unreleased (0.3.2)
+## 0.3.2 (2026-11-21)
 
 - `engine.decode` reads the pushed message through chuang-platform-kit's `pubsub.decode` instead of its own base64 and
   JSON (SMADPickleBot #1933). It still answers {} for anything unreadable, and now also for JSON that is not an object,

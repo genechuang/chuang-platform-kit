@@ -2,7 +2,7 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
-## Unreleased (0.47.0)
+## 0.47.0 - 2026-11-21 PT
 
 Additions to `keepalive`, no signature changes (SMADPickleBot #1933): `request(retry=, redirects=)` and
 `urlopen(retry=, redirects=)`. `retry=False` sends a call once on a second kept session whose adapter retries
