@@ -473,12 +473,12 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 
 | Name | Purpose |
 |---|---|
-| `session(now=)` | The process's session: the one in use, or a new one when there is none or it sat unused over IDLE_SECONDS (the old one closed, its pooled connections with it). Marks it used now. |
-| `request(method, url, headers=, data=, json=, timeout=, now=)` | `method url` on the process's kept-alive session (session()), with `timeout` for the connect and the read: the requests.Response, whatever its status (the caller decides what a 4xx means). A connection that could not be made or an idempotent call whose answer… |
+| `session(now=, retry=)` | The process's session: the one in use, or a new one when there is none or it sat unused over IDLE_SECONDS (the old one closed, its pooled connections with it). Marks it used now. retry=False is a second session of its own (_BARE), kept the same way, whose ada… |
+| `request(method, url, headers=, data=, json=, timeout=, now=, retry=, redirects=)` | `method url` on the process's kept-alive session (session()), with `timeout` for the connect and the read: the requests.Response, whatever its status (the caller decides what a 4xx means). A connection that could not be made or an idempotent call whose answer… |
 | `class Answer` | An answer read whole from a kept-alive connection, in the shape callers read urlopen's: `status`, `headers`, `read()`, a context manager. |
 | `Answer.getcode()` | (no docstring) |
 | `Answer.read(*a)` | (no docstring) |
-| `urlopen(req, timeout=, data=)` | urllib.request.urlopen's shape over the kept-alive session: `req` a urllib Request (or a URL), its method, headers and body sent as they are. A 4xx or 5xx is urllib.error.HTTPError (its body readable), no answer URLError; plain http goes to urllib's own urlop… |
+| `urlopen(req, timeout=, data=, retry=, redirects=)` | urllib.request.urlopen's shape over the kept-alive session: `req` a urllib Request (or a URL), its method, headers and body sent as they are. A 4xx or 5xx is urllib.error.HTTPError (its body readable), no answer URLError; plain http goes to urllib's own urlop… |
 | `reset()` | Close the session and its connections (tests, and a process that wants a clean slate). |
 
 ## `lazy_import`: A module imported on first use, not at import time.

@@ -45,15 +45,20 @@ BACKOFF_SECONDS = 0.2      # urllib3's backoff factor between those tries
 
 _LOCK = threading.Lock()
 _STATE = {'session': None, 'used': 0.0}
+_BARE = {'session': None, 'used': 0.0}   # retry=False's session: the same pool rules, no retry at all
 
 
-def _new_session():
+def _new_session(retry: bool = True):
     """A requests.Session whose https:// and http:// adapters pool POOL_SIZE connections a host and retry as the module
-    docstring says (urllib3 Retry: connect for any method, read for idempotent ones, never on a status)."""
+    docstring says (urllib3 Retry: connect for any method, read for idempotent ones, never on a status); with
+    retry=False they retry nothing, so one try is the whole of a call's time (its caller's timeout, once)."""
     from urllib3.util.retry import Retry
-    retry = Retry(total=CONNECT_RETRIES + READ_RETRIES, connect=CONNECT_RETRIES, read=READ_RETRIES, status=0, other=0,
-                  allowed_methods=Retry.DEFAULT_ALLOWED_METHODS, backoff_factor=BACKOFF_SECONDS,
-                  raise_on_status=False, respect_retry_after_header=False)
+    if retry:
+        retry = Retry(total=CONNECT_RETRIES + READ_RETRIES, connect=CONNECT_RETRIES, read=READ_RETRIES, status=0, other=0,
+                      allowed_methods=Retry.DEFAULT_ALLOWED_METHODS, backoff_factor=BACKOFF_SECONDS,
+                      raise_on_status=False, respect_retry_after_header=False)
+    else:
+        retry = Retry(total=0, connect=0, read=0, status=0, other=0, redirect=None, raise_on_status=False)
     s = requests.Session()
     adapter = requests.adapters.HTTPAdapter(pool_connections=POOL_SIZE, pool_maxsize=POOL_SIZE, max_retries=retry)
     s.mount('https://', adapter)
@@ -62,29 +67,35 @@ def _new_session():
     return s
 
 
-def session(now=None):
+def session(now=None, retry: bool = True):
     """The process's session: the one in use, or a new one when there is none or it sat unused over IDLE_SECONDS (the
-    old one closed, its pooled connections with it). Marks it used now."""
+    old one closed, its pooled connections with it). Marks it used now. retry=False is a second session of its own
+    (_BARE), kept the same way, whose adapters retry nothing (0.47.0, SMAD PickleBot #1933)."""
     t = (now or time.monotonic)()
+    state = _STATE if retry else _BARE
     with _LOCK:
-        held = _STATE['session']
-        if held is None or t - _STATE['used'] > IDLE_SECONDS:
+        held = state['session']
+        if held is None or t - state['used'] > IDLE_SECONDS:
             if held is not None:
                 held.close()
-            held = _STATE['session'] = _new_session()
-        _STATE['used'] = t
+            held = state['session'] = _new_session(retry)
+        state['used'] = t
         return held
 
 
 def request(method: str, url: str, headers: dict = None, data=None, json=None, timeout: float = TIMEOUT_SECONDS,
-            now=None):
+            now=None, retry: bool = True, redirects: bool = True):
     """`method url` on the process's kept-alive session (session()), with `timeout` for the connect and the read: the
     requests.Response, whatever its status (the caller decides what a 4xx means). A connection that could not be made
     or an idempotent call whose answer never came is retried by urllib3 as the module docstring says; what is left
-    raises requests' own exception (requests.exceptions.ConnectionError, Timeout)."""
-    resp = session(now).request(method, url, headers=headers, data=data, json=json, timeout=timeout)
+    raises requests' own exception (requests.exceptions.ConnectionError, Timeout). retry=False sends it once on the
+    session that retries nothing, so `timeout` bounds the whole call; redirects=False returns a 3xx as the answer
+    instead of following it (0.47.0, SMAD PickleBot #1933: its API's own copy of this pool did both)."""
+    held = session(now) if retry else session(now, retry=False)
+    kw = {} if redirects else {'allow_redirects': False}
+    resp = held.request(method, url, headers=headers, data=data, json=json, timeout=timeout, **kw)
     with _LOCK:
-        _STATE['used'] = (now or time.monotonic)()   # a slow answer counts as use up to its end
+        (_STATE if retry else _BARE)['used'] = (now or time.monotonic)()   # a slow answer counts as use up to its end
     return resp
 
 
@@ -108,16 +119,20 @@ class Answer:
         return False
 
 
-def urlopen(req, timeout: float = TIMEOUT_SECONDS, data=None):
+def urlopen(req, timeout: float = TIMEOUT_SECONDS, data=None, retry: bool = True, redirects: bool = True):
     """urllib.request.urlopen's shape over the kept-alive session: `req` a urllib Request (or a URL), its method, headers
     and body sent as they are. A 4xx or 5xx is urllib.error.HTTPError (its body readable), no answer URLError; plain
-    http goes to urllib's own urlopen. A POST is never re-sent after it went out (the module docstring's retry rule)."""
+    http goes to urllib's own urlopen. A POST is never re-sent after it went out (the module docstring's retry rule).
+    retry=False and redirects=False are request()'s: one try bounded by `timeout`, a 3xx returned as an Answer. Only a
+    flag that is off is passed on, so a stand-in for request() written before 0.47.0 still takes every default call."""
     if isinstance(req, str):
         req = urllib.request.Request(req, data=data)
     if urllib.parse.urlsplit(req.full_url).scheme != 'https':
         return urllib.request.urlopen(req, timeout=timeout)
+    kw = {k: False for k, on in (('retry', retry), ('redirects', redirects)) if not on}
     try:
-        resp = request(req.get_method(), req.full_url, headers=dict(req.header_items()), data=req.data, timeout=timeout)
+        resp = request(req.get_method(), req.full_url, headers=dict(req.header_items()), data=req.data, timeout=timeout,
+                       **kw)
     except Exception as e:   # noqa: BLE001 - requests' ConnectionError, Timeout and the rest, as urlopen's URLError
         raise urllib.error.URLError(e)
     if resp.status_code >= 400:
@@ -128,6 +143,7 @@ def urlopen(req, timeout: float = TIMEOUT_SECONDS, data=None):
 def reset() -> None:
     """Close the session and its connections (tests, and a process that wants a clean slate)."""
     with _LOCK:
-        if _STATE['session'] is not None:
-            _STATE['session'].close()
-        _STATE['session'], _STATE['used'] = None, 0.0
+        for state in (_STATE, _BARE):
+            if state['session'] is not None:
+                state['session'].close()
+            state['session'], state['used'] = None, 0.0

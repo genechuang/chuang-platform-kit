@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## Unreleased (0.47.0)
+
+Additions to `keepalive`, no signature changes (SMADPickleBot #1933): `request(retry=, redirects=)` and
+`urlopen(retry=, redirects=)`. `retry=False` sends a call once on a second kept session whose adapter retries
+nothing, so the caller's timeout bounds the whole call; `redirects=False` returns a 3xx as the answer. `urlopen`
+passes only a flag that is off, so a host's stand-in for `request` keeps taking every default call. `reset()` closes
+both sessions. Suite: `tests/test-keepalive.py`.
+
 ## 0.46.0 - 2026-11-20 PT
 
 Addition to `answer_cache`, no signature changes (SMADPickleBot #2109): `AnswerCache(asked_every=)`, how stale a

@@ -55,6 +55,12 @@ class Server:
                     self.connection.shutdown(socket.SHUT_RDWR)
                     return
                 outer.requests.append((self.command, body.decode()))
+                if self.path == '/go':
+                    self.send_response(302)
+                    self.send_header('Location', '/a')
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 out = b'{"ok": true}'
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -194,7 +200,42 @@ check("urlopen: any method's headers and body on the pool, the answer read whole
       ((200, b'{"name": "m1"}', '1', 200), 'POST', b'{"messages": []}', 7, 'Bearer t', (404, b'{"error": "gone"}'),
        'ConnectionError', True, 200))
 
+# 7. retry=False and redirects=False (0.47.0, SMAD PickleBot #1933): the API's own copy of this pool sent once and
+# returned a 3xx; a caller whose timeout must bound the whole call asks for that.
+srv.requests.clear()
+srv.drop = 1
+try:
+    K.request('GET', f'{srv.url}/once', now=clock, retry=False)
+    once = 'answered'
+except Exception as e:   # noqa: BLE001
+    once = type(e).__name__
+check("  retry=False: a GET whose connection was dropped is sent once, never again, and raises",
+      (once, srv.requests), ('ConnectionError', [('GET', 'dropped')]))
+bare = K.session(now=clock, retry=False).get_adapter('https://x').max_retries
+check("  retry=False is its own kept session whose adapter retries nothing; the default session keeps its retries",
+      (bare.total, bare.connect, bare.read, K.session(now=clock, retry=False) is K.session(now=clock),
+       K.session(now=clock).get_adapter('https://x').max_retries.connect),
+      (0, 0, 0, False, K.CONNECT_RETRIES))
+srv.requests.clear()
+kept = K.request('GET', f'{srv.url}/go', now=clock, redirects=False)
+followed = K.request('GET', f'{srv.url}/go', now=clock)
+check("  redirects=False returns the 302 as the answer; the default follows it",
+      (kept.status_code, kept.headers.get('Location'), followed.status_code, followed.json(),
+       [r[0] for r in srv.requests]), (302, '/a', 200, {'ok': True}, ['GET', 'GET', 'GET']))
+
+flags = []
+K.request = lambda method, url, **kw: flags.append(sorted(kw)) or Resp(302, b'', 'Found')
+try:
+    moved = K.urlopen('https://firestore.example/doc', timeout=5, retry=False, redirects=False)
+    K.urlopen('https://firestore.example/doc', timeout=5)
+finally:
+    K.request = keep_request
+check("  urlopen passes only a flag that is off (a stand-in for request() from before 0.47.0 takes every default "
+      "call), and a 3xx is an Answer, never an HTTPError",
+      (moved.status, flags), (302, [['data', 'headers', 'redirects', 'retry', 'timeout'], ['data', 'headers', 'timeout']]))
+
 K.reset()
+check("  reset() closes both sessions", (K._STATE['session'], K._BARE['session']), (None, None))
 srv.close()
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
