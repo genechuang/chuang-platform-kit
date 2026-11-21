@@ -126,5 +126,16 @@ with tempfile.TemporaryDirectory() as tmp:
                               for r in op2.requests]),
           (['a.pdf'], ['a.pdf'], ['one.json', 'two.json'], [True, True]))
 
+op = Opener([('POST', 'uploadType=multipart', {'name': 'h.png'}),
+             ('GET', '/o/heat%2Fh.png', {'name': 'heat/h.png', 'metadata': {'data_hash': 'abc'}, 'updated': '2026-11-20T01:00:00Z'}),
+             ('GET', '/o/none', 404)])
+c = gcs.Client('tok', op)
+c.upload_bytes('b', 'heat/h.png', b'png', 'image/png', metadata={'data_hash': 'abc', 'response_count': 7})
+meta = json.loads(op.requests[0].data.split(b'\r\n\r\n', 1)[1].split(b'\r\n', 1)[0])
+check('custom metadata goes up in the multipart upload as text; stat reads an object, None for one not there',
+      (meta, c.stat('b', 'heat/h.png')['metadata'], c.stat('b', 'none')),
+      ({'name': 'heat/h.png', 'contentType': 'image/png', 'metadata': {'data_hash': 'abc', 'response_count': '7'}},
+       {'data_hash': 'abc'}, None))
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)

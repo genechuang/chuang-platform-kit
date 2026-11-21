@@ -2,6 +2,12 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.44.0 - 2026-11-20 PT
+
+Additions to `gcs`, no signature changes (SMADPickleBot #2095): `Client.stat(bucket, name)` reads an object's
+resource (`metadata`, `updated`, `contentType`, ...), None on a 404; `upload_bytes(..., metadata=)` sets custom object
+metadata ({key: text}) in the same multipart request as `cache_control`. Suite: `tests/test-gcs.py`.
+
 ## 0.43.0 - 2026-11-20 PT
 
 Additions to `neon`, no signature changes (SMADPickleBot #1938, out of its `picklebot_core/neon_branches.py`):

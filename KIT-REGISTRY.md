@@ -248,8 +248,9 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `content_type_for(path)` | The content type a file's name says (mimetypes), else application/octet-stream. |
 | `class Client` | One Cloud Storage client: `token` a string, a callable asked per call, or None for google_auth's; `opener` the transport (urlopen's shape), the real one by default; `guard` google_rest's live guard ('writes' by default; 'none' for a run by hand whose own flag… |
 | `Client.list(bucket, prefix=)` | The bucket's live objects under `prefix`, [{name, size}], by name, every page. |
-| `Client.upload_bytes(bucket, name, data, content_type=, cache_control=)` | `data` as the object `name`, with its `content_type` and, when given, its `cache_control`; the object's metadata as Google answers it. |
+| `Client.upload_bytes(bucket, name, data, content_type=, cache_control=, metadata=)` | `data` as the object `name`, with its `content_type` and, when given, its `cache_control` and its custom `metadata` ({key: text}); the object's metadata as Google answers it. |
 | `Client.upload_file(bucket, name, path, content_type=, cache_control=)` | The file at `path` as the object `name` (upload_bytes), its content type from its name when not given. |
+| `Client.stat(bucket, name)` | The object's resource as Google answers it ({name, size, updated, contentType, metadata, ...}), or None when there is no such object (a 404). |
 | `Client.download(bucket, name)` | The object's bytes. |
 | `Client.download_text(bucket, name, encoding=)` | The object's text. |
 | `Client.copy(bucket, source, target, target_bucket=)` | One object copied to another name (in `target_bucket`, else the same bucket), server side. |
@@ -1573,4 +1574,78 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `from_plain(fields)` | A document's plain values as a record; `hours` back to a dict. |
 | `load(project, collection, token, opener=)` | Every kind's record in `collection`, {kind_id: record}: the whole collection, one query. |
 | `save(project, collection, token, kid, record, opener=)` | One kind's record written whole. |
+
+## `chuang_alerts.engine`: chuang_alerts.engine: an alert watcher's engine, one plain-English message per broken system (SMADP…
+
+| Name | Purpose |
+|---|---|
+| `configure(**kw)` | Set the host's settings (see _DEFAULTS for each name); called once at import by the host. The watcher's own service name is required, since a watcher that told its own lines would loop; an unknown name is a TypeError. The settings now in force. |
+| `instant_now()` | Now, as an aware UTC instant (stored instants; every shown time goes through pt()). |
+| `parse_ts(text)` | An RFC 3339 stamp (Logging's nanoseconds trimmed) as an aware datetime; None for nothing. |
+| `iso(dt)` | A stored instant: ISO 8601 in UTC, to the second. |
+| `pt(dt)` | 'Sat 10/10/26 1:30 AM PT' in the configured zone (the year always), labelled with the configured `zone_label`, else the zone's own abbreviation. |
+| `clean(line)` | One error line as it is shown: redacted, one line, trimmed. |
+| `system_key(kind, *parts)` | The store id of a system's incident: kind and name, no slashes. |
+| `variant_of(command, args)` | A job run's identity by its arguments (catalog variants): the arguments without the interpreter's -u, the script name and --only <steps>; None for a run that is not an alert: a deploy's smoke test (--help) or a hand `python -c`. |
+| `only_steps(args)` | The steps a run was limited to with --only (empty when it ran them all). |
+| `entry_text(entry)` | A LogEntry's words: jsonPayload.message, textPayload, a request's method, path and status, or an audit entry's status message. |
+| `step_error(message)` | 'weekly costs-page failed (exit 1): <error>' -> '<error>' (a leading 'ERROR: ' dropped). |
+| `and_join(items)` | 'a', 'a and b', 'a, b and c' (empty items left out). |
+| `class FirestoreStore` | The incidents and pending collections in Firestore (the host's client, or its configured `firestore_client`). |
+| `FirestoreStore.get(coll, key)` | The document's fields, or None when it does not exist. |
+| `FirestoreStore.set(coll, key, data)` | Write the document whole; an incident's write is also published (the host's `publish_incident`). |
+| `FirestoreStore.delete(coll, key)` | Delete the document. |
+| `FirestoreStore.all(coll)` | Every document of the collection as (id, fields). |
+| `class Google` | Logging, Run Admin, Cloud Build, Scheduler and Pub/Sub reads over REST with the default credentials. |
+| `Google.session()` | The authorized session, made once: the process's own account (the kit's google_auth.authorized_session). |
+| `Google.entries(filter_, order=, limit=)` | Cloud Logging's entries matching the filter (entries.list, one page). |
+| `Google.execution_entries(job, execution, since)` | The execution's ERROR lines and its step summary, oldest first. |
+| `Google.executions(job)` | The job's recent executions, newest first (Run Admin API v2). |
+| `Google.execution(job, name)` | One execution (Run Admin API v2). |
+| `Google.serving_revisions(service)` | The revisions taking traffic on a Cloud Run service now (Run Admin API v2 trafficStatuses, percent > 0). |
+| `Google.last_ok_attempt(job_id, before)` | The schedule's last successful attempt before `before`, as a datetime, within 30 days; None. |
+| `Google.retry_config(job_id)` | The schedule's retryConfig from the Scheduler API ({} when it has none): retryCount and the minBackoffDuration its first retry waits. |
+| `Google.build(build_id)` | The build, looked up globally and then in this region; the last answer's error when neither has it. |
+| `Google.build_errors(build_id)` | The build's ERROR lines from Cloud Logging, as text. |
+| `Google.dead_letters(subscription, limit=)` | The messages waiting on a dead-letter subscription, read without taking them: one pull, then the lease handed straight back (ack deadline 0), so a later list or replay still sees every one. Each as {'id', 'published', 'attributes', 'payload'}, the payload dec… |
+| `Google.last_ok_build(tag, before)` | The finish time of the newest successful build with that tag (untagged for none) before `before`; None. |
+| `class Context` | One event's world: the store, Google's reads, the sender and the clock. |
+| `Context.store()` | The store, made on first use. |
+| `Context.google()` | Google's reads, made on first use. |
+| `Context.tell(subject, body, link=)` | Send, or raise when neither channel took it (Pub/Sub redelivers the event). |
+| `stale(inc, now)` | A one-off run's incident (its label begins with the host's `one_off`) with no failure for STALE_HOURS: nothing will ever run it again to say Fixed. A task the queue gave up on (on_task) is one too: its task is gone. |
+| `others_open(ctx, key)` | 'Also open: ...' for every other open incident, or the all-clear. A stale one-off run's incident is closed here instead (`stale`), said in the log, never listed. |
+| `container(execution)` | (command, args) of an execution, from the audit entry's v1 response or a v2 Execution. |
+| `in_step_order(job, names)` | Step names in the job's own order (the catalog's): Logging hands the summary's steps back sorted by name. |
+| `summarize(entries)` | An execution's lines as {'steps': {step: code} or None, 'errors': [(step or '', text)]}. |
+| `job_history(ctx, job, variant, started)` | (last good completion before `started` or None, recovered completion after it or None, the oldest run looked at) among the job's executions with the same variant. |
+| `compose_job(job, variant, execution, started, summary, condition, last_good, recovered, oldest, link, also=, ended=)` | (subject, body) for a failed job run. |
+| `job_log_link(job, execution)` | The execution's logs page in the console. |
+| `handle_job_end(ctx, job, execution, command, args, ok, started, ended, condition=, link=)` | One execution's end: a failure's message, a success's Fixed, or nothing (a smoke test or a hand command, or a duplicate). What it did, for the log. |
+| `on_job_event(ctx, entry)` | A Cloud Run Job's audit entry for an execution's end. |
+| `on_job_line(ctx, entry)` | A job's ERROR line before its end: held under its execution, never sent on its own. |
+| `fold(ctx, key, at, line, revision=)` | A repeat ERROR of an incident counted in memory (SMADPickleBot #676): within FOLD_SECONDS of a counted write (debounced made the fold), the line's count, its cleaned text, its time and its revision are kept here and the message answered at once, with no store… |
+| `debounced(ctx, key, kind, name, entry, line, at, good, link, revision=)` | An error for a schedule or a service: sent at once when nothing is open or the last message is 30 minutes old, else counted for the next one. A service's error names its revision, kept on the incident so the sweep can tell a fix (a new revision serving) from… |
+| `send_rollup(ctx, key, inc, link=)` | The errors counted since the last message, as one 'still failing' message. |
+| `schedule_passed(ctx, key, inc, job_id, at, link=)` | An open schedule incident whose schedule ran well at `at`: closed. A held one (its own retry passed) tells nobody, since nothing was told; a told one gets its Fixed. |
+| `passed_since(ctx, inc)` | When an open schedule incident's schedule last ran well after its last failure, from the attempt history; None when it has not, or the history cannot be read (the next sweep asks again). The sweep's way to a schedule's Fixed (SMADPickleBot #1395: a sink that… |
+| `on_scheduler(ctx, entry)` | A Cloud Scheduler AttemptFinished: a failure's message (debounced). A success reaches this only when one is still delivered; the sweep closes an open incident from the attempt history (passed_since). |
+| `retry_window(ctx, job_id)` | How long a failed attempt is held for the schedule's own retry: its first backoff and RETRY_SLACK. None (told at once) for a schedule without retries, or when its settings cannot be read. |
+| `release_hold(ctx, key, inc)` | A held schedule whose retry never answered: its first message, from the sweep. |
+| `on_task(ctx, entry)` | The host's queue's last refused attempt (an ERROR attemptResponseLog with no retryTime): one message and one incident (kind `task_kind`) per task, told once, the action and what it was for read from the task's name by the host's `describe_task`. Cloud Tasks h… |
+| `on_service(ctx, entry)` | An ERROR line from a Cloud Run service or function. A 5xx Cloud Run wrote for a call Cloud Scheduler made is that schedule's failed attempt, which its own AttemptFinished tells (held for its retry, on_scheduler), so the request line tells nobody (SMADPickleBo… |
+| `compose_build(build, errors, last_good, also=)` | (subject, body) for a failed build: its failing step, the steps that passed, its ERROR lines. |
+| `handle_build(ctx, build_id, line=)` | A build's ERROR line or the sweep's look: one message per failed build, nothing for one that passed. |
+| `same_revision(ctx, inc)` | True when the revision that logged the incident's errors is still serving: a quiet spell, not a fix. False when a new revision took over, when the incident names none, or when the service cannot be read (then the old 'Fixed' stands). |
+| `flush_folds(ctx)` | Every fold holding counts written into its open incident before the sweep reads them (SMADPickleBot #676): the sweep runs in the same one instance, so a flood that stopped within a fold's minute is still counted in full. A fold whose incident is no longer ope… |
+| `sweep(ctx)` | Quiet services' Fixed, counted errors' roll-ups, held job lines whose end never came, pending builds, and old holds cleared. What it did. |
+| `sweep_job(ctx, execution, held)` | Held job lines 15 minutes old with no end seen: the execution as the Run Admin API has it, finished or not. |
+| `given_up(rows, since)` | What a dead-letter incident's messages were, from the messages waiting (Google.dead_letters): each moved to the queue since `since` described (the host's `describe_dead_letter`), in the order they were moved there, a run's step requests of one run and day on… |
+| `compose_dead_letter(topic, count, at, given=, unread=)` | (subject, body, link) for messages moved to a dead-letter topic: what they were (given_up), the queue, the count, who it affects and the host's command lines that list, replay and drop them (`dead_letter_command`). `unread` is why the messages could not be re… |
+| `read_given_up(ctx, topic, at)` | (given_up of the topic's waiting messages or None, '' or why they could not be read). The dead-letter subscription is named as its topic. |
+| `is_dead_letter_topic(topic)` | A topic an incident names that is a dead-letter queue: catalogued, or named as one. |
+| `close_dead_letter(ctx, topic, iid)` | Monitoring closed a dead-letter incident: the kept one closed too, so 'Also open' stops listing it. An issue filed for it stays open, since the messages still wait. |
+| `on_incident(ctx, payload)` | A Cloud Monitoring incident on the watcher's channel: an opened dead-letter incident is one message (once per incident id, held in the pending collection as sent) and an incident of kind `dead_letter_kind`; a closed one is not told (the messages still wait on… |
+| `decode(envelope)` | The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable. |
+| `handle(payload, ctx)` | One LogEntry by its resource type, or a Cloud Monitoring incident. What it did, for the log. |
 

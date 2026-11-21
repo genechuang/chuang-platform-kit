@@ -1,5 +1,14 @@
 # chuang-alerts changelog
 
+## 0.3.0 (2026-11-20)
+
+- `engine`: an alert watcher's engine, moved unchanged in behavior from SMAD PickleBot's alert watcher (SMADPickleBot
+  #1966): incident state in a store (`FirestoreStore`), Google's reads (`Google`: Logging, Run Admin, Cloud Build,
+  Scheduler, Pub/Sub's dead-letter pull), one event's world (`Context`), the job, schedule, service, build, task and
+  incident handlers, the fold and debounce, the roll-ups, the Fixed and "quiet, not fixed" notes, the sweep, the
+  dead-letter read, `decode` and `handle`. Everything a host names comes through one `configure(...)`, the watcher's
+  own service name required so it never tells its own lines. Suite: `tests/test-alerts-engine.py`.
+
 ## 0.2.0 (2026-11-20)
 
 - `catalog`: an alert catalog's entry shape and lookups (`job_entry`, `schedule_entry`, `task_entry`, `line_rule`,

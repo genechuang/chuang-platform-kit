@@ -62,16 +62,21 @@ class Client:
                 return sorted(out, key=lambda o: o['name'])
 
     def upload_bytes(self, bucket: str, name: str, data: bytes, content_type: str = OCTET,
-                     cache_control: str = None) -> dict:
-        """`data` as the object `name`, with its `content_type` and, when given, its `cache_control`; the object's
-        metadata as Google answers it."""
+                     cache_control: str = None, metadata: dict = None) -> dict:
+        """`data` as the object `name`, with its `content_type` and, when given, its `cache_control` and its custom
+        `metadata` ({key: text}); the object's metadata as Google answers it."""
         content_type = content_type or OCTET
-        if not cache_control:
+        if not cache_control and not metadata:
             query = urllib.parse.urlencode({'uploadType': 'media', 'name': name})
             return self._call('POST', f'{API}/upload/storage/v1/b/{_q(bucket)}/o?{query}', data=data,
                               content_type=content_type, timeout=UPLOAD_TIMEOUT)
         boundary = f'gcs-{uuid.uuid4().hex}'
-        meta = json.dumps({'name': name, 'cacheControl': cache_control, 'contentType': content_type}).encode('utf-8')
+        fields = {'name': name, 'contentType': content_type}
+        if cache_control:
+            fields['cacheControl'] = cache_control
+        if metadata:
+            fields['metadata'] = {str(k): str(v) for k, v in metadata.items()}
+        meta = json.dumps(fields).encode('utf-8')
         body = (f'--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'.encode('utf-8') + meta +
                 f'\r\n--{boundary}\r\nContent-Type: {content_type}\r\n\r\n'.encode('utf-8') + data +
                 f'\r\n--{boundary}--\r\n'.encode('utf-8'))
@@ -83,6 +88,16 @@ class Client:
         with open(path, 'rb') as f:
             data = f.read()
         return self.upload_bytes(bucket, name, data, content_type or content_type_for(path), cache_control)
+
+    def stat(self, bucket: str, name: str):
+        """The object's resource as Google answers it ({name, size, updated, contentType, metadata, ...}), or None when
+        there is no such object (a 404)."""
+        try:
+            return self._call('GET', f'{API}/storage/v1/b/{_q(bucket)}/o/{_q(name)}')
+        except google_rest.GoogleError as e:
+            if getattr(e, 'status', 0) == 404:
+                return None
+            raise
 
     def download(self, bucket: str, name: str) -> bytes:
         """The object's bytes."""
