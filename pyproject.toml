@@ -24,7 +24,8 @@ dependencies = [
 # host that still names the extra keeps installing.
 gcp = []
 gmail = ["google-api-python-client>=2.100", "google-auth>=2.23", "google-auth-oauthlib>=1.1"]
-dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3"]
+# SQLAlchemy is the host's own pin for db.engine() and outbox's rows; the suites need it (tests/test-outbox.py).
+dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3", "sqlalchemy>=2"]
 # Errors and traces to Sentry (monitoring.py); without it monitoring.init() is a no-op.
 monitoring = ["sentry-sdk>=2.20,<3"]
 # The OpenFeature provider over a Config (config.provider()); Config itself needs nothing.
