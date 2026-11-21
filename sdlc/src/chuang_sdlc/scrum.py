@@ -429,12 +429,13 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         missing = [r for r in named if r not in linked_now]
         # The wait's own ETA only: a line with none never borrows the field's, which may still hold a build's date.
         eta, write = card_eta(card, line, now, state) if line.get('eta') else (None, '')
-        # 0.45.0 (SMADPickleBot #2146): a wait that names no ticket is read as waiting on its links only when the last of
-        # them closed after the wait was written (the wait was on them: #230), or once the wait's ETA has passed or when
-        # it has none. #2106 and #2027 were unblocked by links that had closed before their waits were written, with
-        # their ETAs days ahead.
+        # 0.46.0 (SMADPickleBot #2146): the tickets a wait names or links end it only when the last of them closed after
+        # the wait was written (the wait was on them: #1829's #2079, #230's three links), or once the wait's ETA has
+        # passed or when it has none. A ticket that closed before the wait is context or an old link: #2106 and #2027
+        # through old links, #1573 ("since #1572 shipped") and #2028 through tickets named as context, were unblocked by
+        # 0.43.0 with their ETAs days ahead. 0.45.0 applied this to unnamed waits alone.
         closed_since = (facts.get('blockers_closed') or '') > (line.get('at') or '')
-        decides = bool(named) or (bool(linked_now) and (closed_since or not (eta and eta > now)))
+        decides = bool(named or linked_now) and (closed_since or not (eta and eta > now))
         if decides and not missing and not open_blockers:
             closed = sorted(set(named) | set(linked_now))
             out['state'] = 'every ticket its wait names or links is closed'

@@ -297,8 +297,9 @@ pick = S.scrum_line([say("Scrum: blocked on Gene's pick on #2079 | eta 11/21/26 
 p = bplan(card(light='stop', labels=('blocked',)), pick)
 check('0.43.0: a ticket the wait names is linked like `blocked by`, and the card stays blocked while it is open',
       ([a for a in p['actions'] if a[0] in ('link', 'unlabel')], p['state'].startswith('blocked on')), ([('link', 2079)], True))
-p = bplan(card(light='stop', labels=('blocked',)), pick, blockers=[(2079, 'CLOSED')])
-check('  every ticket it names closed: the label and the blocked light off, its owner told it is unblocked (#1829)',
+p = bplan(card(light='stop', labels=('blocked',)), pick, blockers=[(2079, 'CLOSED')],
+          blockers_closed=(NOW - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))
+check('  every ticket it names closed after the wait was written: the label and the blocked light off, its owner told it is unblocked (#1829)',
       (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question'], '#2079' in p['change']),
       ([('light', 'shipyard'), ('unlabel', 'blocked')], True, True))
 watch = S.scrum_line([say("Scrum: blocked on the Watch app's store build | eta 11/22/26")], LOGIN)
@@ -319,6 +320,10 @@ check('0.45.0: a wait naming no ticket, its only link closed before the wait was
 p = bplan(card(light='stop', labels=('blocked',)), game, blockers=[(2109, 'CLOSED')])
 check('  with no close time known, an ETA ahead keeps it blocked too',
       ([a for a in p['actions'] if a[0] == 'unlabel'], p['state'].startswith('blocked on')), ([], True))
+since = S.scrum_line([say("Scrum: blocked on a week of taps since #1572 shipped | eta 11/22/26 9 AM")], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), since, blockers=[(1572, 'CLOSED')], blockers_closed=before_line)
+check('0.46.0: a ticket the wait names only as context, closed before the wait was written, its ETA ahead: still blocked (#1573)',
+      ([a for a in p['actions'] if a[0] in ('unlabel', 'light')], p['state'].startswith('blocked on')), ([], True))
 gone = S.scrum_line([say("Scrum: blocked on the club's reply | eta 10/20/26")], LOGIN)
 p = bplan(card(light='stop', labels=('blocked',)), gone, blockers=[(2109, 'CLOSED')], blockers_closed=before_line)
 check('  its ETA passed: every link closed unblocks it, as 0.43.0',

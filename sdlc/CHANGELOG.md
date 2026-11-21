@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.46.0 - 2026-11-21 PT
+
+- `scrum.plan`: 0.45.0's rule for every `blocked on` wait, named tickets included: the tickets a wait names or links
+  end it only when the last of them closed after the wait's line (`blockers_closed`), or once its ETA has passed or when
+  it has none. A ticket named only as context ("since #1572 shipped") had closed before the wait and ended it at once
+  (SMADPickleBot #2146: #1573 and #2028 at the 1:03 PM PT sweep, 11/21/26). No signature changes. Suite:
+  `tests/test-sdlc-scrum.py`.
+
 ## 0.45.0 - 2026-11-21 PT
 
 - `scrum.plan`: a `Scrum: blocked on <what>` wait whose words name no ticket is unblocked by its closed links only when
