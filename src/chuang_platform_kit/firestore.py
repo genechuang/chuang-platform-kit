@@ -375,28 +375,33 @@ class Client:
         return out
 
     # -- claims and locks
-    def claim(self, collection: str, doc_id: str, data: dict = None, ttl=None, more_ids=()) -> bool:
+    def claim(self, collection: str, doc_id: str, data: dict = None, ttl=None, more_ids=(), server_time=()) -> bool:
         """Take `collection/doc_id` once: a create-only commit (precondition exists=false). True when this call made it,
         False when it was already there, so two deliveries of one message act once. `ttl` (seconds or a timedelta) adds
-        EXPIRES_FIELD for Firestore's TTL policy; `more_ids` are taken in the same commit, all or none. Unreachable for
-        anything else, so a caller never acts on a claim it may not hold unless it chooses to."""
+        EXPIRES_FIELD for Firestore's TTL policy; `more_ids` are taken in the same commit, all or none; `server_time`
+        fields hold Firestore's own time of the claim (`claimed_at`, as the SDK's SERVER_TIMESTAMP wrote it; 0.47.0).
+        Unreachable for anything else, so a caller never acts on a claim it may not hold unless it chooses to."""
         fields = dict(data or {})
         if ttl is not None:
             fields[EXPIRES_FIELD] = self.now() + timedelta(seconds=_seconds(ttl))
-        writes = [update(self.name(collection, d), fields, exists=False) for d in (doc_id, *more_ids)]
+        writes = [update(self.name(collection, d), fields, exists=False, server_time=server_time)
+                  for d in (doc_id, *more_ids)]
         try:
             self.commit(writes)
         except Conflict:
             return False
         return True
 
-    def release(self, collection: str, doc_id: str) -> bool:
+    def release(self, collection: str, doc_id: str, say=None) -> bool:
         """Give back a claim or a lock (delete it) so a retry can take it at once: True when deleted (or already
-        gone), False, never an exception, when Firestore could not be reached (a TTL then frees it)."""
+        gone), False, never an exception, when Firestore could not be reached (a TTL then frees it). `say`, a callable,
+        is handed why it failed (Unreachable's text) for the caller's own line (0.47.0)."""
         try:
             self.delete(collection, doc_id)
             return True
-        except Unreachable:
+        except Unreachable as e:
+            if say is not None:
+                say(str(e))
             return False
 
     def lock(self, collection: str, doc_id: str, ttl, data: dict = None) -> bool:
@@ -432,15 +437,17 @@ def _status_word(err) -> str:
 
 # ------------------------------------------------------------------ writes for commit()
 def update(name: str, data: dict = None, mask=None, exists=None, update_time=None, increment=None, append=None,
-           remove=None) -> dict:
+           remove=None, server_time=()) -> dict:
     """A commit's update Write for document `name` (full, or relative to the database's documents): `data` encoded;
     `mask` the field paths to change (None replaces the document whole); `exists` True / False a precondition that
     the document is / is not there; `update_time` that it is unchanged since that read; `increment`, `append`,
-    `remove` server-side transforms ({field: n} / {field: [values]})."""
+    `remove` server-side transforms ({field: n} / {field: [values]}); `server_time` field paths set to the commit's
+    own time by Firestore (REQUEST_TIME, the SDK's SERVER_TIMESTAMP; 0.47.0)."""
     write = {'update': {'name': name, 'fields': to_fields(data or {})}}
     if mask is not None:
         write['updateMask'] = {'fieldPaths': list(mask)}
-    transforms = [{'fieldPath': f, 'increment': encode(n)} for f, n in (increment or {}).items()]
+    transforms = [{'fieldPath': f, 'setToServerValue': 'REQUEST_TIME'} for f in server_time]
+    transforms += [{'fieldPath': f, 'increment': encode(n)} for f, n in (increment or {}).items()]
     transforms += [{'fieldPath': f, 'appendMissingElements': {'values': [encode(v) for v in vs]}}
                    for f, vs in (append or {}).items()]
     transforms += [{'fieldPath': f, 'removeAllFromArray': {'values': [encode(v) for v in vs]}}

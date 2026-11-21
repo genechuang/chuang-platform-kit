@@ -253,10 +253,28 @@ try:
 except F.Unreachable as e:
     why = str(e)
 check("claim: any other refusal raises Unreachable naming it", why, 'HTTP 400 INVALID_ARGUMENT')
+check("  no server_time, no transform (a claim from before 0.47.0 writes what it wrote)",
+      ['updateTransforms' in w for w in ws], [False, False])
+c, seen = db({'writeResults': [{}]})
+c.claim('dedup', 'msg-1', {'source': 'sender'}, ttl=60, server_time=('claimed_at',))
+w = seen[0][2]['writes'][0]
+check("claim(server_time=): the field is Firestore's own commit time (REQUEST_TIME), still create-only, the data beside it",
+      (w['updateTransforms'], w['currentDocument'], w['update']['fields']['source'], 'claimed_at' in w['update']['fields']),
+      ([{'fieldPath': 'claimed_at', 'setToServerValue': 'REQUEST_TIME'}], {'exists': False}, {'stringValue': 'sender'}, False))
+check("update(server_time=) goes before the other transforms",
+      [list(t)[1] for t in F.update('d/x', {}, server_time=('at',), increment={'n': 1})['updateTransforms']],
+      ['setToServerValue', 'increment'])
 c, seen = db({})
 check("release: True when deleted", c.release('sent', 'x'), True)
 c, seen = db(urllib.error.URLError('down'))
 check("release: False, never raising, when unreachable", c.release('sent', 'x'), False)
+said = []
+c, seen = db(urllib.error.URLError('down'))
+c.release('sent', 'x', say=said.append)
+check("release(say=): handed why it failed, once", (len(said), bool(said and said[0])), (1, True))
+c, seen = db({})
+c.release('sent', 'x', say=said.append)
+check("  and nothing when it was deleted", len(said), 1)
 
 # ------------------------------------------------------------------ locks
 c, seen = db(http_error(404, 'NOT_FOUND'), {'writeResults': [{}]})

@@ -176,6 +176,20 @@ try:
 except ValueError as err:
     refused = str(err)
 check("decode: no message is a ValueError", refused, 'no Pub/Sub message in the delivery')
+kinds = []
+for delivery in ({'nothing': 1}, {'message': {'attributes': {}}}, {'message': {'data': '!!not base64!!'}},
+                 {'message': {'data': base64.b64encode(b'\xff\xfe').decode()}}):
+    try:
+        P.decode(delivery)
+        kinds.append('decoded')
+    except P.NoMessage:
+        kinds.append('NoMessage')
+    except ValueError as err:
+        kinds.append(type(err).__name__)
+check("decode: no message and a message with no data are NoMessage (a ValueError); data that is not base64 or not "
+      "UTF-8 is its own ValueError, so a caller can tell 'no data' from 'not JSON' (0.47.0)",
+      (kinds, issubclass(P.NoMessage, ValueError)), (['NoMessage', 'NoMessage', 'Error', 'UnicodeDecodeError'], True))
+check("decode: empty data is '' (no data), never NoMessage", P.decode({'message': {'data': ''}})[0], '')
 
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)

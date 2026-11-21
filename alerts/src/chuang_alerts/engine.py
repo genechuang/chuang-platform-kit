@@ -35,7 +35,6 @@ keeps the subject and body it was told with, for an issue filer):
 Delivery is the host's `deliver(subject, body, link)`, which answers the channels that took it; none is an error, so
 the push is redelivered. Every line shown passes chuang_platform_kit.redact.
 """
-import base64
 import json
 import logging
 import re
@@ -1354,12 +1353,14 @@ def on_incident(ctx: Context, payload: dict) -> str:
 
 
 def decode(envelope: dict) -> dict:
-    """The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable."""
-    raw = ((envelope or {}).get('message') or {}).get('data', '')
+    """The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable: no message, empty data, data
+    that is not base64, UTF-8 or JSON, or JSON that is not an object. The kit's pubsub.decode reads it."""
+    from chuang_platform_kit import pubsub
     try:
-        return json.loads(base64.b64decode(raw).decode('utf-8')) if raw else {}
-    except (ValueError, UnicodeDecodeError):
+        payload = pubsub.decode({'message': ((envelope or {}).get('message') or {})})[0]
+    except ValueError:   # NoMessage, and base64's and UTF-8's own errors (UnicodeDecodeError is a ValueError)
         return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def handle(payload: dict, ctx: Context) -> str:

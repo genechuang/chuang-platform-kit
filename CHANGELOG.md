@@ -10,6 +10,12 @@ nothing, so the caller's timeout bounds the whole call; `redirects=False` return
 passes only a flag that is off, so a host's stand-in for `request` keeps taking every default call. `reset()` closes
 both sessions. Suite: `tests/test-keepalive.py`.
 
+Additions to `firestore` and `pubsub`, no signature changes: `Client.claim(server_time=)` and `update(server_time=)`
+set the named fields to Firestore's own commit time (REQUEST_TIME, the SDK's SERVER_TIMESTAMP), so a host's create-only
+claim keeps its `claimed_at` on REST; `Client.release(say=)` hands the caller why a release failed. `pubsub.NoMessage`,
+a ValueError, is what `decode` raises for a delivery with no message, so a caller can tell it from data that is not
+base64 or UTF-8. Suites: `tests/test-firestore.py`, `tests/test-pubsub.py`.
+
 ## 0.46.0 - 2026-11-20 PT
 
 Addition to `answer_cache`, no signature changes (SMADPickleBot #2109): `AnswerCache(asked_every=)`, how stale a

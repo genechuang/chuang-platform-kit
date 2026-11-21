@@ -164,16 +164,23 @@ def envelope(type: str, data: dict, *, source: str, subject: dict = None, actor:
                 source=source, subject=subject or {}, actor=actor or {}, correlation_id=correlation_id, data=data)
 
 
+class NoMessage(ValueError):
+    """decode() found no Pub/Sub message in the delivery (no `message`, or one with no `data` key). A ValueError, so a
+    caller that catches ValueError still catches it; a caller that must tell it from data that is not base64 or not
+    UTF-8 (a ValueError too) catches this first (0.47.0)."""
+
+
 def decode(delivery) -> tuple:
     """(payload, attributes, message_id) from one delivery: a push subscription's JSON body
     ({"message": {...}}), an Eventarc CloudEvent (its `.data` holds the same), or the message dict itself.
-    The payload is the decoded JSON, or the text when it is not JSON. ValueError when there is no message."""
+    The payload is the decoded JSON, or the text when it is not JSON ('' for empty data). NoMessage (a ValueError)
+    when there is no message; data that is not base64 or not UTF-8 raises its own ValueError."""
     body = getattr(delivery, 'data', delivery)
     if isinstance(body, (bytes, str)):
         body = json.loads(body)
     message = (body or {}).get('message', body) if isinstance(body, dict) else None
     if not isinstance(message, dict) or 'data' not in message:
-        raise ValueError('no Pub/Sub message in the delivery')
+        raise NoMessage('no Pub/Sub message in the delivery')
     raw = message.get('data') or ''
     text = base64.b64decode(raw).decode('utf-8') if isinstance(raw, str) else bytes(raw).decode('utf-8')
     try:

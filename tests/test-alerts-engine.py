@@ -204,5 +204,23 @@ check('configure answers the settings in force', (cfg['incidents'], cfg['subject
 check('the fold and the held set are module objects, never replaced', (E._FOLD is E.__dict__['_FOLD'],
       type(E._JOB_FULL)), (True, set))
 
+# decode, over the kit's pubsub.decode (0.47.0, SMADPickleBot #1933): the LogEntry, or {} for anything else.
+import base64  # noqa: E402
+import json  # noqa: E402
+
+
+def pushed(raw):
+    return {'message': {'data': raw}, 'subscription': 's'}
+
+
+entry = {'severity': 'ERROR', 'textPayload': 'boom'}
+check("decode: the pushed message's LogEntry (the positive case)",
+      E.decode(pushed(base64.b64encode(json.dumps(entry).encode()).decode())), entry)
+check("  {} for no envelope, no message, no data, empty data, bad base64, bad UTF-8, text that is not JSON, a JSON list",
+      [E.decode(x) for x in (None, {}, {'message': {}}, pushed(''), pushed('!!not base64!!'),
+                             pushed(base64.b64encode(b'\xff').decode()), pushed(base64.b64encode(b'hello').decode()),
+                             pushed(base64.b64encode(b'[1, 2]').decode()))],
+      [{}] * 8)
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
