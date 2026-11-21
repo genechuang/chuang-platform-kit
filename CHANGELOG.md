@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.43.0 - 2026-11-20 PT
+
+Additions to `neon`, no signature changes (SMADPickleBot #1938, out of its `picklebot_core/neon_branches.py`):
+`request(method, path, key, body=, opener=, timeout=)` is a public call of Neon's API whose refusal is the new
+`NeonError` ("Neon answered HTTP <code>: <Neon's words>", `status`, the key masked by value, the words redacted; no
+answer "Neon did not answer (<kind>)"); `branches`, `create_branch` (idempotent: a branch of that name is returned
+with `made` False; cut from the default branch unless given a parent) and `delete_branch` use it. `_call` and the
+functions on it keep their own errors. Suite: `tests/test-neon-branches.py`.
+
 ## 0.42.0 - 2026-11-20 PT
 
 New module, and two keywords added to `google_rest.call` with defaults that change no caller (SMADPickleBot #1937,

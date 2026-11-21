@@ -525,6 +525,11 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `create_project(key, name, region_id=, pg_version=, database=, role=, org_id=, opener=)` | A new project with one branch (`main`) holding `database` owned by `role` (Neon's default role when None). The answer is Neon's: `project`, `branch`, `databases`, `roles`, `endpoints` and `connection_uris` (secrets: never log it). |
 | `ensure_project(key, name, region_id=, pg_version=, database=, role=, org_id=, opener=)` | The project named `name`, created when missing: (project, created). An existing project is reused as it is — its region and major are reported, never changed. |
 | `default_branch(key, project_id, opener=)` | The project's default branch (`main` on a new project). |
+| `class NeonError` | Neon's API refused (`status` its HTTP code) or did not answer (`status` 0); the text never carries the key. |
+| `request(method, path, key, body=, opener=, timeout=)` | One call of Neon's API with the key, the parsed JSON ({} for an empty answer). A refusal is NeonError "Neon answered HTTP <code>: <Neon's words>" (the key masked by value, the words redacted); no answer is "Neon did not answer (<kind>)". The branch functions… |
+| `branches(key, project_id, opener=)` | The project's branches as Neon lists them: [{id, name, default, created_at, ...}]. |
+| `create_branch(key, project_id, name, parent_id=, opener=, listed=)` | A branch `name` cut from `parent_id`, else from the default branch as it is now: {id, name, made}. One that exists already is returned with `made` False, so a second delivery cuts nothing twice. `listed` is the branch list when the caller has just read it. Ne… |
+| `delete_branch(key, project_id, branch_id, opener=)` | Delete one branch by its id; Neon's answer. |
 | `roles(key, project_id, branch_id, opener=)` | The branch's roles (Neon's own roles are excluded). |
 | `databases(key, project_id, branch_id, opener=)` | The branch's databases. |
 | `ensure_database(key, project_id, branch_id, name, owner, opener=)` | The database `name` on the branch, created for `owner` when missing: (database, created). |

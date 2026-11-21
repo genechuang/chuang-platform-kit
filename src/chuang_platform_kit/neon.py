@@ -143,6 +143,67 @@ def default_branch(key, project_id, opener=None):
     return branches[0]
 
 
+class NeonError(RuntimeError):
+    """Neon's API refused (`status` its HTTP code) or did not answer (`status` 0); the text never carries the key."""
+
+    def __init__(self, text: str, status: int = 0):
+        super().__init__(text)
+        self.status = status
+
+
+def request(method, path, key, body=None, opener=None, timeout=30):
+    """One call of Neon's API with the key, the parsed JSON ({} for an empty answer). A refusal is NeonError "Neon
+    answered HTTP <code>: <Neon's words>" (the key masked by value, the words redacted); no answer is "Neon did not
+    answer (<kind>)". The branch functions below use it; `_call`'s callers keep their own errors."""
+    req = urllib.request.Request(f'{API}{path}', method=method,
+                                 data=json.dumps(body).encode('utf-8') if body is not None else None,
+                                 headers={'Authorization': f'Bearer {key}', 'Accept': 'application/json',
+                                          'Content-Type': 'application/json'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:
+            text = r.read().decode('utf-8')
+            return json.loads(text) if text.strip() else {}
+    except urllib.error.HTTPError as e:
+        try:
+            words = (e.read() or b'').decode('utf-8', 'replace')[:300]
+        except Exception:   # noqa: BLE001 - the status alone
+            words = ''
+        words = _redact.redact(words.replace(key, '***') if key else words)
+        raise NeonError(f'Neon answered HTTP {e.code}: {words}', e.code) from None
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise NeonError(f'Neon did not answer ({type(e).__name__})') from None
+
+
+def branches(key, project_id, opener=None):
+    """The project's branches as Neon lists them: [{id, name, default, created_at, ...}]."""
+    return request('GET', f'/projects/{project_id}/branches', key, opener=opener).get('branches') or []
+
+
+def create_branch(key, project_id, name, parent_id=None, opener=None, listed=None):
+    """A branch `name` cut from `parent_id`, else from the default branch as it is now: {id, name, made}. One that
+    exists already is returned with `made` False, so a second delivery cuts nothing twice. `listed` is the branch list
+    when the caller has just read it. NeonError when there is no default branch or Neon makes none."""
+    listed = branches(key, project_id, opener) if listed is None else listed
+    have = next((b for b in listed if b.get('name') == name), None)
+    if have:
+        return {'id': have.get('id'), 'name': name, 'made': False}
+    if not parent_id:
+        parent = next((b for b in listed if b.get('default')), None)
+        if parent is None:
+            raise NeonError('the project lists no default branch to cut from')
+        parent_id = parent['id']
+    got = request('POST', f'/projects/{project_id}/branches', key, {'branch': {'name': name, 'parent_id': parent_id}},
+                  opener=opener).get('branch') or {}
+    if not got.get('id'):
+        raise NeonError(f'Neon made no branch for {name}')
+    return {'id': got['id'], 'name': got.get('name') or name, 'made': True}
+
+
+def delete_branch(key, project_id, branch_id, opener=None):
+    """Delete one branch by its id; Neon's answer."""
+    return request('DELETE', f'/projects/{project_id}/branches/{branch_id}', key, opener=opener)
+
+
 def roles(key, project_id, branch_id, opener=None):
     """The branch's roles (Neon's own roles are excluded)."""
     found = (_call(f'/projects/{project_id}/branches/{branch_id}/roles', key, opener=opener) or {}).get('roles') or []
