@@ -1639,7 +1639,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `instant_now()` | Now, as an aware UTC instant (stored instants; every shown time goes through pt()). |
 | `parse_ts(text)` | An RFC 3339 stamp (Logging's nanoseconds trimmed) as an aware datetime; None for nothing. |
 | `iso(dt)` | A stored instant: ISO 8601 in UTC, to the second. |
-| `pt(dt)` | 'Sat 10/10/26 1:30 AM PT' in the configured zone (the year always), labelled with the configured `zone_label`, else the zone's own abbreviation. |
+| `pt(dt)` | 'Sat 10/10/26 1:30 AM PT' in the configured zone (the year always), labelled with the configured `zone_label`, else the zone's own label: chuang-platform-kit's clock.human_time (0.3.1), never a copy of its format. |
 | `clean(line)` | One error line as it is shown: redacted, one line, trimmed. |
 | `system_key(kind, *parts)` | The store id of a system's incident: kind and name, no slashes. |
 | `variant_of(command, args)` | A job run's identity by its arguments (catalog variants): the arguments without the interpreter's -u, the script name and --only <steps>; None for a run that is not an alert: a deploy's smoke test (--help) or a hand `python -c`. |

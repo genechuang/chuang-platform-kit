@@ -1,5 +1,11 @@
 # chuang-alerts changelog
 
+## 0.3.1 (2026-11-21)
+
+- `engine.pt` writes its time through chuang-platform-kit's `clock.human_time` instead of a copy of its format
+  (SMADPickleBot #1966, after #1932 moved SMAD's own copy onto the clock). With a `zone_label` the text is unchanged;
+  without one, a US zone reads its short label ("PT") where it read the season's abbreviation ("PST").
+
 ## 0.3.0 (2026-11-20)
 
 - `engine`: an alert watcher's engine, moved unchanged in behavior from SMAD PickleBot's alert watcher (SMADPickleBot

@@ -163,11 +163,12 @@ def iso(dt: datetime) -> str:
 
 def pt(dt) -> str:
     """'Sat 10/10/26 1:30 AM PT' in the configured zone (the year always), labelled with the configured `zone_label`,
-    else the zone's own abbreviation."""
-    d = parse_ts(dt).astimezone(_CFG['zone'])
-    hour = d.hour % 12 or 12
-    label = _CFG['zone_label'] or d.tzname() or 'UTC'
-    return f"{d:%a} {d.month}/{d.day}/{d:%y} {hour}:{d:%M} {'AM' if d.hour < 12 else 'PM'} {label}"
+    else the zone's own label: chuang-platform-kit's clock.human_time (0.3.1), never a copy of its format."""
+    from chuang_platform_kit import clock
+    when = parse_ts(dt)
+    if _CFG['zone_label']:
+        return f"{clock.human_time(when, tz=_CFG['zone'])} {_CFG['zone_label']}"
+    return clock.human_time(when, tz_word=True, tz=_CFG['zone'])
 
 
 def clean(line: str) -> str:
