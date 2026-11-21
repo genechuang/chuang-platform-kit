@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.43.0 - 2026-11-21 PT
+
+- `scrum.plan`: a `Scrum: blocked on <what>` wait whose words name tickets (`#N`) links them as blocked-by, like
+  `blocked by #N`, and once every ticket it names or links is closed the card is unblocked in the same pass: the label
+  and the blocked light off, its owner told it is unblocked. The branch had returned before the every-blocker-closed rule
+  (SMADPickleBot, 11/21/26: #1829 sat Blocked 11 hours after #2079 closed, #230 after its three linked blockers closed).
+  No signature changes. Suite: `tests/test-sdlc-scrum.py`.
+
 ## 0.42.0 - 2026-11-20 PT
 
 New module `mirrors`, no signature changes elsewhere (SMADPickleBot #1943): a vendor's open findings mirrored as GitHub

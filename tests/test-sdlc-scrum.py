@@ -290,6 +290,25 @@ check('  review: "ETA" and "#N" inside the wait are part of it, the ETA read fro
 p = bplan(dict(card(light='stop', labels=('blocked',)), eta='2026-10-01'), S.scrum_line([say('Scrum: blocked on the club')], LOGIN))
 check("  review: a wait with no ETA never borrows the field's old build date: it is asked for one",
       ('with no ETA' in p['question'], p['state'].endswith('no ETA')), (True, True))
+# 0.43.0 (SMADPickleBot, Gene 11/21/26 10:56 AM PT): #1829 sat Blocked 11 hours on "Gene's pick on #2079" after #2079
+# closed, and #230 18 minutes after its three linked blockers closed: a `blocked on` wait unblocks once every ticket it
+# names or links is closed.
+pick = S.scrum_line([say("Scrum: blocked on Gene's pick on #2079 | eta 11/21/26 6 PM")], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), pick)
+check('0.43.0: a ticket the wait names is linked like `blocked by`, and the card stays blocked while it is open',
+      ([a for a in p['actions'] if a[0] in ('link', 'unlabel')], p['state'].startswith('blocked on')), ([('link', 2079)], True))
+p = bplan(card(light='stop', labels=('blocked',)), pick, blockers=[(2079, 'CLOSED')])
+check('  every ticket it names closed: the label and the blocked light off, its owner told it is unblocked (#1829)',
+      (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question'], '#2079' in p['change']),
+      ([('light', 'shipyard'), ('unlabel', 'blocked')], True, True))
+watch = S.scrum_line([say("Scrum: blocked on the Watch app's store build | eta 11/22/26")], LOGIN)
+p = bplan(card(light='stop', labels=('blocked',)), watch, blockers=[(2118, 'CLOSED'), (1616, 'CLOSED')])
+check('  every linked blocker closed, none named: unblocked the same way (#230)',
+      (sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), 'is unblocked' in p['question']),
+      ([('light', 'shipyard'), ('unlabel', 'blocked')], True))
+p = bplan(card(light='stop', labels=('blocked',)), watch, blockers=[(2118, 'CLOSED'), (1616, 'OPEN')])
+check('  a linked blocker still open keeps it blocked, asked nothing before its ETA',
+      ([a for a in p['actions'] if a[0] == 'unlabel'], p['state'].startswith('blocked on'), p['question']), ([], True, ''))
 started_on = Board(places={970: ('Building', 'stop'), 971: ('Backlog', 'stop')})
 T.start([970, 971], started_on, bcfg)
 check("  review: a commit's start keeps a Shipyard card's Blocked light, and turns one elsewhere to working",

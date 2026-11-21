@@ -419,6 +419,26 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         # the card stays in the shipyard, its light the blocked one and its label on, and once the ETA passes its owner
         # is asked whether the wait is over (again ASK_AGAIN_HOURS later while it is not answered).
         what = line.get('ask') or 'something outside the board'
+        # 0.43.0 (SMADPickleBot, Gene 11/21/26 10:56 AM PT: "again a scrum master job that he is not doing"): a wait whose
+        # words name tickets ("Gene's pick on #2079") is linked to them like `blocked by`, and once every ticket it names
+        # or links is closed the card is unblocked in the same pass. #1829 sat Blocked 11 hours after #2079 closed, and
+        # #230 18 minutes after its three linked blockers closed, since a `blocked on` line returned here before the
+        # every-blocker-closed rule below was reached.
+        named = [int(m) for m in re.findall(r'#(\d+)', what) if int(m) != n]
+        linked_now = [b for b, _s in blockers]
+        missing = [r for r in named if r not in linked_now]
+        if (named or linked_now) and not missing and not open_blockers:
+            closed = sorted(set(named) | set(linked_now))
+            out['state'] = 'every ticket its wait names or links is closed'
+            if BLOCKED_LABEL in labels:
+                out['actions'].append(('unlabel', BLOCKED_LABEL))
+            if blocked and light == blocked:
+                out['actions'].append(('light', 'shipyard'))
+            out['change'] = 'Unblocked: every ticket its wait names or links is closed (' + ', '.join(f'#{r}' for r in closed) + ').'
+            out['question'] = unblocked_q
+            return out
+        for r in missing:
+            out['actions'].append(('link', r))
         if relight:
             out['actions'].append(('light', 'blocked'))
             out['change'] = f'Switched to {blocked}: its owner says it waits on {what}.'
