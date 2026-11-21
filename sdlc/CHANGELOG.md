@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.44.0 - 2026-11-21 PT
+
+- `tickets.comment_login(cfg)`: the account sessions comment as, the config's `owner_login` when set, else the
+  repository's owner part. The scrum sweep's comment reads, its assign and `repo_owner` (the Triage check) use it. A
+  repository moved into an organization keeps its sessions writing as the person's account (SMADPickleBot #2145,
+  11/21/26: ChuangFinance moved to SMAD-PickleBot, and every `Scrum:` line its session wrote as genechuang was read as
+  nobody's, so its #19 lost its Blocked state). No signature changes; a host names `owner_login` in a moved
+  repository's config. Suite: `tests/test-sdlc-tickets.py`.
+
 ## 0.43.0 - 2026-11-21 PT
 
 - `scrum.plan`: a `Scrum: blocked on <what>` wait whose words name tickets (`#N`) links them as blocked-by, like

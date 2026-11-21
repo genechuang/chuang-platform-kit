@@ -424,10 +424,20 @@ def issue(number: int, run=None, repo: str = None):
             'pr': bool(got.get('pr'))}
 
 
+def comment_login(cfg: dict = None) -> str:
+    """The account every session comments as, whose `Scrum:` and `Triage:` lines count and who is assigned for the
+    lead: the config's `owner_login` when set, else the repository's owner part. A repository moved into an
+    organization keeps its sessions writing as the person's account, so its config names that account (SMADPickleBot
+    #2145, 11/21/26: ChuangFinance moved to SMAD-PickleBot and every line its session wrote as genechuang was read as
+    nobody's)."""
+    c = _cfg(cfg)
+    return (c.get('owner_login') or '').strip() or c['repo'].split('/')[0]
+
+
 def repo_owner(cfg: dict = None) -> str:
-    """The repository's owner, lowercased: the one account whose Triage lines count. Never the board's `owner`, which
-    names the Project's organization or user."""
-    return _cfg(cfg)['repo'].split('/')[0].lower()
+    """The account whose Triage lines count, lowercased (`comment_login`). Never the board's `owner`, which names the
+    Project's organization or user."""
+    return comment_login(cfg).lower()
 
 
 # ------------------------------------------------------------------ the estimate

@@ -866,5 +866,11 @@ check('a duplicate title is refused unless --new', (T.refused_as_duplicate('Expo
                                                      T.refused_as_duplicate('Export monthly report CSV', ['--new'], gh, out)),
       (True, False))
 
+moved = dict(CFG, repo='Some-Org/Tenant', owner_login='personaccount')
+check('comment_login (0.44.0): the config\'s owner_login for a repository moved into an organization, else the repo\'s owner part; repo_owner lowercases it',
+      (T.comment_login(moved), T.repo_owner(moved), T.comment_login(dict(CFG, repo='Gene/Repo')),
+       T.comment_login(dict(CFG, repo='Gene/Repo', owner_login='  ')), T.repo_owner(dict(CFG, repo='Gene/Repo'))),
+      ('personaccount', 'personaccount', 'Gene', 'Gene', 'gene'))
+
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

@@ -758,7 +758,7 @@ def closed_sweep(cfg: dict, gh, store, now: datetime, dry: bool, letters: dict, 
     gh.remember(cards)   # #1207: the items kept and the issues read in one aliased query
     gh.prefetch([(c.get('content') or {}).get('number') for c in cards
                  if (c.get('content') or {}).get('number') not in skip and (only is None or (c.get('content') or {}).get('number') == only)])
-    login = cfg['repo'].split('/')[0]
+    login = _tickets.comment_login(cfg)
     lines = []
     for c in cards:
         n = (c.get('content') or {}).get('number')
@@ -1064,7 +1064,7 @@ class GitHub:
 
     def assign(self, n, on=True):
         """The repository's owner (the lead's login) assigned to the card or not."""
-        return True if self.dry else self.run.assign(n, self.cfg['repo'].split('/')[0], on=on)
+        return True if self.dry else self.run.assign(n, _tickets.comment_login(self.cfg), on=on)
 
     def label(self, n, name, add=True):
         """A label added to the card, or taken off."""
@@ -1197,7 +1197,7 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
         last = datetime.fromtimestamp(mark['at_epoch'], timezone.utc) if mark.get('at_epoch') else None
         open_rows.append(c)
         starts[n] = last
-        login = cfg['repo'].split('/')[0]   # every session comments as the repository's owner
+        login = _tickets.comment_login(cfg)   # every session comments as one account (#2145)
         line = scrum_line(comments, login, skip=('done',))   # `done` is a closed card's word, read past here
         closed = ()
         theirs = line.get('ref_repo') or ''   # #2006: a full reference is read in its own repository
