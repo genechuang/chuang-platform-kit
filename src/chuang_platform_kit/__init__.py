@@ -76,6 +76,8 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
                      when a publish fails; Postgres over the host's model, Firestore over a store seam
   link_preview       a page's preview fetched safely: https only, every address public, redirects checked hop by
                      hop, bounded in time and bytes; og and title parse, YouTube through its oEmbed
+  gcs                Cloud Storage over its JSON API, one client: list, upload (media or multipart with
+                     cacheControl), download, copy, delete, a prefix down and a folder up
   public_text        text bound for a public page or ticket: emails and phone numbers scrubbed, or listed for a check
                      that refuses the text
   signed_link        a link that carries its own proof: an HMAC-SHA256 signature of a value as a query parameter,
@@ -97,4 +99,4 @@ copying files. Nothing in here knows about pickleball, a league or a sheet:
 Every version is tagged; a host pins `chuang-platform-kit @ git+https://github.com/genechuang/chuang-platform-kit@v<tag>`,
 or, in an image with no git, `chuang-platform-kit @ https://github.com/genechuang/chuang-platform-kit/archive/refs/tags/v<tag>.tar.gz`.
 """
-__version__ = '0.41.0'
+__version__ = '0.42.0'

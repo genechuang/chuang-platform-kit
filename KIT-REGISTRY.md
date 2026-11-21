@@ -241,6 +241,22 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `release(project, collection, doc_id)` | client(project).release: the claim or lock deleted; False, never raising, when Firestore is unreachable. |
 | `lock(project, collection, doc_id, ttl, data=)` | client(project).lock: True when this call holds the lease, False while another holder's runs. |
 
+## `gcs`: Cloud Storage over its JSON API, one client for every project: list, upload, download, copy and del…
+
+| Name | Purpose |
+|---|---|
+| `content_type_for(path)` | The content type a file's name says (mimetypes), else application/octet-stream. |
+| `class Client` | One Cloud Storage client: `token` a string, a callable asked per call, or None for google_auth's; `opener` the transport (urlopen's shape), the real one by default; `guard` google_rest's live guard ('writes' by default; 'none' for a run by hand whose own flag… |
+| `Client.list(bucket, prefix=)` | The bucket's live objects under `prefix`, [{name, size}], by name, every page. |
+| `Client.upload_bytes(bucket, name, data, content_type=, cache_control=)` | `data` as the object `name`, with its `content_type` and, when given, its `cache_control`; the object's metadata as Google answers it. |
+| `Client.upload_file(bucket, name, path, content_type=, cache_control=)` | The file at `path` as the object `name` (upload_bytes), its content type from its name when not given. |
+| `Client.download(bucket, name)` | The object's bytes. |
+| `Client.download_text(bucket, name, encoding=)` | The object's text. |
+| `Client.copy(bucket, source, target, target_bucket=)` | One object copied to another name (in `target_bucket`, else the same bucket), server side. |
+| `Client.delete(bucket, name)` | The object removed: True when it was there, False when there was none (a 404). |
+| `Client.download_prefix(bucket, prefix, dest)` | Every object directly under `prefix` (none in a deeper folder) into `dest`, by the name after the prefix; the names written, sorted. |
+| `Client.upload_dir(bucket, prefix, src, cache_control=)` | Every file directly in `src` to `<prefix><name>`; the names uploaded, sorted. |
+
 ## `gitguardian`: GitGuardian's incidents for a repository, read and closed: list the open ones, attach their occurre…
 
 | Name | Purpose |
@@ -369,7 +385,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `class RefusedHere` | A real call refused before it was made, because this process is not where one is meant (`live_allowed`): a configuration fault no retry fixes, so a caller logs it at ERROR. |
 | `configure(allow_env=, platform_env=)` | Name the project's opt-in variable for a real call off Cloud Run (`allow_env`, read as on when it is `1`) and, rarely, the platform variables that mean "on Cloud Run" (`platform_env`, K_SERVICE and CLOUD_RUN_JOB by default). Called once from the project's own… |
 | `live_allowed(env=)` | True where a real call is meant: a platform variable is set (on Cloud Run) or the configured opt-in variable is `1`. `env` is os.environ unless given. |
-| `call(method, url, token=, body=, opener=, timeout=, guard=, label=, what=, error=, refused=)` | One Google REST call, JSON both ways: `body` (a dict, or None for no body) sent as JSON, the answer parsed ({} for an empty one). The live guard first (module docstring; `guard` 'writes', 'all' or 'none'), then the token (a string, a callable, or None for goo… |
+| `call(method, url, token=, body=, opener=, timeout=, guard=, label=, what=, error=, refused=, data=, content_type=, raw=)` | One Google REST call, JSON both ways: `body` (a dict, or None for no body) sent as JSON, the answer parsed ({} for an empty one). The live guard first (module docstring; `guard` 'writes', 'all' or 'none'), then the token (a string, a callable, or None for goo… |
 | `list_all(url, key, token=, page_size=, limit=, **kw)` | Every item under `key` of a Google list answer, following `nextPageToken` (pageSize and pageToken added to `url`'s query), up to `limit` items when given. `kw` goes to `call` (opener, timeout, guard, error...). A GET, so the default guard lets it read from an… |
 | `queue_path(project, location, queue)` | A queue's resource name, `projects/<p>/locations/<l>/queues/<q>`. |
 | `task_name(queue, name)` | A task's full resource name from its queue and its short name; a name already full is kept. |

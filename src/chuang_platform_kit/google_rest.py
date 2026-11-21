@@ -105,12 +105,15 @@ def _raise(cls, text, **kw):
 
 
 def call(method: str, url: str, token=None, body=None, *, opener=None, timeout: float = TIMEOUT_SECONDS,
-         guard: str = 'writes', label: str = None, what: str = 'Google call', error=None, refused=None) -> dict:
+         guard: str = 'writes', label: str = None, what: str = 'Google call', error=None, refused=None,
+         data: bytes = None, content_type: str = 'application/json', raw: bool = False):
     """One Google REST call, JSON both ways: `body` (a dict, or None for no body) sent as JSON, the answer parsed ({} for
     an empty one). The live guard first (module docstring; `guard` 'writes', 'all' or 'none'), then the token (a string,
     a callable, or None for google_auth.access_token). A refusal raises `error` (GoogleError by default) with Google's
     status and message, no answer the same with status 0, a guarded call off Cloud Run `refused` (RefusedHere). `label`
-    replaces `<METHOD> <path>` at the head of an error's text; `what` names the call in a refusal ("job start")."""
+    replaces `<METHOD> <path>` at the head of an error's text; `what` names the call in a refusal ("job start").
+    `data` (bytes, with its `content_type`) is sent in place of a JSON body, and `raw` returns the answer's bytes in
+    place of parsed JSON: an upload or a download (Cloud Storage's media and multipart calls, gcs.py)."""
     method = method.upper()
     if guard not in _GUARDS:
         raise ValueError(f'guard must be one of {", ".join(_GUARDS)}, not {guard!r}')
@@ -127,12 +130,13 @@ def call(method: str, url: str, token=None, body=None, *, opener=None, timeout: 
         token = token()
     if not token:
         _raise(error, f'{head}: no Google Cloud token (no metadata server and no gcloud)', method=method, url=url)
-    data = json.dumps(body).encode('utf-8') if body is not None else None
+    if data is None:
+        data = json.dumps(body).encode('utf-8') if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
-                                 headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'})
+                                 headers={'Authorization': f'Bearer {token}', 'Content-Type': content_type})
     try:
         with opener(req, timeout=timeout) as r:
-            raw = r.read()
+            got = r.read()
     except urllib.error.HTTPError as e:
         message = ''
         try:
@@ -143,7 +147,9 @@ def call(method: str, url: str, token=None, body=None, *, opener=None, timeout: 
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         prefix = f'{label}: ' if label else ''
         _raise(error, f'{prefix}{_host(url)} could not be reached ({type(e).__name__})', method=method, url=url)
-    text = raw.decode('utf-8') if isinstance(raw, bytes) else str(raw or '')
+    if raw:
+        return got if isinstance(got, bytes) else str(got or '').encode('utf-8')
+    text = got.decode('utf-8') if isinstance(got, bytes) else str(got or '')
     return json.loads(text) if text.strip() else {}
 
 

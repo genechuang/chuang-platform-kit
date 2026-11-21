@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.42.0 - 2026-11-20 PT
+
+New module, and two keywords added to `google_rest.call` with defaults that change no caller (SMADPickleBot #1937,
+out of its `picklebot_core/db_backup.py` and `jobs/runner.py`). `gcs.Client(token=, opener=, timeout=, guard=)`:
+Cloud Storage over its JSON API, standard library only: `list` (every page, {name, size}), `upload_bytes` and
+`upload_file` (a media upload, or one multipart request that sets `cacheControl` with the bytes; the content type from
+the file name when not given), `download` and `download_text`, `copy`, `delete` (False on a 404), `download_prefix`
+and `upload_dir`. `google_rest.call(data=, content_type=, raw=)` sends bytes in place of a JSON body and returns the
+answer's bytes, under the same live guard and error. Suite: `tests/test-gcs.py`.
+
 ## 0.41.0 - 2026-11-20 PT
 
 New module, no signature changes: `link_preview`, a page's preview fetched safely, standard library only
