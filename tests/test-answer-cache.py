@@ -339,6 +339,13 @@ soon = store.docs[(cache.collection, name)]['asked']
 cache.answer('home', ('u1', ''), {}, lambda: {}, now=NOW + timedelta(hours=9))
 check("a served read refreshes `asked` once it is six hours old, not before",
       (soon, store.docs[(cache.collection, name)]['asked']), (NOW.isoformat(), (NOW + timedelta(hours=9)).isoformat()))
+store, cache = fresh(asked_every=timedelta(minutes=5))
+cache.answer('home', ('u1', ''), {}, lambda: {}, now=NOW)
+cache.answer('home', ('u1', ''), {}, lambda: {}, now=NOW + timedelta(minutes=2))
+soon = store.docs[(cache.collection, name)]['asked']
+cache.answer('home', ('u1', ''), {}, lambda: {}, now=NOW + timedelta(minutes=6))
+check("  with asked_every five minutes (0.46.0, SMADPickleBot #2109) it is refreshed once five minutes old, not before",
+      (soon, store.docs[(cache.collection, name)]['asked']), (NOW.isoformat(), (NOW + timedelta(minutes=6)).isoformat()))
 
 # 10. Bumps: one request's commits.
 store, cache = fresh()

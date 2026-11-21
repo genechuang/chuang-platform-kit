@@ -109,7 +109,10 @@ class AnswerCache:
 
     def __init__(self, store, scope, revision='', collection='api_answers', versions='data_versions',
                  locks='answer_cache_locks', day_end=None, encode=None, enabled=True, max_age=MAX_AGE,
-                 max_bytes=MAX_BYTES, keep_days=KEEP_DAYS, refused=None):
+                 max_bytes=MAX_BYTES, keep_days=KEEP_DAYS, refused=None, asked_every=ASKED_EVERY):
+        # `asked_every` (0.46.0, SMADPickleBot #2109): how stale a document's `asked` may be before a served read
+        # refreshes it; a host whose keep_days is minutes (rebuild only for readers seen lately) keeps it below that
+        self.asked_every = asked_every
         # `refused(error)` (0.45.0, SMADPickleBot #2029): whether a rebuild's exception is the caller's own refusal (a
         # sign-in no longer linked, a member gone), so the pass drops the kept answer instead of trying it every pass
         self.refused = refused
@@ -220,10 +223,10 @@ class AnswerCache:
             return False
 
     def _asked(self, name, kept, now) -> None:
-        """Note that a kept answer was asked for, at most once per ASKED_EVERY a document, so the rebuild pass knows
-        which answers still have a reader. Best effort."""
+        """Note that a kept answer was asked for, at most once per `asked_every` (ASKED_EVERY by default) a document,
+        so the rebuild pass knows which answers still have a reader. Best effort."""
         asked = instant(kept.get('asked'))
-        if asked is not None and now - asked < ASKED_EVERY:
+        if asked is not None and now - asked < self.asked_every:
             return
         try:
             self.store().merge(self.collection, name, {'asked': now.isoformat()})

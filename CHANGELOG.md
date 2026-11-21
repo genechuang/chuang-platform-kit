@@ -2,6 +2,13 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.46.0 - 2026-11-20 PT
+
+Addition to `answer_cache`, no signature changes (SMADPickleBot #2109): `AnswerCache(asked_every=)`, how stale a
+document's `asked` may be before a served read refreshes it (`ASKED_EVERY`, six hours, by default). A host that
+rebuilds at a write only for readers seen in the last minutes sets its `keep_days` to those minutes and `asked_every`
+below them. Suite: `tests/test-answer-cache.py`.
+
 ## 0.45.0 - 2026-11-20 PT
 
 Addition to `google_rest`, no signature changes (SMADPickleBot #1939): `log_entries(project, filter, token, order=,
