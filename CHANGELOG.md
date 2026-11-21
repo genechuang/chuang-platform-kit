@@ -2,6 +2,17 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.39.0 - 2026-11-20 PT
+
+New module, no signature changes: `expo_push`, push notifications to phones through Expo's push service on the
+standard library alone (SMADPickleBot #1934, out of its `services/api/push.py`). `token_ok` and `scrub` (a token
+never leaves the host, and every error text returned is scrubbed), `message` (urgent's time-sensitive level and high
+priority, an Android channel, a badge), `send(rows, build, post=)` in batches of 100 with tickets and the gone list
+(never raising for Expo's answer or a network failure, always for a programming error), `receipts(ids, get=)` in
+batches of 1000, `phone_gone` and `is_alarm` (one phone's token against the sender's credentials), and the dedupe
+pieces `dedupe_key`, `dedupe_slots`, `MemoryDedupe`. `post` and `get_receipts` are the transports a test replaces.
+Suite: `tests/test-expo-push.py`.
+
 ## 0.38.0 - 2026-11-19 PT
 
 New in `db`, no signature changes (SMADPickleBot #1849, out of its `services/api/db.py`): what a service on a

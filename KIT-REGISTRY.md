@@ -182,6 +182,24 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `maybe_send_email(player, message, subject=, dry_run=, append_date=)` | Send email to player if they have an email address on file. |
 | `maybe_send_extra_notifications(player, message, subject=, dry_run=, append_date=)` | Send supplemental email notification to player if they have an email on file. |
 
+## `expo_push`: Push notifications to phones through Expo's push service, on the standard library alone.
+
+| Name | Purpose |
+|---|---|
+| `token_ok(token)` | True when `token` has the shape of an Expo push token (`ExponentPushToken[...]` or `ExpoPushToken[...]`), at most TOKEN_MAX characters. |
+| `scrub(text)` | `text` with every Expo push token in it masked as `<push token>`. |
+| `message(token, title, body, data, urgent=, channel=, badge=, sound=)` | One Expo message. `urgent` asks iOS for the time-sensitive level (shown through a Focus once the app has that entitlement; ignored before) and FCM for high priority; `channel` is the Android notification channel, sent only when given; `badge` the app icon's n… |
+| `post(messages)` | POST one batch of messages to Expo; its JSON answer. |
+| `get_receipts(ids)` | POST one batch of ticket ids to Expo's receipts; its JSON answer. |
+| `send(rows, build, post=)` | Send to every (who, token) in `rows`, in batches of BATCH; `build(chunk)` makes the chunk's messages, one per row in order. Returns {sent, errors: [{who, error}], gone: [token], tickets: [(who, token, id)]}: `sent` the messages Expo took (`tickets`, each with… |
+| `receipts(ids, get=)` | The phone platform's answer for each ticket id, through Expo's receipts: {id: (status, error)}, status 'ok' or 'error' and error "<code>: <message>" (scrubbed, at most 200 characters) or None. An id Expo has no receipt for yet is left out, to be asked again l… |
+| `phone_gone(error)` | True when `error` ("<code>: <message>", as receipts() keeps it) says this one token can never be delivered to: Expo's DeviceNotRegistered, or a DeveloperError whose APNs reason is in ONE_PHONE_REASONS. |
+| `is_alarm(error)` | True when `error` means the sender is wrong for every phone (ALARM_ERRORS), not one phone's token. |
+| `dedupe_key(kind, title, body, data, recipients)` | A push's identity: its kind, title, body, data and its recipients (sorted, once each), hashed to 32 hex characters. The same message to other recipients is another push. |
+| `dedupe_slots(key, now=, seconds=)` | The two claim ids a push takes: this slot's and the next (`seconds` long each). |
+| `class MemoryDedupe` | The claims in this process. claim(ids) is all or none, as a create-only commit is. |
+| `MemoryDedupe.claim(ids, expires_at=)` | Take every id in `ids`, or none when any is taken already; True when taken. |
+
 ## `firestore`: Firestore over REST with the standard library: documents, commits, queries, create-only claims and…
 
 | Name | Purpose |
