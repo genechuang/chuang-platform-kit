@@ -470,6 +470,19 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `importable(*names)` | True when every module in `names` is installed, without importing any of them (only their parent packages). |
 | `require(*names)` | Raise ImportError unless every module in `names` is installed (see importable()): the fail-fast an eager import gave. |
 
+## `link_preview`: A web page's preview for a link (its title, description, image and site name), fetched safely, stan…
+
+| Name | Purpose |
+|---|---|
+| `class Refused` | An address that will not be fetched: why, in a user's words. |
+| `check_url(url, resolve=, url_max=)` | The address as given when it is https on the standard port with no credentials and its host resolves only to public addresses; Refused otherwise. |
+| `get(url, opener=, accept=, agent=, timeout=, max_bytes=)` | (status, headers, the first `max_bytes` of the body) for one request, a redirect returned and not followed. The address is the caller's to have checked. |
+| `fetch(url, opener=, resolve=, agent=, timeout=, max_bytes=, max_redirects=)` | (the final address, its HTML text or '') after at most `max_redirects` redirects, each address checked first (Refused when one is not public). A non-200 or non-HTML answer is ''. |
+| `parse(page, url, max_bytes=)` | {url, title, description, image, site} from a page's head: og:* first, then twitter:* and <meta name=description>, then <title>; an image only as an https address; empty fields left out. |
+| `is_youtube(url)` | Whether the address is a YouTube link (YOUTUBE_HOSTS), whose watch page hides its tags past MAX_BYTES. |
+| `oembed(url, opener=, resolve=, agent=, timeout=, max_bytes=)` | A YouTube link's preview from YouTube's oEmbed: {url, title, description (the channel), image (the thumbnail, https alone), site YouTube}, read through the same checks and bounds as a page; {} when it cannot be read or names no title, and the caller reads the… |
+| `preview(url, opener=, resolve=, agent=, timeout=, max_bytes=, max_redirects=)` | The preview of one checked https address (Refused for any other): a YouTube link's from its oEmbed, else the page's; a page that cannot be read is {url, site}. |
+
 ## `monitoring`: Errors and traces to Sentry, behind functions of our own: the one module that imports sentry_sdk.
 
 | Name | Purpose |

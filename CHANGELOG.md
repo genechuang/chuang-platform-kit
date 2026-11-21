@@ -2,6 +2,15 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.41.0 - 2026-11-20 PT
+
+New module, no signature changes: `link_preview`, a page's preview fetched safely, standard library only
+(SMADPickleBot #1936, out of its `services/api/link_preview.py`). `check_url` (https on the standard port, no
+credentials, every resolved address public; a malformed port is Refused too), `get` and the no-redirect `OPENER`,
+`fetch` (redirects followed by hand with each hop checked, `max_redirects`, `max_bytes`, HTML alone; a charset Python
+lacks reads as UTF-8), `parse` (og:*, twitter:*, <title>), `is_youtube` and `oembed`, and `preview`, all of it. The
+host names itself in `agent`. Suite: `tests/test-link-preview.py`.
+
 ## 0.40.0 - 2026-11-20 PT
 
 New module, no signature changes: `outbox`, the transactional outbox (SMADPickleBot #1935, out of its
