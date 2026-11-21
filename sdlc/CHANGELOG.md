@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.47.0 - 2026-11-21 PT
+
+- `tickets.owners_of` reads the board at most `OWNERS_S` (4 s) on the kit's own client, through `Client.graphql`'s new
+  `timeout`; a board that does not answer only warns, and CO #2149's push gate waited 11.2 s on a slow answer for a read
+  that takes under a second (SMADPickleBot #2150). A host's own runner is called as before. No signature changes. Suite:
+  `tests/test-sdlc-tickets.py`.
+
 ## 0.46.0 - 2026-11-21 PT
 
 - `scrum.plan`: 0.45.0's rule for every `blocked on` wait, named tickets included: the tickets a wait names or links

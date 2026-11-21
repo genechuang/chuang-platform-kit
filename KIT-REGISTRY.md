@@ -1297,7 +1297,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `Client.repo()` | The board's repository, owner/name. |
 | `Client.token()` | The token, a callable's answer read once; '' when there is none. |
 | `Client.auth_ok()` | Whether a token is at hand (without one, a commit check reads the form alone). |
-| `Client.graphql(query, variables=)` | The `data` of one GraphQL call; None on a refusal. |
+| `Client.graphql(query, variables=, timeout=)` | The `data` of one GraphQL call; None on a refusal. `timeout` bounds it in seconds (0.47.0), the kit client's own default when not given. |
 | `Client.issue(number)` | One issue in gh's shape (its labels, body, state and ids); None when GitHub does not answer or has none. |
 | `Client.node_id(number)` | An issue's GraphQL node id, read once a process; '' when GitHub does not answer. |
 | `Client.compare(base, head)` | The commits after `base` up to `head`, [{'sha', 'message'}] oldest first (the kit's github.compare); None when GitHub does not answer (0.11.0). |

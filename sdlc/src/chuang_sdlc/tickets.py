@@ -33,6 +33,8 @@ class NotConfigured(RuntimeError):
     """The host has not wired what this call needs (configure)."""
 
 
+OWNERS_S = 4   # seconds owners_of waits for the board on the kit's client (#2150); its read is under 1 s normally
+
 _HOST = _tenant.Layered('tickets', {   # a tenant's wiring layered over it (tenant.using, 0.30.0)
     'board': None,          # () -> the board's config dict
     'runner': None,         # () -> the GitHub runner (Client)
@@ -258,12 +260,15 @@ class Client:
             self.error = str(e)
             return None
 
-    def graphql(self, query: str, variables: dict = None):
-        """The `data` of one GraphQL call; None on a refusal."""
+    def graphql(self, query: str, variables: dict = None, timeout: int = None):
+        """The `data` of one GraphQL call; None on a refusal. `timeout` bounds it in seconds (0.47.0), the kit client's
+        own default when not given."""
         from chuang_platform_kit import github
         if self._refused():
             return None
         try:
+            if timeout:
+                return github.graphql(self.token, query, variables or {}, opener=self.opener, timeout=timeout)
             return github.graphql(self.token, query, variables or {}, opener=self.opener)
         except github.GitHubError as e:
             self.error = str(e)
@@ -2491,9 +2496,12 @@ def owners_of(numbers, run=None, cfg: dict = None):
     body = ' '.join(f'i{n}: issue(number: {n}) {{ projectItems(first: 10) {{ nodes {{ project {{ id }} '
                     'owner: fieldValueByName(name: "Owner") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } }'
                     for n in numbers)
+    query = f'query($o: String!, $r: String!) {{ repository(owner: $o, name: $r) {{ {body} }} }}'
     try:
-        data = run.graphql(f'query($o: String!, $r: String!) {{ repository(owner: $o, name: $r) {{ {body} }} }}',
-                           {'o': owner, 'r': name})
+        # 0.47.0 (SMADPickleBot #2150): bounded at OWNERS_S on the kit's own client, since a board that does not answer
+        # only warns (CO #2149's push gate waited 11.2 s on a slow answer for a read that takes under a second)
+        data = (run.graphql(query, {'o': owner, 'r': name}, timeout=OWNERS_S) if isinstance(run, Client)
+                else run.graphql(query, {'o': owner, 'r': name}))
     except Exception:   # noqa: BLE001 - a client that raises: no board answer
         data = None
     repo = (data or {}).get('repository') if isinstance(data, dict) else None

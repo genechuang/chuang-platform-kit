@@ -845,6 +845,16 @@ finally:
     _gh.close_issue = _keep
 check("0.14.2: a close GitHub answered with nothing is done, a refusal is not and keeps its reason",
       (done, refused, T.Client(tok=None, cfg=CFG).close_issue(5)), (True, (False, 'GitHub /issues/5: HTTP 403 (Forbidden)'), False))
+_keep, bounds = _gh.graphql, []
+try:
+    _gh.graphql = lambda tok, q, v, opener=None, timeout=20: bounds.append(timeout) or {
+        'repository': {'i7': {'projectItems': {'nodes': [{'project': {'id': CFG['id']}, 'owner': {'name': 'Ann'}}]}}}}
+    owners = T.owners_of([7], c, CFG)
+    c.graphql('query { viewer { login } }')
+finally:
+    _gh.graphql = _keep
+check("0.47.0 (#2150): the gate's Owner read waits OWNERS_S at most on the kit's client; any other call keeps the client's default",
+      (owners, bounds, T.OWNERS_S), ({7: 'Ann'}, [4, 20], 4))
 _keep, sent = _gh.graphql, []
 try:
     _gh.graphql = lambda tok, q, v, opener=None: sent.append((q, v)) or {'archiveProjectV2Item': {'item': {'id': v['i']}}}
