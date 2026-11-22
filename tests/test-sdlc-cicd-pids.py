@@ -49,12 +49,13 @@ check("other_process: both known and further apart than the slack; an unknown si
       (False, True, False, False, True))
 
 flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
-quick = subprocess.Popen([sys.executable, '-c', 'import sys; sys.exit(3)'], creationflags=flags)
+quick = subprocess.Popen([sys.executable, '-c', 'import sys; sys.exit(3)'], creationflags=flags, stdin=subprocess.DEVNULL)
 ended, code = P.wait_pid(quick.pid, 20)
 quick.wait()
 check("wait_pid: a child that exits is seen to end, with its exit code on Windows (a pidfd gives none)",
       (ended, code), (True, 3 if os.name == 'nt' else None))
-slow = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], creationflags=flags)
+slow = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], creationflags=flags,
+                        stdin=subprocess.DEVNULL)
 try:
     slow_start = P.proc_started(slow.pid)
     timed = P.wait_pid(slow.pid, 0.3, started=slow_start)
