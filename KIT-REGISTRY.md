@@ -780,6 +780,19 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `kept(store, collection, key, token=, info=)` | The post kept under `key` (its channel and ts). A post kept with no ts but its file's id (Slack had not filled the share when it was posted) is read once more from files.info now, a phase later, and the ts kept once it has come. The store out of reach is a Re… |
 | `deliver(data, token, store, collection, resolve=, now=, upload=, post=, update=, info=, sleep=)` | The listener's answer to one post event: the lines it logs. Claims <collection>/<key> first (a repeated delivery is acknowledged with nothing posted), resolves the channel (`resolve(channel) -> id`, the host's roles; the value as given without one) and the th… |
 
+## `standby`: A desktop worker with a cloud standby: one lease document per piece of work (SMADPickleBot #2158, f…
+
+| Name | Purpose |
+|---|---|
+| `aware(value)` | A stored instant as an aware datetime: a datetime (a naive one read as UTC) or an ISO string, None for anything else or an unreadable string. |
+| `class Lease` | The lease rules for one collection: `desktop` and `cloud` the holders' names, a beat `stale_s` old (or from a clock that far ahead) a desktop gone, the twin reading every `poll_s`; `what` names the work in the twin's lines ("the night") and `tag` starts them… |
+| `Lease.claim(store, key, now=)` | The desktop takes `key` unless its document exists: True when this call created it. |
+| `Lease.beat(store, key, now=)` | One desktop beat: '' when the desktop still holds `key` and the beat was written; else the holder that has it ('none' for no document), nothing written. The store's own error when it cannot be read or written, which the desktop counts toward its fence. |
+| `Lease.done(store, key, code, now=)` | The desktop's run ended on its own with exit `code`: an exit 0 settles the work, any other hands it to the cloud's twin at its next read. |
+| `Lease.decide(doc, now=)` | (verdict, why) for one read of the twin's document: 'take' when the cloud must take the work first (no document, the desktop's beat `stale_s` old or from a clock that far ahead, or its run ended with an error), 'book' when the cloud already holds it, 'stand d… |
+| `Lease.take(store, key, doc, now, why)` | The cloud's twin takes `key`: the document written whole, holder cloud, with who held it before. |
+| `Lease.gate(store, key, name, until, now=, sleep=, log=, unreachable=)` | The cloud twin's stand-by before it runs `key`: True to run (taken, or the cloud's already), False to stand down (the desktop's run ended well, or `until` passed with the desktop still holding). Reads every `poll_s`; a store that cannot be read for `stale_s`… |
+
 ## `timecheck`: The scanner behind "in code, every calendar day is a day in the kit's zone" (Gene, 2026-10-07 PT).
 
 | Name | Purpose |

@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.50.0 - 2026-11-21 PT
+
+New module `standby` (SMADPickleBot #2158, from #1685's audit): a desktop worker with a cloud standby on one lease
+document. `Lease(collection, desktop=, cloud=, stale_s=, poll_s=, what=, tag=)` with `claim`, `beat`, `done`, `decide`
+(take / book / stand down / wait), `take` and `gate` (the cloud twin's stand-by loop until a deadline), and `aware`
+(a stored instant as an aware datetime). It is SMADPickleBot's court-booking night lease with the names taken out.
+Suite: `tests/test-standby.py`.
+
 ## 0.49.0 - 2026-11-21 PT
 
 Additions to `app_store_connect`, no signature changes (SMADPickleBot #2151): `group_testers(app_id, bearer)` reads
