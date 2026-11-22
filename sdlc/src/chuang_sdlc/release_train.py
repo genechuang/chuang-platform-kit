@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
-           'history_bound', 'watch_run', 'run_head', 'dispatched_run']
+           'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'watch_jobs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
 REASON = r'pre-push|refused|FAILED|no desktop build|has no '      # a hook's reason lines, said before the refusal
@@ -297,3 +297,25 @@ def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait:
             return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
         sleep(wait)
     return ''
+
+
+def watch_jobs(read_jobs, done, ok, timeout: int, step: int = 5, pause=time.sleep,
+               unreadable=(ValueError, AttributeError, subprocess.TimeoutExpired)) -> bool:
+    """A run waited on to its end by its jobs, read every `step` s for at most `timeout`: whether every job succeeded
+    (`ok(job)` for each), a wait that runs out never a success. `done(jobs)` must hold on two reads in a row, since a
+    job that waits on another may not be listed yet. `read_jobs()` answers the jobs API's JSON ({'jobs': [...]}); a read
+    that raises one of `unreadable` counts as no jobs."""
+    agreed = 0
+    for _ in range(max(1, timeout // step)):
+        try:
+            jobs = read_jobs().get('jobs') or []
+        except unreadable:
+            jobs = []
+        if done(jobs):
+            agreed += 1
+            if agreed >= 2:
+                return all(ok(j) for j in jobs)
+        else:
+            agreed = 0
+        pause(step)
+    return False

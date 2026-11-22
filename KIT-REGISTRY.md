@@ -1115,6 +1115,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `watch_run(gh, repo, run_id, bound_s, again_s=, sleep=, now=)` | A GitHub Actions run watched to its end (`gh run watch`, never a poll); its conclusion. A watch that returns while the run is still going (its conclusion empty, its status not `completed`) is watched again after `again_s`, within `bound_s` in all, so a run is… |
 | `run_head(gh, repo, run_id)` | The commit a run builds (its headSha), which a dispatch on a branch takes from the branch at GitHub's dispatch; '' when GitHub does not say. |
 | `dispatched_run(gh, repo, workflow, since, tries, wait, sleep=)` | The run a `gh workflow run` just made: the oldest `workflow_dispatch` run of `workflow` created at or after `since` (epoch seconds), asked up to `tries` times `wait` seconds apart, since a dispatch's run appears a few seconds after it; '' when none appeared. |
+| `watch_jobs(read_jobs, done, ok, timeout, step=, pause=, unreadable=)` | A run waited on to its end by its jobs, read every `step` s for at most `timeout`: whether every job succeeded (`ok(job)` for each), a wait that runs out never a success. `done(jobs)` must hold on two reads in a row, since a job that waits on another may not… |
 
 ## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
 

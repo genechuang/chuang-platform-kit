@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.54.0 - 2026-11-21 PT
+
+- `release_train.watch_jobs(read_jobs, done, ok, timeout, step=5, ...)`: a run waited on to its end by its jobs
+  (SMADPickleBot #2159, step 7, from its ship.py's `_watch`): `done(jobs)` must hold on two reads in a row, then every
+  job's `ok`; a wait that runs out is never a success, an unreadable read counts as no jobs. The rules for when a job
+  is done and whether it passed stay the host's. No signature changes. Suite: `tests/test-sdlc-release-train.py`.
+
 ## 0.53.0 - 2026-11-21 PT
 
 - `release_train` gains a GitHub Actions run's handling (SMADPickleBot #2159, step 6, from its tf_pipe.py):

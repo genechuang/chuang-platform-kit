@@ -276,6 +276,35 @@ check("dispatched_run: the oldest dispatch run made since the dispatch; asked ag
        R.dispatched_run(Gh({'list': [Got(0, '[]'), Got(0, 'x')]}), 'o/r', 'app.yml', since, 2, 4, sleep=lambda s: None)),
       ('9', [4], ''))
 
+def jobs_reader(*reads):
+    seq = list(reads)
+
+    def read():
+        got = seq.pop(0) if seq else seq_last[0]
+        if isinstance(got, Exception):
+            raise got
+        return got
+    seq_last = [reads[-1]]
+    return read
+
+
+done_all = lambda jobs: bool(jobs) and all(j.get('status') == 'completed' for j in jobs)   # noqa: E731
+ok_one = lambda j: j.get('conclusion') in ('success', 'skipped')   # noqa: E731
+green = {'jobs': [{'status': 'completed', 'conclusion': 'success'}, {'status': 'completed', 'conclusion': 'skipped'}]}
+naps = []
+check("watch_jobs, the positive case: every job done on two reads in a row, then whether each succeeded",
+      (R.watch_jobs(jobs_reader({'jobs': []}, green, green), done_all, ok_one, 60, pause=naps.append), naps),
+      (True, [5, 5]))
+red = {'jobs': [{'status': 'completed', 'conclusion': 'failure'}]}
+going = {'jobs': [{'status': 'in_progress'}]}
+check("watch_jobs: done once then a job still going starts the count again; a failed job is False; a wait that runs "
+      "out is False; an unreadable read counts as no jobs",
+      (R.watch_jobs(jobs_reader(green, going, green, green), done_all, ok_one, 60, pause=lambda s: None),
+       R.watch_jobs(jobs_reader(red, red), done_all, ok_one, 60, pause=lambda s: None),
+       R.watch_jobs(jobs_reader(going), done_all, ok_one, 15, pause=lambda s: None),
+       R.watch_jobs(jobs_reader(ValueError('x'), green, green), done_all, ok_one, 60, pause=lambda s: None)),
+      (True, False, False, True))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
