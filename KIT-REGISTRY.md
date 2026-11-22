@@ -1098,6 +1098,16 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `lines(done, markdown=, not_allowed=)` | One line a run step ({..., 'result', 'seconds', 'url'}) for the notes: '• <job> <args>: ✅ passed in 74 s, <what> (<sha8>)', its label linked to `url` (a markdown link, else Slack's <url\|text>); a step off the allow-list says `not_allowed` (by its `allowed` f… |
 | `failed(done)` | The steps that did not pass. |
 
+## `chuang_sdlc.release_train`: The release train's generic parts, moved from SMADPickleBot's pipeline/desktop scripts one at a tim…
+
+| Name | Purpose |
+|---|---|
+| `parse_instant(value)` | A stored ISO instant as an aware datetime (a naive one read as UTC), None when it cannot be read. |
+| `class Lease` | This run's hold on the shared push (its own `run` token): take() waits for another's, renew() pushes `until` on while it is still this run's, free() deletes it only while it is this run's. With no store every call answers True and nothing is written. `collect… |
+| `Lease.take(sha)` | True once this run holds the lease (or there is no store, or it could not be read: pushed blind); False when another run held it past `wait`. |
+| `Lease.renew(sha)` | `until` pushed on while the lease is still this run's; False when another run holds it now. |
+| `Lease.free()` | The lease deleted when it is still this run's; a lease left frees itself after `lease_s`. |
+
 ## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
 
 | Name | Purpose |

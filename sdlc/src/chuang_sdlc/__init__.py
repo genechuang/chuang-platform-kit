@@ -41,6 +41,9 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   signature  who wrote a comment when everyone writes with one person's token: the signature footer, its signer (the
              host's, CHUANG_SIGNED_AS, the Claude Code session's registry row) and signed_by, the read that tells a
              session's or the pipeline's comment from the person's own words (standard library only)
+  release_train  the release train's generic parts, one at a time: Lease, one push at a time to a shared branch (a
+             lease document taken, renewed, freed, a killed run's taken over, an unreadable store pushed past blind);
+             the collection, id, bound and words the host's (standard library only)
   triage     a triage pass on a box: the request over the host's bus, the prompt, the read-only worktree, one pass at a
              time by its lock, the headless run on the subscriptions' accounts (chuang_platform_kit.headless_claude),
              capped and logged; the worktree, prompt file, logs and model the host's
@@ -58,4 +61,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.47.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
+__version__ = '0.48.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)

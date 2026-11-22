@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.48.0 - 2026-11-21 PT
+
+- New `release_train`: the release train's generic parts, moved from SMADPickleBot's pipeline scripts one at a time
+  (#2159, from #1685's audit). Its first is `Lease(store, session, collection, doc_id, lease_s, ...)`, one push at a
+  time to a shared branch: `take` waits for another run's lease and takes a killed run's, `renew` stops when another
+  run holds it, `free` deletes only this run's, and an unreadable store is pushed past blind while `free` still deletes
+  a lease naming the run (SMADPickleBot #2076). `parse_instant` reads a stored instant, a naive one as UTC. Standard
+  library only. No signature changes elsewhere. Suite: `tests/test-sdlc-release-train.py`.
+
 ## 0.47.0 - 2026-11-21 PT
 
 - `tickets.owners_of` reads the board at most `OWNERS_S` (4 s) on the kit's own client, through `Client.graphql`'s new
