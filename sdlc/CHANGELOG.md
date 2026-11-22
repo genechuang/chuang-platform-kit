@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.61.0 - 2026-11-21 PT
+
+- New `cicd.import_walk` (SMADPickleBot #2160, step 2, moved from its pipeline/shared/check-function-deps.py): a deploy
+  entry's module-level and lazy third-party imports through the host's shared package (`walk`, `reach`,
+  `package_targets`, `imports`), each file's facts kept by content across processes (`compute_facts`, `facts_of`,
+  `load_facts`, `save_facts`), a requirements file's packages (`requirements`, `norm`), and `satisfied` and `unused` with
+  the host's import-to-package map, namespace prefixes and runtime packages passed in. Suite:
+  `tests/test-sdlc-cicd-import-walk.py`.
+- `release_train.short_sha_path` (a run's log named by `git rev-parse --short=7`, the longest such name a full sha
+  starts with) and `release_train.stamped_verdict` (one run's verdict from a log every run appends to, never an earlier
+  run's) (SMADPickleBot #2162). No signature changes.
+
 ## 0.60.0 - 2026-11-21 PT
 
 - New `cicd.name_reach` (SMADPickleBot #2160, step 1, moved from its pipeline/shared/name_reach.py): `uses(entries,

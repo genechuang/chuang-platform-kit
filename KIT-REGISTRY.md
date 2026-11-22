@@ -1591,6 +1591,24 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `status(did, state, url, description, tok, opener=, env=)` | A status on deployment `did`: its state, the description, the log link and the live address when given. |
 | `main(argv=, env=, opener=, run=, out=, bump=)` | The command line; always 0, a refusal one WARNING line on stderr. |
 
+## `chuang_sdlc.cicd.import_walk`: A deploy gate's import walk: which third-party modules a deploy's entry file imports, through the h…
+
+| Name | Purpose |
+|---|---|
+| `norm(name)` | A requirement line or import name as the bare, lower-case, dashed package name: `Foo_Bar>=1` and `foo-bar @ git+https://...@v0.1.0` both give `foo-bar`. |
+| `requirements(path)` | Normalized package names from one requirements file; empty when it is missing. Comments and option lines (`-r`, `--hash`) are skipped. |
+| `imports(tree)` | (module_level, lazy) sets of top-level import names; an import inside any function is lazy, and a relative import is first-party and left out. One walk that carries "inside a function" down (SMADPickleBot 10/13/26: a walk of each function's subtree per enclos… |
+| `package_targets(tree, package)` | Which modules of `package` one file pulls in: `from <package>.x`, `from .x`, `from . import x`, `from <package> import x`, `import <package>.x`. |
+| `string_facts(tree)` | The string literals a walker could read as a path or a module (a slash, a dot or a folder name, no space, under 160 characters) and the joins of consecutive string arguments of a call (os.path.join(ROOT, 'scripts', 'x.py') gives 'scripts/x.py'). |
+| `compute_facts(text, package)` | One file's facts from its source, JSON-ready sorted lists: `top` and `lazy` import names, `shared` (the package's modules it pulls in), `scripts` (script file names it mentions) and `strings` (string_facts). |
+| `facts_of(raw, kept, new, package)` | One file's facts by its bytes: from `kept` (read from the cache file) or `new` (this process's) when this exact content was seen, else computed now and put in `new` for save_facts. Keyed by the content's SHA-1. |
+| `load_facts(path, version)` | The facts kept in the cache file at `path` ({sha1: facts}), {} when there is none, it cannot be read, or it was written by another `version`. |
+| `save_facts(path, version, new, kept=, prefix=, keep=)` | `new` merged into the cache file at `path`: read again first (another process may have written meanwhile), merged, written whole through a temporary file beside it. Past `keep` entries only the ones seen this run (`new` and `kept`) are kept. A write that fail… |
+| `reach(entry_path, package_dir, targets)` | The package's modules `entry_path` reaches, as file names ('config.py'), `__init__.py` always among them (any `<package>.x` import runs it). `targets(path)` is the host's (cached) package_targets of one file; a module file that does not exist ends that branch. |
+| `walk(entry_path, package_dir, file_facts, first_party=)` | (module_level, lazy) third-party import names from `entry_path` through the package, transitively. The standard library, a module beside the entry file, names starting `_` and `first_party` (the host's own packages and the serving framework's) are left out. `… |
+| `satisfied(mod, pkgs, import_to_pkg=, namespace_prefixes=)` | True when an import name is installed by one of `pkgs` (normalized names): by its own name, by the host's `import_to_pkg` entry ('yaml' -> 'PyYAML'), or for a namespace package by any package with its prefix ('google' -> 'google-'). |
+| `unused(direct, mods, runtime=, import_to_pkg=, namespace_prefixes=)` | The direct requirements that no reachable import name is met by, sorted: a dead package is a build, a deploy and a cold start paying for nothing. `runtime` names the packages the host's runtime needs that no import names (its server, a driver loaded by name). |
+
 ## `chuang_sdlc.cicd.jest`: The app's Jest suites that test a pipeline script, run when a push changes that script (SMADPickleB…
 
 | Name | Purpose |

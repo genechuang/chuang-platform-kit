@@ -23,4 +23,7 @@ own names in).
                   HolderLock, a lock file naming its holder, taken by one taker, freed when its holder is gone
   name_reach      which names of a host's shared package a deploy runs and which a push changed, so a deploy gate
                   redeploys only what a changed name reaches; the package's import name the host's (#2160)
+  import_walk     a deploy's entry file walked through the host's shared package: its module-level and lazy third-party
+                  imports, the facts kept by content across processes, a requirements file's packages, whether each
+                  import is installed and which direct requirements nothing imports (#2160)
 """
