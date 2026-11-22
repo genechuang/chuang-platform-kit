@@ -11,16 +11,22 @@ The store is any record store with `create`, `get`, `set` and `delete`.
 again) or 'refused' (the hook's own refusal, the network), the hook's reason said. `push_loop`: the push's tries under
 the lease (take, rebase, gate, push; on 'behind', rebase and carry the gate's mark when nothing it reads came in, else
 gate the rebased tree on the next try), every step the host's callable. `release_runs`: the runs a release's head
-started, watched to their end within a bound, one line saying what happened. Standard library only.
+started, watched to their end within a bound, one line saying what happened.
+
+`newest` and `history_bound`: a wait's bound from what the work took before, the slowest of the last runs on record
+times a factor (the timeout rule's 150%), a default when nothing is on record; what a run took is read by the host's
+own readers of its own logs. Standard library only.
 """
 import json
+import os
 import re
 import subprocess
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-__all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND']
+__all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
+           'history_bound']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
 REASON = r'pre-push|refused|FAILED|no desktop build|has no '      # a hook's reason lines, said before the refusal
@@ -208,3 +214,39 @@ def release_runs(sha: str, gh, run, at_most: int, branch: str = 'main', sleep=ti
         except subprocess.TimeoutExpired:
             return f"{len(open_) - n} of the release's {len(rows)} run(s) still ran after {at_most} s; gating beside them"
     return f"the release's {len(rows)} run(s) are done ({len(open_)} waited for, {round(now() - began)} s)"
+
+
+def newest(folder: str, prefix: str, suffix: str) -> list:
+    """The paths in `folder` named prefix…suffix, newest first by file time; [] when the folder cannot be read (a file
+    removed since the listing sorts last, and its reader then skips it)."""
+    try:
+        names = [n for n in os.listdir(folder) if n.startswith(prefix) and n.endswith(suffix)]
+    except OSError:
+        return []
+
+    def written(path):
+        try:
+            return os.path.getmtime(path)
+        except OSError:
+            return 0.0
+    return sorted((os.path.join(folder, n) for n in names), key=written, reverse=True)
+
+
+def history_bound(sources, factor: float, default: int, last: int) -> tuple:
+    """(seconds, found, slowest) for a wait on work that ran before: `factor` times the slowest of the last `last`
+    readable runs of each source, or (`default`, found, None) when no source has one. `sources` is (kind, paths
+    newest first, read) each, `read(path)` the run's seconds or None to skip it; `found` is {kind: [seconds, ...]} for
+    the host's own line saying where the bound came from."""
+    found = {kind: [] for kind, _, _ in sources}
+    for kind, paths, read in sources:
+        for path in paths:
+            if len(found[kind]) >= last:
+                break
+            got = read(path)
+            if got is not None:
+                found[kind].append(got)
+    every = [v for values in found.values() for v in values]
+    if not every:
+        return default, found, None
+    slowest = max(every)
+    return round(slowest * factor), found, slowest

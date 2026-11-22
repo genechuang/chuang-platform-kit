@@ -210,6 +210,36 @@ check("release_runs: a bound already spent says how many still ran",
                      now=lambda: next(clock)),
       "1 of the release's 1 run(s) still ran after 300 s; gating beside them")
 
+import tempfile  # noqa: E402
+
+folder = tempfile.mkdtemp(prefix='release-train-')
+for i, (name, body) in enumerate((('warm-a.log', '100'), ('warm-b.log', 'x'), ('warm-c.log', '300'), ('stages-d.json', '200'),
+                                  ('other.txt', '999'))):
+    path = os.path.join(folder, name)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(body)
+    os.utime(path, (1000 + i, 1000 + i))
+
+
+def seconds(path):
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    return int(text) if text.isdigit() else None
+
+
+warms = R.newest(folder, 'warm-', '.log')
+check("newest, the positive case: the prefix…suffix files newest first; a folder that cannot be read is []",
+      ([os.path.basename(p) for p in warms], R.newest(os.path.join(folder, 'gone'), 'warm-', '.log')),
+      (['warm-c.log', 'warm-b.log', 'warm-a.log'], []))
+bound = R.history_bound((('warms', warms, seconds), ('ships', R.newest(folder, 'stages-', '.json'), seconds)),
+                        1.5, 600, last=20)
+check("history_bound: factor times the slowest readable run of every source, an unreadable one skipped",
+      bound, (450, {'warms': [300, 100], 'ships': [200]}, 300))
+check("history_bound: only the last `last` readable runs of a source count; none on record is the default",
+      (R.history_bound((('warms', warms, seconds),), 1.5, 600, last=1),
+       R.history_bound((('warms', [], seconds),), 1.5, 600, last=20)),
+      ((450, {'warms': [300]}, 300), (600, {'warms': []}, None)))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

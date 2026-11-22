@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.51.0 - 2026-11-21 PT
+
+- `release_train` gains a wait's bound from what the work took before (SMADPickleBot #2159, step 4, from its
+  warm-dock.py's `warm_bound` and `shell_bound`): `newest(folder, prefix, suffix)`, the matching files newest first, and
+  `history_bound(sources, factor, default, last)`, `factor` times the slowest of the last `last` readable runs of each
+  source or the default with none, with what was found for the host's own line. The readers of a host's logs stay the
+  host's. No signature changes. Suite: `tests/test-sdlc-release-train.py`.
+
 ## 0.50.0 - 2026-11-21 PT
 
 - New `cicd.pids`: a process named by its pid and the start a lock recorded (SMADPickleBot #2159, step 3, moved from its
