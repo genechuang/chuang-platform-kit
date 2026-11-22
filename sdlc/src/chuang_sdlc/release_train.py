@@ -26,7 +26,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
-           'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'watch_jobs', 'gh_seconds', 'run_profiles',
+           'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'dispatched_runs', 'watch_jobs', 'gh_seconds',
+           'run_profiles',
            'profile_lines', 'keep_logs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
@@ -298,6 +299,24 @@ def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait:
             return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
         sleep(wait)
     return ''
+
+
+def dispatched_runs(out, workflow: str, since: str, want: int, tries: int = 30, wait: float = 2,
+                    sleep=time.sleep) -> list:
+    """The ids of `workflow`'s runs dispatched by hand since `since` (an ISO UTC stamp, GitHub's createdAt form), once
+    `want` of them are listed or `tries` reads `wait` s apart are spent; [] when none is wanted. `out(argv, timeout=)`
+    answers a command's stdout ('' on a failure), the host's runner."""
+    if want == 0:
+        return []
+    ids = []
+    for _ in range(tries):
+        ids = out(['gh', 'run', 'list', '--workflow', workflow, '--event', 'workflow_dispatch', '--limit', str(want + 4),
+                   '--json', 'databaseId,createdAt', '--jq', f'.[] | select(.createdAt >= "{since}") | .databaseId'],
+                  timeout=60).split()
+        if len(ids) >= want:
+            break
+        sleep(wait)
+    return ids
 
 
 def watch_jobs(read_jobs, done, ok, timeout: int, step: int = 5, pause=time.sleep,

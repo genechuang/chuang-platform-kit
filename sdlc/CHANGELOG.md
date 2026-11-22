@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.56.0 - 2026-11-21 PT
+
+- `release_train.dispatched_runs(out, workflow, since, want, tries=30, wait=2)`: the ids of a workflow's runs
+  dispatched since a moment, once `want` are listed (SMADPickleBot #2159, step 9, from its ship.py's promotion's
+  `_dispatched`); `out(argv, timeout=)` is the host's runner. No signature changes. Suite:
+  `tests/test-sdlc-release-train.py`.
+
 ## 0.55.0 - 2026-11-21 PT
 
 - `release_train` gains a release's profile (SMADPickleBot #2159, step 8, from its ship.py): `run_profiles(api, sha,

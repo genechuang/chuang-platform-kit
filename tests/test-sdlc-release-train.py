@@ -345,6 +345,18 @@ check("keep_logs: the logs written since the release began copied to <sha7>/; an
       (R.keep_logs('c' * 40, folder, ('tests.log', 'push.log', 'build.log'), since=1000),
        os.path.exists(os.path.join(folder, 'c' * 7, 'push.log'))), (['push.log'], True))
 
+asked, naps = [], []
+answers = iter(['', '11', '11 12'])
+got = R.dispatched_runs(lambda argv, timeout=None: (asked.append(argv), next(answers))[1], 'deploy.yml',
+                        '2026-11-22T01:00:00Z', 2, sleep=naps.append)
+check("dispatched_runs, the positive case: asked until `want` are listed, `wait` s apart, the dispatch's own since",
+      (got, naps, asked[0][4], asked[0][-1].endswith('select(.createdAt >= "2026-11-22T01:00:00Z") | .databaseId')),
+      (['11', '12'], [2, 2], 'deploy.yml', True))
+check("dispatched_runs: none wanted reads nothing; a list that never fills gives what it has after `tries`",
+      (R.dispatched_runs(lambda a, timeout=None: 1 / 0, 'x', 's', 0),
+       R.dispatched_runs(lambda a, timeout=None: '7', 'x', 's', 3, tries=2, sleep=lambda s: None)),
+      ([], ['7']))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
