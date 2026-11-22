@@ -47,6 +47,7 @@ log = logging.getLogger(__name__)
 OTHER = 'other'       # every table a host did not map to a domain: no route may name it
 UNKNOWN = 'unknown'   # a write whose table could not be read: every domain reader reads this counter too
 MAX_AGE = timedelta(hours=12)
+LASTING = timedelta(days=30)   # how long an answer that is not `daily` is kept when nothing else ends it (0.51.0)
 MAX_BYTES = 900_000   # under Firestore's 1 MiB document: a larger answer is served, never kept
 KEEP_DAYS = 7         # a kept answer nobody has asked for in this long is not rebuilt at a write
 ASKED_EVERY = timedelta(hours=6)   # how stale a document's `asked` may be before a served read refreshes it
@@ -90,10 +91,12 @@ def version_of(signal: dict, domains=None) -> str:
 class Route:
     """One registered route: how its answer is rebuilt with no request in hand, and what it reads."""
 
-    def __init__(self, name, rebuild, domains=None, until=None, inputs=None, keep=None):
+    def __init__(self, name, rebuild, domains=None, until=None, inputs=None, keep=None, daily=True,
+                 any_revision=False):
         self.name, self.rebuild = name, rebuild
         self.domains = domains if callable(domains) else tuple(domains) if domains else None
         self.until, self.inputs, self.keep = until, inputs, keep
+        self.daily, self.any_revision = daily, any_revision
 
     def domains_of(self, key):
         """The domains this route's answer for `key` reads: its registered ones, or what its function says for the
@@ -126,13 +129,14 @@ class AnswerCache:
 
     # -- register ---------------------------------------------------------------------------------------------------
 
-    def register(self, route, rebuild, domains=None, until=None, inputs=None, keep=None) -> Route:
+    def register(self, route, rebuild, domains=None, until=None, inputs=None, keep=None, daily=True,
+                 any_revision=False) -> Route:
         """Say how `route`'s answer is rebuilt at a write: `rebuild(who, key)` answers what the route's own build
         would for that caller and key (or raises, or answers SKIP, and the document is left for its next reader), `domains` the
         domains its build reads (None: the scope's whole version; a function of the key when they depend on it), `until(answer, now)`, `inputs()` and
-        `keep(answer)` as `answer()` takes them, used when the call gives none. A route never registered is kept and
-        served as any other and simply not rebuilt."""
-        self.routes[route] = Route(route, rebuild, domains, until, inputs, keep)
+        `keep(answer)` as `answer()` takes them, used when the call gives none. `daily` and `any_revision` are
+        `answer()`'s too (0.51.0). A route never registered is kept and served as any other and simply not rebuilt."""
+        self.routes[route] = Route(route, rebuild, domains, until, inputs, keep, daily, any_revision)
         return self.routes[route]
 
     # -- read -------------------------------------------------------------------------------------------------------
@@ -143,25 +147,35 @@ class AnswerCache:
         raw = json.dumps([list(who), key], default=str, separators=(',', ':'))
         return f'{self.scope}__{route}__{hashlib.sha256(raw.encode("utf-8")).hexdigest()[:40]}'
 
-    def usable(self, kept, version, inputs, now) -> bool:
+    def usable(self, kept, version, inputs, now, daily=True, any_revision=False) -> bool:
         """Whether a kept document answers now: built under `version`, by this revision, with the same `inputs`,
-        before its end and within the longest age."""
+        before its end and within the longest age. An answer that is not `daily` has no longest age, and one that
+        holds for `any_revision` is served whatever code kept it (0.51.0)."""
         if not kept:
             return False
         until, at = instant(kept.get('until')), instant(kept.get('at'))
-        return (kept.get('version') == version and kept.get('revision') == self.revision
+        return (kept.get('version') == version and (any_revision or kept.get('revision') == self.revision)
                 and (kept.get('inputs') or '') == inputs and until is not None and now < until
-                and at is not None and now - at < self.max_age)
+                and at is not None and (not daily or now - at < self.max_age))
 
-    def answer(self, route, who, key, build, until=None, inputs=None, now=None, keep=None, domains=None, mark=None):
+    def answer(self, route, who, key, build, until=None, inputs=None, now=None, keep=None, domains=None, mark=None,
+               daily=None, any_revision=None):
         """(the answer's JSON text, 'kept' or 'built'): the kept one when it is usable, else `build()`'s, kept for
         next time. `who` is a tuple naming the caller (always part of the key); `key` the route's own, JSON-able.
         `build()` answers or raises as the route does (nothing is kept then). `until(answer, now)` is when the answer
         stops being true by the clock alone, None for never, `now` or earlier for one never to keep; `inputs()` a
         string naming what it reads from outside the database; `keep(answer)` False for an answer never to keep;
         `domains` what its build reads. Each falls back to the route's registration. `mark(name)` is the host's
-        phase log. A Firestore that cannot be read costs one try and the built answer, never an error."""
+        phase log. A Firestore that cannot be read costs one try and the built answer, never an error.
+
+        `daily` False (0.51.0, SMADPickleBot #2173) is for an answer with no day-based figure: it does not end at the
+        host's day end or at the longest age, only when its version moves, at its own `until`, or LASTING after it
+        was kept. `any_revision` True is for an answer whose shape no release changes: it is served across deploys.
+        Without them every caller's first read after the day's end and after each deploy was built from the database,
+        which on a database that sleeps is a wake."""
         reg = self.routes.get(route)
+        daily = (reg.daily if reg else True) if daily is None else daily
+        any_revision = (reg.any_revision if reg else False) if any_revision is None else any_revision
         until = until or (reg.until if reg else None)
         inputs = inputs or (reg.inputs if reg else None)
         keep = keep or (reg.keep if reg else None)
@@ -175,7 +189,7 @@ class AnswerCache:
             try:
                 signal, kept = self.store().batch_get([(self.versions, self.scope), (self.collection, name)])
                 version = version_of(signal, domains)
-                if kept and kept.get('json') and self.usable(kept, version, stamp, now):
+                if kept and kept.get('json') and self.usable(kept, version, stamp, now, daily, any_revision):
                     self.counts['kept'] += 1
                     if mark:
                         mark('kept')
@@ -190,7 +204,8 @@ class AnswerCache:
         answer = build()
         self.counts['built'] += 1
         body = self.encode(answer)
-        saved = version is not None and self._keep(route, name, who, key, answer, body, version, stamp, now, until, keep)
+        saved = version is not None and self._keep(route, name, who, key, answer, body, version, stamp, now, until, keep,
+                                                   daily=daily)
         if mark and version is not None:
             mark('kept_write')
         if self.enabled:
@@ -198,16 +213,19 @@ class AnswerCache:
                      'saved' if saved else 'not saved' if version is not None else 'unread')
         return body, 'built'
 
-    def _ends(self, answer, now, until):
-        return earliest(self.day_end(now) if self.day_end else None, now + self.max_age,
-                        until(answer, now) if until else None)
+    def _ends(self, answer, now, until, daily=True):
+        own = until(answer, now) if until else None
+        if not daily:   # no day's end and no longest age: its own end, or LASTING
+            return earliest(now + LASTING, own)
+        return earliest(self.day_end(now) if self.day_end else None, now + self.max_age, own)
 
-    def _keep(self, route, name, who, key, answer, body, version, stamp, now, until, keep, pushed=None) -> bool:
+    def _keep(self, route, name, who, key, answer, body, version, stamp, now, until, keep, pushed=None,
+              daily=True) -> bool:
         """Write the kept document unless the answer is too large, the route says not to keep it or it has ended
         already. False, never an exception, when it is not kept."""
         if len(body.encode('utf-8')) > self.max_bytes or (keep is not None and not keep(answer)):
             return False
-        ends = self._ends(answer, now, until)
+        ends = self._ends(answer, now, until, daily)
         if ends is None or ends <= now:
             return False
         fields = {'json': body, 'version': version, 'revision': self.revision, 'inputs': stamp, 'until': ends.isoformat(),
@@ -312,7 +330,7 @@ class AnswerCache:
             except Exception:   # noqa: BLE001 - a document this code cannot read is its next reader's
                 report['failed'] += 1
                 continue
-            fresh = self.usable(d, version, stamp, now)
+            fresh = self.usable(d, version, stamp, now, reg.daily, reg.any_revision)
             if fresh and d.get('pushed') == version:
                 continue
             if spent():
@@ -340,7 +358,7 @@ class AnswerCache:
                     log.info("answer_cache: %s could not be rebuilt for one caller (%s)", reg.name, type(e).__name__)
                     continue
                 if not self._keep(reg.name, doc_id, who, key, answer, body, version, stamp, now, reg.until, reg.keep,
-                                  pushed=version):
+                                  pushed=version, daily=reg.daily):
                     continue
                 report['rebuilt'] += 1
             else:

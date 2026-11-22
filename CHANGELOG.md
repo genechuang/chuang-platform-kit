@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.51.0 - 2026-11-22 PT
+
+`answer_cache`: an answer may outlive the day and a deploy (SMADPickleBot #2173). `answer(..., daily=False)` keeps an
+answer with no day-based figure past the host's day end and the 12-hour longest age: it ends when its version moves,
+at its own `until`, or `LASTING` (30 days) after it was kept. `answer(..., any_revision=True)` serves an answer
+whatever code kept it, for one whose shape no release changes. `register()` takes both for a registered route, and the
+rebuild pass honours them. Both default to the behavior before, so no caller changes. Why: every caller's first read
+after the day's end and after each deploy was built from the database, which on a database that sleeps is a wake (17
+of 55 on SMADPickleBot's 11/21/26). No signature a host calls changes. Suite: `tests/test-answer-cache.py`.
+
 ## 0.50.0 - 2026-11-21 PT
 
 New module `standby` (SMADPickleBot #2158, from #1685's audit): a desktop worker with a cloud standby on one lease

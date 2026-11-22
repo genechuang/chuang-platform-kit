@@ -363,5 +363,49 @@ nameless.committed()
 nameless.finish()
 check("  a request that named no table it wrote says so", nameless.wrote_nothing, True)
 
+# 0.51.0 (SMADPickleBot #2173): an answer that is not `daily` outlives the day's end and the longest age, and one
+# that holds for `any_revision` is served by other code; both still end when their version moves.
+store, cache = fresh()
+made = []
+
+
+def bind():
+    made.append(1)
+    return {'bound': True}
+
+
+def ask(c, at, **kw):
+    return c.answer('bind', ('u1', 's1'), 'k', bind, now=at, domains=('devices',), **kw)[1]
+
+
+plain = [ask(cache, NOW), ask(cache, NOW + timedelta(hours=9)), ask(cache, NOW + timedelta(hours=11))]
+check("the default, as before: kept inside the day, built again past the day's end (10 h here)",
+      plain, ['built', 'kept', 'built'])
+store, cache = fresh()
+lasting = [ask(cache, NOW, daily=False), ask(cache, NOW + timedelta(hours=11), daily=False),
+           ask(cache, NOW + timedelta(days=3), daily=False)]
+check("the positive case: not daily, kept past the day's end and past the longest age (12 h), three days on",
+      lasting, ['built', 'kept', 'kept'])
+other_code = A.AnswerCache(lambda: store, 'smad', revision='r2', day_end=day_end)
+check("  another revision builds it again unless the answer holds for any revision",
+      (ask(other_code, NOW + timedelta(days=3), daily=False, any_revision=True),
+       ask(other_code, NOW + timedelta(days=3), daily=False)), ('kept', 'built'))
+cache.bump(['devices'], now=NOW + timedelta(days=4))
+check("  its version moving still ends it, whatever the options",
+      ask(cache, NOW + timedelta(days=4), daily=False, any_revision=True), 'built')
+check("  LASTING is its longest life when nothing else ends it",
+      ask(cache, NOW + timedelta(days=4) + A.LASTING + timedelta(hours=1), daily=False, any_revision=True), 'built')
+store, cache = fresh()
+own_end = [cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW, daily=False, until=lambda a, now: now + timedelta(hours=2))[1],
+           cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW + timedelta(hours=3), daily=False,
+                        until=lambda a, now: now + timedelta(hours=2))[1]]
+check("  its own `until` still ends it", own_end, ['built', 'built'])
+store, cache = fresh()
+cache.register('queue', lambda who, key: {'n': 1}, domains=('roster',), daily=False, any_revision=True)
+reg_reads = [cache.answer('queue', ('u1', ''), {}, lambda: {'n': 1}, now=NOW)[1],
+             cache.answer('queue', ('u1', ''), {}, lambda: {'n': 1}, now=NOW + timedelta(days=2))[1]]
+check("  a registered route's options are used when the call gives none, and the pass leaves a lasting answer alone",
+      (reg_reads, cache.rebuild(now=NOW + timedelta(days=2))['rebuilt']), (['built', 'kept'], 0))
+
 print(f"\n{len(fails)} failure(s)" + (': ' + '; '.join(fails) if fails else ''))
 sys.exit(1 if fails else 0)
