@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.63.1 - 2026-11-22 PT
+
+- `moves.light_fix` keeps the scheduled Light on a card in the shipyard column, as it keeps the blocked one: without
+  it the first edit of a scheduled card would have had the light rule clear what the scrum master set (found before
+  0.63.0 was pinned anywhere). Suite: `tests/test-sdlc-moves.py`.
+
 ## 0.63.0 - 2026-11-22 PT
 
 - A wait on a date or an event shows a board's **scheduled** Light (SMADPickleBot #2200; its lead, 11/22/26: "maybe

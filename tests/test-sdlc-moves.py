@@ -186,6 +186,11 @@ def test_light_fix_leaves_what_a_drag_must_not_change():
     assert M.light_fix(moved(node(col='Ready', light='Working'))) is None        # two roles share it
     assert M.light_fix(moved(node(col='Orders', light='Working'))) is None
     assert M.light_fix(moved(node(number=None, col='Backlog', light='Working'))) is None
+    # 0.63.1 (SMADPickleBot #2200): the scrum master's blocked and scheduled lights stay in the shipyard column too
+    waits = dict(CFG, lights=dict(CFG['lights'], blocked='Blocked', scheduled='Scheduled'))
+    assert M.light_fix(moved(node(col='Building', light='Scheduled')), waits) is None
+    assert M.light_fix(moved(node(col='Building', light='Blocked')), waits) is None
+    assert M.light_fix(moved(node(col='Backlog', light='Scheduled')), waits) == ''   # dragged out: its column's light
 
 
 # ------------------------------------------------------------------ the writes

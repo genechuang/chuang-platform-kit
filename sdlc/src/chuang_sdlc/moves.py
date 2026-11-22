@@ -322,7 +322,7 @@ def light_fix(data: dict, cfg: dict = None):
     if want is None or have == want or have == lights.get('needs'):
         return None
     if col == stage('shipyard', cfg) and have and have in (lights.get('working'), lights.get('queued'), lights.get('pushing'),
-                                                           lights.get('blocked')):
+                                                           lights.get('blocked'), lights.get('scheduled')):   # 0.63.1
         return None
     return want
 
