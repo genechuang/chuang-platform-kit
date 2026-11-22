@@ -224,6 +224,79 @@ def test_the_ship_card_and_a_placeholder_are_told_apart_and_righted():
     assert M.right_placeholder(node(), 'tok', opener=opener) == ''
 
 
+def _column(cards, drafts=None):
+    """An opener answering label_first's reads from `cards` (the column in board order) and its writes."""
+    def answer(q, v):
+        if q == M.COLUMN_ITEMS:
+            rows = [c for c in cards if not M.number(c)] if 'is:draft' in v['q'] else cards
+            return {'node': {'items': {'nodes': rows[:v['n']]}}}
+        return {'updateProjectV2ItemPosition': {'items': {'nodes': []}}}
+    return Opener(answer)
+
+
+def _writes(opener):
+    """(item, after) of each position write the opener saw, in order."""
+    return [(v['i'], v.get('a')) for q, v in opener.calls if 'updateProjectV2ItemPosition' in q]
+
+
+LABEL = node(number=None, title='— Building: a card someone is working on —', item='IT_label')
+DOCK_LABEL = node(number=None, title='— Ready: tested and ready to ship —', col='Ready', item='IT_dock')
+SHIP = node(number=None, title='🚢 Launch it! drag me', col='Ready', item='IT_ship')
+DOCK_CFG = dict(CFG, placeholders=dict(CFG['placeholders'], dock=M.title(DOCK_LABEL)))
+
+
+def test_a_label_card_is_put_first_when_a_card_sits_above_it():
+    """The positive case (0.62.0): a card that entered above the column's label card is answered by one write, the
+    label card to the top; nothing else in the column is moved."""
+    opener = _column([node(7), LABEL, node(8, item='IT_8')])
+    assert M.label_first('Building', 'tok', opener=opener) == 'Building: its label card put first'
+    assert _writes(opener) == [('IT_label', None)]
+    assert [v['q'] for q, v in opener.calls if q == M.COLUMN_ITEMS] == ['status:"Building"', 'is:draft status:"Building"']
+
+
+def test_a_label_card_already_first_costs_one_read_and_no_write():
+    """A column in order is one read and no write, which is also where the keeper's own write settles when its
+    reorder event comes round."""
+    opener = _column([LABEL, node(7)])
+    assert M.label_first('Building', 'tok', opener=opener).endswith('left')
+    assert len(opener.calls) == 1 and _writes(opener) == []
+
+
+def test_a_column_with_no_label_card_is_left():
+    """A column the board names no label card for is not read; one whose card is missing says so and writes nothing."""
+    opener = _column([node(7)])
+    assert M.label_first('Backlog', 'tok', opener=opener) == '' and M.label_first('', 'tok', opener=opener) == ''
+    assert opener.calls == []
+    assert M.label_first('Building', 'tok', opener=opener) == 'Building: no label card to put first'
+    assert _writes(opener) == []
+
+
+def test_the_ship_card_stays_second_in_its_home_column():
+    """In the ship card's home column the label card goes first and the ship card right after it; with both in place
+    nothing is written, and a ship card that is away (in a door) is not looked for twice."""
+    entered = _column([node(9, col='Ready', item='IT_9'), DOCK_LABEL, SHIP])
+    assert M.label_first('Ready', 'tok', DOCK_CFG, entered) == 'Ready: its label card put first, the ship card put second'
+    assert _writes(entered) == [('IT_dock', None), ('IT_ship', 'IT_dock')]
+    behind = _column([DOCK_LABEL, node(9, col='Ready', item='IT_9'), SHIP])
+    assert M.label_first('Ready', 'tok', DOCK_CFG, behind) == 'Ready: the ship card put second'
+    assert _writes(behind) == [('IT_ship', 'IT_dock')]
+    settled = _column([DOCK_LABEL, SHIP, node(9, col='Ready', item='IT_9')])
+    assert M.label_first('Ready', 'tok', DOCK_CFG, settled).endswith('left') and len(settled.calls) == 1
+    away = _column([DOCK_LABEL, node(9, col='Ready', item='IT_9')])
+    assert M.label_first('Ready', 'tok', DOCK_CFG, away).endswith('left') and _writes(away) == []
+
+
+def test_a_refused_write_is_said():
+    """GitHub's refusal of the write is a RuntimeError with its words, for the receiver's WARNING."""
+    refusing = Opener(errors='nope')
+    try:
+        M.label_first('Building', 'tok', opener=refusing)
+    except RuntimeError as e:
+        assert 'nope' in str(e)
+    else:
+        raise AssertionError('a refusal was not raised')
+
+
 # ------------------------------------------------------------------ the put-backs
 def test_a_move_that_breaks_a_rule_is_named_with_where_it_goes_back():
     """put_back_to: the ship column wants proof, the shipment column a change order, the app-status column the ship card."""
@@ -441,5 +514,8 @@ if __name__ == '__main__':
             traceback.print_exc(file=sys.stdout)
         finally:
             dict.update(M._SET, before)
+            # Each case its own budget of the client's per-process GraphQL cap (60 a minute): the fakes count as calls.
+            from chuang_platform_kit import github as _github
+            _github.reset_limits()
     print(f'{len(FAILURES)} failure(s)')
     sys.exit(1 if FAILURES else 0)

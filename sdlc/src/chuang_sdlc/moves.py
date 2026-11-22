@@ -439,6 +439,56 @@ def right_placeholder(node: dict, token: str, cfg: dict = None, opener=None) -> 
     return f'placeholder "{t}" was moved to {col or "no column"}; put back in {home}'
 
 
+# 0.62.0 (SMADPickleBot #2194; Gene, 11/22/26 1:23 PM PT: "keep all static description card at the top and not
+# moveable ... this applies to all boards"): GitHub puts a card that enters a column at its top, and the sweep's keeper
+# (tickets.card_order_keep) put the label card back only every 30 minutes, in three columns. label_first is the
+# receiver's own keeper: called for the column of every Status move and every reorder, it reads that column's first
+# cards and writes only when its label card is not first (so its own write's echo settles on the read).
+COLUMN_ITEMS = ('query($p: ID!, $q: String!, $n: Int!) { node(id: $p) { ... on ProjectV2 { items(first: $n, query: $q) '
+                '{ nodes { id content { ... on Issue { number title } ... on DraftIssue { title } } } } } } }')
+ITEM_AFTER = ('mutation($p: ID!, $i: ID!, $a: ID!) { updateProjectV2ItemPosition(input: {projectId: $p, itemId: $i, '
+              'afterId: $a}) { items(first: 1) { nodes { id } } } }')
+
+
+def _column_items(q: str, n: int, token: str, cfg: dict, opener=None) -> list:
+    """The first `n` items of the board matching GitHub's own filter `q`, in the board's order."""
+    got = _graphql(COLUMN_ITEMS, {'p': cfg['id'], 'q': q, 'n': n}, token, opener) or {}
+    return [x for x in (((got.get('node') or {}).get('items') or {}).get('nodes') or []) if x]
+
+
+def label_first(col: str, token: str, cfg: dict = None, opener=None) -> str:
+    """The column `col`'s label card (its placeholder) put first when it is not, and in the ship card's home column the
+    ship card put second when it is there and is not. One read of the column's first cards when all is in order, a
+    second (its drafts) and one or two position writes when it is not; the top write is the client's own verb
+    (project_item_to_top), the ship card's a document here since the client has no "after" verb. The line said, ''
+    for a column that has no label card in the board's `placeholders`; RuntimeError with GitHub's refusal."""
+    cfg = cfg or board()
+    role = next((r for r in (cfg.get('placeholders') or {}) if (cfg.get('stages') or {}).get(r) == col), '')
+    if not col or not role:
+        return ''
+    home = (cfg.get('stages') or {}).get((cfg.get('ship_card') or {}).get('home') or 'dock') == col
+
+    def is_label(n):
+        return not number(n) and placeholder_role(title(n), cfg) == role
+    top = _column_items(f'status:"{col}"', 3, token, cfg, opener)
+    first = bool(top) and is_label(top[0])
+    if first and (not home or (len(top) > 1 and is_ship_card(top[1], cfg))):
+        return f'{col}: its label card is first; left'
+    drafts = _column_items(f'is:draft status:"{col}"', 20, token, cfg, opener)
+    label = top[0] if first else next((n for n in drafts if is_label(n)), None)
+    if label is None:
+        return f'{col}: no label card to put first'
+    ship = next((n for n in drafts if is_ship_card(n, cfg)), None) if home else None
+    said = []
+    if not first:
+        _kit(lambda github: github.project_item_to_top(token, cfg['id'], label['id'], opener=opener), token)
+        said.append('its label card put first')
+    if ship is not None:
+        _graphql(ITEM_AFTER, {'p': cfg['id'], 'i': ship['id'], 'a': label['id']}, token, opener)
+        said.append('the ship card put second')
+    return f'{col}: ' + (', '.join(said) if said else 'its label card is first; left')
+
+
 # ------------------------------------------------------------------ the board's put-backs
 # A ticket is never dragged into the ship column without proof it shipped live, no card but a change order goes into the
 # shipment column, and the app-status column takes the ship card alone and lets none of its status cards out. A move

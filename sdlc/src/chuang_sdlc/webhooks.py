@@ -109,6 +109,15 @@ def dock_landed(payload: dict, numbers_of=None) -> dict:
             'forced': bool(payload.get('forced')), 'by': ((payload.get('pusher') or {}).get('name') or '')}
 
 
+def reordered(payload: dict) -> str:
+    """The node id of the item a Projects (v2) `reordered` delivery names (a card dragged up or down, or moved by a
+    position write), '' for any other delivery (0.62.0: the receiver keeps the column's label card first on it,
+    moves.label_first)."""
+    if (payload.get('action') or '') != 'reordered':
+        return ''
+    return (payload.get('projects_v2_item') or {}).get('node_id') or ''
+
+
 def project_item(payload: dict, event_fields) -> tuple:
     """(data, line) for a Projects (v2) item delivery: the `ticket.moved` data before the item's read, {item, field,
     field_name, by, from}, and '' when it is a move to read; (None, the line) when it is ignored: any action but an

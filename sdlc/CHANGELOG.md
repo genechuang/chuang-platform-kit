@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.62.0 - 2026-11-22 PT
+
+- New `moves.label_first(column, token)` (SMADPickleBot #2194; its lead, 11/22/26: "keep all static description card
+  at the top and not moveable ... this applies to all boards"): a column's label card (its placeholder) put first when
+  a card sits above it, and in the ship card's home column the ship card put second. One read of the column's first
+  cards when all is in order; a second read and one or two position writes when it is not, so the keeper's own write
+  settles on the read when its `reordered` delivery comes round. Any column the board's `placeholders` names. A
+  receiver calls it for the column of every Status move and every reorder; the sweep's `tickets.card_order_keep`
+  stays as the catch for its three columns.
+- New `webhooks.reordered(payload)`: the item a Projects (v2) `reordered` delivery names, '' for any other.
+- No signature changes. Suites: `tests/test-sdlc-moves.py`, `tests/test-sdlc-webhooks.py`.
+
 ## 0.61.0 - 2026-11-21 PT
 
 - New `cicd.import_walk` (SMADPickleBot #2160, step 2, moved from its pipeline/shared/check-function-deps.py): a deploy

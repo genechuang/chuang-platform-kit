@@ -139,6 +139,8 @@ check("  0.16.0: a date field the host names (a card's ETA) is carried; one it d
        W.project_item(item(ftype='date', name='Due'), FIELDS + ('ETA',))[1]),
       (({'item': 'PVTI_1', 'field': 'F1', 'field_name': 'ETA', 'by': 'lead', 'from': ''}, ''),
        'ignored: a projects_v2_item edited of its Due'))
+check('  0.62.0: a reordered delivery names its item; any other names none',
+      (W.reordered(item('reordered')), W.reordered(item()), W.reordered({})), ('PVTI_1', '', ''))
 moves = Moves()
 card = lambda n=None, title='t', col='Building': {'id': 'I', 'content': {'number': n, 'title': title}, 'status': {'name': col}}  # noqa: E731
 check('after the read: a move, a placeholder, an app status draft, the ship card there, a draft\'s and an unread Light',
