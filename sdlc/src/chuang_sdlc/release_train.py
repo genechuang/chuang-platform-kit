@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
            'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'dispatched_runs', 'watch_jobs', 'gh_seconds',
-           'run_profiles',
+           'run_profiles', 'step_seconds', 'log_lines',
            'profile_lines', 'keep_logs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
@@ -299,6 +299,39 @@ def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait:
             return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
         sleep(wait)
     return ''
+
+
+def step_seconds(gh, repo: str, run_id, steps: dict) -> dict:
+    """{key: seconds} for each of a run's steps a matcher in `steps` ({key: match(step name) -> bool}) names, from the
+    run's jobs; None for a key no finished step matched (the last match wins). `gh(args, timeout=)` is the host's."""
+    got = gh(['api', f'repos/{repo}/actions/runs/{run_id}/jobs'], timeout=60)
+    out = {key: None for key in steps}
+    try:
+        jobs = json.loads(got.stdout or '{}').get('jobs') or []
+    except ValueError:
+        jobs = []
+    for job in jobs:
+        for step in job.get('steps') or []:
+            secs = gh_seconds(step.get('started_at'), step.get('completed_at'))
+            if secs is None:
+                continue
+            for key, match in steps.items():
+                if match(step.get('name') or ''):
+                    out[key] = secs
+                    break
+    return out
+
+
+def log_lines(gh, repo: str, run_id, patterns: dict) -> dict:
+    """{key: the last line the run's log has for that pattern} ({key: compiled regex with one group}), '' when absent
+    or the log cannot be read. `gh(args, timeout=)` is the host's."""
+    got = gh(['run', 'view', str(run_id), '--log', '--repo', repo], timeout=120)
+    text = (got.stdout or '') if got.returncode == 0 else ''
+    out = {}
+    for key, pattern in patterns.items():
+        found = pattern.findall(text)
+        out[key] = found[-1].strip() if found else ''
+    return out
 
 
 def dispatched_runs(out, workflow: str, since: str, want: int, tries: int = 30, wait: float = 2,

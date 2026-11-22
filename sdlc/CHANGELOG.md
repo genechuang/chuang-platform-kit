@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.57.0 - 2026-11-21 PT
+
+- `release_train` gains two reads of a GitHub Actions run (SMADPickleBot #2159, step 10, from its tf_pipe.py's store
+  run): `step_seconds(gh, repo, run_id, steps)`, each named step's seconds from the run's jobs, and `log_lines(gh, repo,
+  run_id, patterns)`, the last line of the run's log for each pattern. The step names and patterns stay the host's.
+  No signature changes. Suite: `tests/test-sdlc-release-train.py`.
+
 ## 0.56.0 - 2026-11-21 PT
 
 - `release_train.dispatched_runs(out, workflow, since, want, tries=30, wait=2)`: the ids of a workflow's runs

@@ -9,7 +9,9 @@ parse_instant reads Z, naive and junk.
 
 Run:  python -B tests/test-sdlc-release-train.py
 """
+import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -356,6 +358,25 @@ check("dispatched_runs: none wanted reads nothing; a list that never fills gives
       (R.dispatched_runs(lambda a, timeout=None: 1 / 0, 'x', 's', 0),
        R.dispatched_runs(lambda a, timeout=None: '7', 'x', 's', 3, tries=2, sleep=lambda s: None)),
       ([], ['7']))
+
+STEPS_JOBS = Got(0, json.dumps({'jobs': [{'steps': [
+    {'name': 'Build with Expo (ios)', 'started_at': '2026-11-22T01:00:00Z', 'completed_at': '2026-11-22T01:10:00Z'},
+    {'name': 'Wait for TestFlight', 'started_at': '2026-11-22T01:10:00Z', 'completed_at': '2026-11-22T01:15:30Z'},
+    {'name': 'Upload', 'started_at': '2026-11-22T01:15:30Z'}]}]}))
+check("step_seconds, the positive case: each named step's seconds; a step not finished or not there is None",
+      R.step_seconds(lambda a, timeout=None: STEPS_JOBS, 'o/r', 5,
+                     {'expo': lambda n: n.startswith('Build with Expo'), 'apple': lambda n: n == 'Wait for TestFlight',
+                      'upload': lambda n: n == 'Upload', 'gone': lambda n: n == 'x'}),
+      {'expo': 600, 'apple': 330, 'upload': None, 'gone': None})
+check("step_seconds: an unreadable answer names nothing",
+      R.step_seconds(lambda a, timeout=None: Got(0, 'x'), 'o/r', 5, {'expo': lambda n: True}), {'expo': None})
+log = Got(0, 'a\nTestFlight: build 30 uploaded\nb\nTestFlight: build 31 submitted for external review\r\nApp Store: ok\n')
+check("log_lines: the last line of each pattern; absent or an unread log is ''",
+      (R.log_lines(lambda a, timeout=None: log, 'o/r', 5,
+                   {'tf': re.compile(r'(TestFlight: build \d+ [^\r\n]+)'), 'st': re.compile(r'(App Store: [^\r\n]+)'),
+                    'none': re.compile(r'(Nope: [^\n]+)')}),
+       R.log_lines(lambda a, timeout=None: Got(1), 'o/r', 5, {'tf': re.compile(r'(x)')})),
+      ({'tf': 'TestFlight: build 31 submitted for external review', 'st': 'App Store: ok', 'none': ''}, {'tf': ''}))
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
