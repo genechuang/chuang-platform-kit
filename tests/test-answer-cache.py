@@ -95,13 +95,9 @@ class Store:
 NOW = datetime(2026, 11, 19, 20, 0, tzinfo=timezone.utc)  # utc-ok: a fixed instant for the cases, noon Pacific
 
 
-def day_end(now):
-    return now + timedelta(hours=10)
-
-
 def fresh(**kw):
     store = Store()
-    cache = A.AnswerCache(lambda: store, 'smad', revision='r1', day_end=day_end, **kw)
+    cache = A.AnswerCache(lambda: store, 'smad', revision='r1', **kw)
     return store, cache
 
 
@@ -193,7 +189,9 @@ same = cache.answer('home', ('u1', ''), {}, build, now=NOW, inputs=lambda: stamp
 stamp[0] = 'b'
 check("  the same inputs are kept; other inputs build", (same, cache.answer('home', ('u1', ''), {}, build, now=NOW, inputs=lambda: stamp[0])[1]),
       ('kept', 'built'))
-check("  the day's end ends it", cache.answer('home', ('u1', ''), {}, build, now=NOW + timedelta(hours=11), inputs=lambda: stamp[0])[1], 'built')
+check("  no day's end and no age ends it: eleven hours and two days on it is still kept (0.52.0)",
+      (cache.answer('home', ('u1', ''), {}, build, now=NOW + timedelta(hours=11), inputs=lambda: stamp[0])[1],
+       cache.answer('home', ('u1', ''), {}, build, now=NOW + timedelta(days=2), inputs=lambda: stamp[0])[1]), ('kept', 'kept'))
 
 # 4. Never kept: too large, the route's keep, ended already.
 store, cache = fresh(max_bytes=50)
@@ -240,8 +238,6 @@ for i, member in enumerate(('old', 'bad', 'a', 'b', 'c')):
     at = NOW - timedelta(days=9) if member == 'old' else NOW - timedelta(minutes=10 * (5 - i))
     cache.answer('home', (member, ''), {'year': 2026}, lambda m=member: home((m, ''), {'year': 2026}), now=at,
                  until=lambda answer, now: now + timedelta(days=30))
-cache.day_end = None
-cache.max_age = timedelta(days=30)
 cache.bump(['games'], now=NOW)
 built.clear()
 report = cache.rebuild(now=NOW)
@@ -279,8 +275,6 @@ cache.register('home', picky, domains=('games',))
 for i, member in enumerate(('gone', 'flaky', 'a')):
     cache.answer('home', (member, ''), {'year': 2026}, lambda m=member: home((m, ''), {'year': 2026}),
                  now=NOW - timedelta(minutes=10 * (3 - i)), until=lambda answer, now: now + timedelta(days=30))
-cache.day_end = None
-cache.max_age = timedelta(days=30)
 cache.bump(['games'], now=NOW)
 tries.clear()
 first = cache.rebuild(now=NOW)
@@ -363,8 +357,10 @@ nameless.committed()
 nameless.finish()
 check("  a request that named no table it wrote says so", nameless.wrote_nothing, True)
 
-# 0.51.0 (SMADPickleBot #2173): an answer that is not `daily` outlives the day's end and the longest age, and one
-# that holds for `any_revision` is served by other code; both still end when their version moves.
+# 0.52.0 (SMADPickleBot #2175; Gene, 11/22/26: "It should dirty only when data changes, not based on time expiry!",
+# "when time based data expires, throw an event that cache listens to to expire"): no answer ends by its age or by a
+# day's end; a figure that changes with the clock is a domain the host bumps; a route's shape number, not the
+# revision, decides whether a deploy builds it again.
 store, cache = fresh()
 made = []
 
@@ -378,34 +374,52 @@ def ask(c, at, **kw):
     return c.answer('bind', ('u1', 's1'), 'k', bind, now=at, domains=('devices',), **kw)[1]
 
 
-plain = [ask(cache, NOW), ask(cache, NOW + timedelta(hours=9)), ask(cache, NOW + timedelta(hours=11))]
-check("the default, as before: kept inside the day, built again past the day's end (10 h here)",
-      plain, ['built', 'kept', 'built'])
-store, cache = fresh()
-lasting = [ask(cache, NOW, daily=False), ask(cache, NOW + timedelta(hours=11), daily=False),
-           ask(cache, NOW + timedelta(days=3), daily=False)]
-check("the positive case: not daily, kept past the day's end and past the longest age (12 h), three days on",
+lasting = [ask(cache, NOW), ask(cache, NOW + timedelta(hours=13)), ask(cache, NOW + timedelta(days=3))]
+check("the positive case: nothing written, so it is kept thirteen hours on and three days on; its age is never asked",
       lasting, ['built', 'kept', 'kept'])
-other_code = A.AnswerCache(lambda: store, 'smad', revision='r2', day_end=day_end)
-check("  another revision builds it again unless the answer holds for any revision",
-      (ask(other_code, NOW + timedelta(days=3), daily=False, any_revision=True),
-       ask(other_code, NOW + timedelta(days=3), daily=False)), ('kept', 'built'))
 cache.bump(['devices'], now=NOW + timedelta(days=4))
-check("  its version moving still ends it, whatever the options",
-      ask(cache, NOW + timedelta(days=4), daily=False, any_revision=True), 'built')
-check("  LASTING is its longest life when nothing else ends it",
-      ask(cache, NOW + timedelta(days=4) + A.LASTING + timedelta(hours=1), daily=False, any_revision=True), 'built')
+check("  its version moving ends it", ask(cache, NOW + timedelta(days=4)), 'built')
+check("  LASTING is only when its document is dropped, nothing having changed",
+      ask(cache, NOW + timedelta(days=4) + A.LASTING + timedelta(hours=1)), 'built')
+
+# A clock figure is a domain: the host's midnight event bumps `day`, and only the routes that name it end.
 store, cache = fresh()
-own_end = [cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW, daily=False, until=lambda a, now: now + timedelta(hours=2))[1],
-           cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW + timedelta(hours=3), daily=False,
+day_reads = [cache.answer('home', ('u1', ''), {}, bind, now=NOW, domains=('games', 'day'))[1],
+             cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW, domains=('devices',))[1]]
+cache.bump(['day'], now=NOW + timedelta(hours=10), what='clock')   # the host's midnight event
+day_reads += [cache.answer('home', ('u1', ''), {}, bind, now=NOW + timedelta(hours=10), domains=('games', 'day'))[1],
+              cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW + timedelta(hours=10), domains=('devices',))[1]]
+check("  the day's bump ends the route that names `day` and leaves the one that does not",
+      day_reads, ['built', 'built', 'built', 'kept'])
+
+# A route's shape decides the deploy: with one, another revision serves it until the number moves; with none, every
+# deploy builds it again (the safe rule for a route nobody has pinned).
+store, cache = fresh()
+other_code = A.AnswerCache(lambda: store, 'smad', revision='r2')
+shaped = [ask(cache, NOW, shape=1), ask(other_code, NOW, shape=1), ask(other_code, NOW, shape=2), ask(other_code, NOW, shape=2)]
+check("  a shaped answer is served by another revision, and built once when its shape number moves",
+      shaped, ['built', 'kept', 'built', 'kept'])
+store, cache = fresh()
+other_code = A.AnswerCache(lambda: store, 'smad', revision='r2')
+check("  an answer with no shape is built again by another revision",
+      (ask(cache, NOW), ask(cache, NOW), ask(other_code, NOW)), ('built', 'kept', 'built'))
+store, cache = fresh()
+check("  an answer kept before it had a shape is built once when the route gets one",
+      (ask(cache, NOW), ask(cache, NOW, shape=1), ask(cache, NOW, shape=1)), ('built', 'built', 'kept'))
+
+store, cache = fresh()
+own_end = [cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW, until=lambda a, now: now + timedelta(hours=2))[1],
+           cache.answer('bind', ('u1', 's1'), 'k', bind, now=NOW + timedelta(hours=3),
                         until=lambda a, now: now + timedelta(hours=2))[1]]
-check("  its own `until` still ends it", own_end, ['built', 'built'])
+check("  an end the answer itself names still ends it", own_end, ['built', 'built'])
 store, cache = fresh()
-cache.register('queue', lambda who, key: {'n': 1}, domains=('roster',), daily=False, any_revision=True)
+cache.register('queue', lambda who, key: {'n': 1}, domains=('roster',), shape=3)
+other_code = A.AnswerCache(lambda: store, 'smad', revision='r2')
+other_code.register('queue', lambda who, key: {'n': 1}, domains=('roster',), shape=3)
 reg_reads = [cache.answer('queue', ('u1', ''), {}, lambda: {'n': 1}, now=NOW)[1],
-             cache.answer('queue', ('u1', ''), {}, lambda: {'n': 1}, now=NOW + timedelta(days=2))[1]]
-check("  a registered route's options are used when the call gives none, and the pass leaves a lasting answer alone",
-      (reg_reads, cache.rebuild(now=NOW + timedelta(days=2))['rebuilt']), (['built', 'kept'], 0))
+             other_code.answer('queue', ('u1', ''), {}, lambda: {'n': 1}, now=NOW + timedelta(days=2))[1]]
+check("  a registered route's shape is used when the call gives none, and another revision's pass leaves it alone",
+      (reg_reads, other_code.rebuild(now=NOW + timedelta(days=2))['rebuilt']), (['built', 'kept'], 0))
 
 print(f"\n{len(fails)} failure(s)" + (': ' + '; '.join(fails) if fails else ''))
 sys.exit(1 if fails else 0)

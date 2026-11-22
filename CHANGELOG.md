@@ -2,6 +2,27 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.52.0 - 2026-11-22 PT
+
+`answer_cache`: an answer ends only when something it was built from changes (SMADPickleBot #2175; Gene, 11/22/26:
+"It should dirty only when data changes, not based on time expiry!", "when time based data expires, throw an event
+that cache listens to to expire. Change is pushed, not polled", and "We should know in an api change if cache needs
+to be flushed, and not flush it every time"). **Breaking**, and it removes 0.51.0's two options:
+
+- **No age and no day's end.** `AnswerCache(day_end=, max_age=)` and `MAX_AGE` are gone, and no kept answer is found
+  stale by a clock check at read. A figure that changes with the clock is a domain like any other: the host names it
+  on the routes that hold such a figure and calls `bump` on it at the moment the figure changes, from its own clock
+  event. A route's `until` stays, for an end the answer itself names. `LASTING` (30 days) is only when a document
+  nobody changed is dropped.
+- **A route's `shape` decides the deploy.** `register(..., shape=)` and `answer(..., shape=)`: a route that names a
+  shape number is served across deploys until the number moves; a route that names none is kept under the code's
+  revision as before, so every deploy builds it again. The kept document carries `shape`.
+- `daily=` and `any_revision=` (0.51.0) are removed from `register`, `answer` and `usable`: the first is now every
+  route's rule, the second is `shape`.
+
+Host call sites (SMADPickleBot `services/api/fs_cache.py`): drop `day_end` and `max_age` from the constructor; add a
+clock domain and bump it from the host's midnight event; replace `daily=False, any_revision=True` with `shape=1`.
+
 ## 0.51.0 - 2026-11-22 PT
 
 `answer_cache`: an answer may outlive the day and a deploy (SMADPickleBot #2173). `answer(..., daily=False)` keeps an
