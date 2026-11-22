@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -436,6 +437,36 @@ check("run_stage: a failed stage keeps its log under a failed name and says its 
       (bad[0], os.path.exists(failed_log), said[0].splitlines(),
        open(os.path.join(stage_dir, 'tests-prev.log'), encoding='utf-8').read()),
       (False, True, [f'FAILED tests: 0 s (its log: {failed_log})', 'line 17', 'line 18', 'line 19'], 'all green\n'))
+
+sha_dir = tempfile.mkdtemp(prefix='short-sha-')
+for name in ('warm-abcdef1.log', 'warm-abcdef12.log', 'warm-abcdef9.log', 'stages-abcdef1.json'):
+    open(os.path.join(sha_dir, name), 'w').close()
+check("short_sha_path, the positive case: the longest short-sha name the full sha starts with",
+      os.path.basename(R.short_sha_path(sha_dir, 'abcdef12345', 'warm-', '.log')), 'warm-abcdef12.log')
+check("short_sha_path: a seven-character name when that is the only match; '' for none or a missing folder",
+      (os.path.basename(R.short_sha_path(sha_dir, 'abcdef1999', 'warm-', '.log')),
+       R.short_sha_path(sha_dir, '1234567890', 'warm-', '.log'),
+       R.short_sha_path(os.path.join(sha_dir, 'gone'), 'abcdef12345', 'warm-', '.log')),
+      ('warm-abcdef1.log', '', ''))
+
+T0 = 1_800_000_000   # 2027-01-15T08:00:00Z
+
+
+def stamp(at, text):
+    return f"{time.strftime(R.STAMP, time.gmtime(at))} {text}"
+
+
+run_log = [stamp(T0 - 600, 'warm: a stage failed (tests 3 s)'), 'no stamp at all', stamp(T0 + 5, 'tests: started'),
+           stamp(T0 + 90, 'warm: every stage passed (tests 12 s; 90 s in all)')]
+check("stamped_verdict, the positive case: this run's own pass line is 0",
+      R.stamped_verdict(run_log, T0, 'warm: ', 'warm: every stage passed'), 0)
+check("stamped_verdict: this run's failure is 1; an earlier run's line is never read (None); unknown since is None",
+      (R.stamped_verdict(run_log[:3] + [stamp(T0 + 40, 'warm: a stage failed (images)')], T0, 'warm: ',
+                         'warm: every stage passed'),
+       R.stamped_verdict(run_log[:3], T0, 'warm: ', 'warm: every stage passed'),
+       R.stamped_verdict(run_log, None, 'warm: ', 'warm: every stage passed'),
+       R.stamped_verdict(run_log, str(T0), 'warm: ', 'warm: every stage passed')),
+      (1, None, None, 0))
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

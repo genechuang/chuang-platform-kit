@@ -15,8 +15,11 @@ started, watched to their end within a bound, one line saying what happened.
 
 `newest` and `history_bound`: a wait's bound from what the work took before, the slowest of the last runs on record
 times a factor (the timeout rule's 150%), a default when nothing is on record; what a run took is read by the host's
-own readers of its own logs. Standard library only.
+own readers of its own logs. `short_sha_path` and `stamped_verdict`: a run's log named by its head's short sha, and
+the verdict of one run read from a log every run appends to, never an earlier run's (SMADPickleBot #1125, #2162).
+Standard library only.
 """
+import calendar
 import json
 import os
 import re
@@ -28,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
            'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'dispatched_runs', 'watch_jobs', 'gh_seconds',
            'run_profiles', 'step_seconds', 'log_lines', 'actions_operational', 'GH_STATUS', 'run_stage',
-           'profile_lines', 'keep_logs']
+           'profile_lines', 'keep_logs', 'short_sha_path', 'stamped_verdict', 'STAMP']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
 REASON = r'pre-push|refused|FAILED|no desktop build|has no '      # a hook's reason lines, said before the refusal
@@ -232,6 +235,43 @@ def newest(folder: str, prefix: str, suffix: str) -> list:
         except OSError:
             return 0.0
     return sorted((os.path.join(folder, n) for n in names), key=written, reverse=True)
+
+
+def short_sha_path(folder: str, sha: str, prefix: str, suffix: str) -> str:
+    """The file in `folder` named prefix<short sha>suffix for `sha`, where the short sha is `git rev-parse --short=7`'s,
+    which runs past seven characters when seven are ambiguous: the longest such name that `sha` starts with. '' when
+    there is none or the folder cannot be read."""
+    try:
+        names = [n[len(prefix):len(n) - len(suffix)] for n in os.listdir(folder)
+                 if n.startswith(prefix + sha[:7]) and n.endswith(suffix)]
+    except OSError:
+        return ''
+    names = [n for n in names if sha.startswith(n)]
+    return os.path.join(folder, f'{prefix}{max(names, key=len)}{suffix}') if names else ''
+
+
+STAMP = '%Y-%m-%dT%H:%M:%SZ'   # an appended log's own UTC stamp at the head of each line
+
+
+def stamped_verdict(lines, since, prefix: str, passed: str):
+    """How the run that started at `since` (epoch seconds) ended, read from a log every run of the same work appends to,
+    each line `<STAMP> <text>`: 0 when its newest line starting `prefix` starts `passed`, 1 for any other such line,
+    None when no such line is stamped at or after `since` (the run was stopped, killed or is still going) or `since` is
+    unknown. Read newest first and stopped at the first line older than `since`, so an earlier run's verdict is never
+    read as this one's; a line with no stamp is skipped."""
+    if since is None:
+        return None
+    for raw in reversed(list(lines)):
+        stamp, _, text = raw.partition(' ')
+        try:
+            at = calendar.timegm(time.strptime(stamp, STAMP))   # utc-ok: the log's own UTC stamp
+        except ValueError:
+            continue
+        if at < int(float(since)):
+            return None
+        if text.startswith(prefix):
+            return 0 if text.startswith(passed) else 1
+    return None
 
 
 def history_bound(sources, factor: float, default: int, last: int) -> tuple:
