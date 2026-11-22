@@ -88,7 +88,7 @@ check("gate: a good end stands down; an unreadable store grabs after stale_s; no
       (False, True, True, '[STANDBY] book: no Firestore client; grabbing'))
 check("aware: a naive datetime is UTC, an ISO Z string reads, junk is None",
       (S.aware(datetime(2026, 1, 1)).tzinfo, S.aware('2026-11-21T07:58:00Z'), S.aware('x'), S.aware(3)),
-      (timezone.utc, T0, None, None))
+      (timezone.utc, T0, None, None))   # utc-ok: the zone a naive instant is read in
 
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))

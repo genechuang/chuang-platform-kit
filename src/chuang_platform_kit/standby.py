@@ -18,7 +18,7 @@ def aware(value):
     """A stored instant as an aware datetime: a datetime (a naive one read as UTC) or an ISO string, None for anything
     else or an unreadable string."""
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)   # utc-ok: a stored naive instant is UTC
     if isinstance(value, str) and value:
         try:
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -28,7 +28,7 @@ def aware(value):
 
 
 def _now(now) -> datetime:
-    return now or datetime.now(timezone.utc)
+    return now or datetime.now(timezone.utc)   # utc-ok: an instant to compare beats by, never a day
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ class Lease:
         down (the desktop's run ended well, or `until` passed with the desktop still holding). Reads every `poll_s`; a
         store that cannot be read for `stale_s` is a desktop that has fenced itself, so it runs. `store` None runs at
         once. Each verdict that ends the wait is one log line, `name` the runner's."""
-        clock = now or (lambda: datetime.now(timezone.utc))
+        clock = now or (lambda: datetime.now(timezone.utc))   # utc-ok: an instant to compare beats by, never a day
         if store is None:
             log(f'{self.tag} {name}: no Firestore client; grabbing')
             return True
