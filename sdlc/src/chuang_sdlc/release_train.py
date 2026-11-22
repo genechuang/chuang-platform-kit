@@ -26,7 +26,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
-           'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'watch_jobs']
+           'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'watch_jobs', 'gh_seconds', 'run_profiles',
+           'profile_lines', 'keep_logs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
 REASON = r'pre-push|refused|FAILED|no desktop build|has no '      # a hook's reason lines, said before the refusal
@@ -319,3 +320,89 @@ def watch_jobs(read_jobs, done, ok, timeout: int, step: int = 5, pause=time.slee
             agreed = 0
         pause(step)
     return False
+
+
+def gh_seconds(start, end):
+    """Whole seconds between two GitHub timestamps; None when either is missing or unreadable."""
+    a, b = parse_instant(start), parse_instant(end)
+    return int((b - a).total_seconds()) if a and b else None
+
+
+def run_profiles(api, sha: str, watch, events=('push', 'workflow_dispatch'), skip_branch: str = None) -> list:
+    """Every workflow run of `sha` whose event is one of `events` (never another branch's run of the same commit,
+    `skip_branch`), each still going waited on with `watch(run_id)`, then [{name, id, conclusion, seconds, jobs: [{name,
+    seconds, waited, slowest: [(step, seconds)]}]}]: the jobs that ran (a skipped one left out), how long each waited to
+    start, its two slowest steps. `api(path)` answers GitHub's REST JSON for a `repos/{owner}/{repo}/...` path."""
+    def own(found):
+        return [r for r in found.get('workflow_runs', []) if r.get('event') in events
+                and (skip_branch is None or r.get('head_branch') != skip_branch)]
+    path = f'repos/{{owner}}/{{repo}}/actions/runs?head_sha={sha}&per_page=50'
+    for r in own(api(path)):
+        if r.get('status') != 'completed':
+            watch(str(r['id']))
+    out = []
+    for r in own(api(path)):
+        jobs = []
+        for j in api(f"repos/{{owner}}/{{repo}}/actions/runs/{r['id']}/jobs?per_page=100").get('jobs', []):
+            if j.get('conclusion') == 'skipped':
+                continue
+            steps = sorted(((s['name'], gh_seconds(s.get('started_at'), s.get('completed_at')) or 0)
+                            for s in j.get('steps') or []), key=lambda s: -s[1])[:2]
+            jobs.append({'name': j['name'], 'seconds': gh_seconds(j.get('started_at'), j.get('completed_at')),
+                         'waited': gh_seconds(r.get('run_started_at'), j.get('started_at')), 'slowest': steps})
+        out.append({'name': r['name'], 'id': r.get('id'), 'conclusion': r.get('conclusion'),
+                    'seconds': gh_seconds(r.get('run_started_at'), r.get('updated_at')), 'jobs': jobs})
+    return out
+
+
+def profile_lines(sha: str, kind: str, times: dict, runs: list, history: str, now=time.time) -> list:
+    """A release's profile lines: its stages, each run with its four slowest jobs (how long each waited to start, its
+    slowest steps), then the same set beside the last release of this `kind` in `history` (a JSON line per release),
+    to which this one is added. Every time in seconds."""
+    lines = [f'release profile ({sha[:8]}, {kind}):', '  stages: ' + ', '.join(f'{k} {v} s' for k, v in times.items())]
+    for r in sorted(runs, key=lambda r: -(r['seconds'] or 0)):
+        lines.append(f"  {r['name']} {r['seconds']} s ({r['conclusion']})")
+        for j in sorted(r['jobs'], key=lambda j: -(j['seconds'] or 0))[:4]:
+            slow = ', '.join(f'{n} {s} s' for n, s in j['slowest'] if s)
+            lines.append(f"    {j['name']} {j['seconds']} s, started +{j['waited']} s" + (f'; slowest: {slow}' if slow else ''))
+    this = {'sha': sha, 'kind': kind, 'at': now(), 'stages': times, 'runs': {r['name']: r['seconds'] for r in runs}}
+    before = None
+    try:
+        with open(history, encoding='utf-8') as f:
+            for ln in f:
+                rec = json.loads(ln)
+                if rec.get('kind') == kind:
+                    before = rec
+    except (OSError, ValueError):
+        pass
+    if before:
+        diffs = [f'{k} {before["stages"].get(k, "–")} → {v} s' for k, v in times.items()]
+        diffs += [f'{n} {before["runs"].get(n, "–")} → {s} s' for n, s in this['runs'].items()]
+        lines.append(f'  vs the last {kind} release ({before["sha"][:8]}): ' + '; '.join(diffs))
+    else:
+        lines.append(f'  no earlier {kind} release on record to compare')
+    try:
+        with open(history, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(this) + '\n')
+    except OSError:
+        pass
+    return lines
+
+
+def keep_logs(sha: str, logs: str, names, since: float = 0) -> list:
+    """A release's stage logs (`names` in `logs`) copied to <logs>/<sha7>/, since the next release writes the same
+    names; a log last written before `since` (an older release's, a stage that did not run) is left out. The names
+    copied."""
+    import shutil
+    dest, kept = os.path.join(logs, sha[:7]), []
+    for name in names:
+        src = os.path.join(logs, name)
+        try:
+            if os.path.getmtime(src) + 1 < since:
+                continue
+            os.makedirs(dest, exist_ok=True)
+            shutil.copy2(src, os.path.join(dest, name))
+            kept.append(name)
+        except OSError:
+            continue
+    return kept

@@ -305,6 +305,46 @@ check("watch_jobs: done once then a job still going starts the count again; a fa
        R.watch_jobs(jobs_reader(ValueError('x'), green, green), done_all, ok_one, 60, pause=lambda s: None)),
       (True, False, False, True))
 
+check("gh_seconds: whole seconds between two GitHub stamps; None for a missing one",
+      (R.gh_seconds('2026-11-22T01:00:00Z', '2026-11-22T01:01:05Z'), R.gh_seconds(None, '2026-11-22T01:00:00Z')),
+      (65, None))
+RUNS = {'workflow_runs': [
+    {'id': 1, 'name': 'Deploy', 'event': 'push', 'head_branch': 'main', 'status': 'completed', 'conclusion': 'success',
+     'run_started_at': '2026-11-22T01:00:00Z', 'updated_at': '2026-11-22T01:02:00Z'},
+    {'id': 2, 'name': 'Graph', 'event': 'dynamic', 'head_branch': 'main', 'status': 'queued'},
+    {'id': 3, 'name': 'Deploy', 'event': 'workflow_dispatch', 'head_branch': 'dock', 'status': 'in_progress'}]}
+JOBS = {'jobs': [
+    {'name': 'api', 'conclusion': 'success', 'started_at': '2026-11-22T01:00:10Z', 'completed_at': '2026-11-22T01:01:40Z',
+     'steps': [{'name': 'Smoke', 'started_at': '2026-11-22T01:01:00Z', 'completed_at': '2026-11-22T01:01:30Z'},
+               {'name': 'Setup', 'started_at': '2026-11-22T01:00:10Z', 'completed_at': '2026-11-22T01:00:15Z'},
+               {'name': 'Deploy', 'started_at': '2026-11-22T01:00:15Z', 'completed_at': '2026-11-22T01:01:00Z'}]},
+    {'name': 'site', 'conclusion': 'skipped'}]}
+watched = []
+runs = R.run_profiles(lambda path: JOBS if '/jobs' in path else RUNS, 'abc', watched.append, skip_branch='dock')
+check("run_profiles, the positive case: the release's own runs (no dynamic run, no dock run), a skipped job left "
+      "out, each job's seconds, wait to start and two slowest steps; only an open own run is watched",
+      (runs, watched),
+      ([{'name': 'Deploy', 'id': 1, 'conclusion': 'success', 'seconds': 120,
+         'jobs': [{'name': 'api', 'seconds': 90, 'waited': 10, 'slowest': [('Deploy', 45), ('Smoke', 30)]}]}], []))
+history = os.path.join(folder, 'history.jsonl')
+first_lines = R.profile_lines('a' * 40, 'web', {'tests': 20}, runs, history, now=lambda: 1.0)
+second = R.profile_lines('b' * 40, 'web', {'tests': 15}, runs, history, now=lambda: 2.0)
+check("profile_lines: the stages, each run and its slowest jobs; the first of a kind says so, the next sets each "
+      "beside it and the history grows",
+      (first_lines[:3], first_lines[-1], second[-1], len(open(history, encoding='utf-8').read().splitlines())),
+      (['release profile (aaaaaaaa, web):', '  stages: tests 20 s', '  Deploy 120 s (success)'],
+       '  no earlier web release on record to compare',
+       '  vs the last web release (aaaaaaaa): tests 20 → 15 s; Deploy 120 → 120 s', 2))
+old_log = os.path.join(folder, 'tests.log')
+with open(old_log, 'w', encoding='utf-8') as f:
+    f.write('x')
+os.utime(old_log, (500, 500))
+with open(os.path.join(folder, 'push.log'), 'w', encoding='utf-8') as f:
+    f.write('y')
+check("keep_logs: the logs written since the release began copied to <sha7>/; an older one and a missing one left out",
+      (R.keep_logs('c' * 40, folder, ('tests.log', 'push.log', 'build.log'), since=1000),
+       os.path.exists(os.path.join(folder, 'c' * 7, 'push.log'))), (['push.log'], True))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

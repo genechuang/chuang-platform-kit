@@ -1116,6 +1116,10 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `run_head(gh, repo, run_id)` | The commit a run builds (its headSha), which a dispatch on a branch takes from the branch at GitHub's dispatch; '' when GitHub does not say. |
 | `dispatched_run(gh, repo, workflow, since, tries, wait, sleep=)` | The run a `gh workflow run` just made: the oldest `workflow_dispatch` run of `workflow` created at or after `since` (epoch seconds), asked up to `tries` times `wait` seconds apart, since a dispatch's run appears a few seconds after it; '' when none appeared. |
 | `watch_jobs(read_jobs, done, ok, timeout, step=, pause=, unreadable=)` | A run waited on to its end by its jobs, read every `step` s for at most `timeout`: whether every job succeeded (`ok(job)` for each), a wait that runs out never a success. `done(jobs)` must hold on two reads in a row, since a job that waits on another may not… |
+| `gh_seconds(start, end)` | Whole seconds between two GitHub timestamps; None when either is missing or unreadable. |
+| `run_profiles(api, sha, watch, events=, skip_branch=)` | Every workflow run of `sha` whose event is one of `events` (never another branch's run of the same commit, `skip_branch`), each still going waited on with `watch(run_id)`, then [{name, id, conclusion, seconds, jobs: [{name, seconds, waited, slowest: [(step, s… |
+| `profile_lines(sha, kind, times, runs, history, now=)` | A release's profile lines: its stages, each run with its four slowest jobs (how long each waited to start, its slowest steps), then the same set beside the last release of this `kind` in `history` (a JSON line per release), to which this one is added. Every t… |
+| `keep_logs(sha, logs, names, since=)` | A release's stage logs (`names` in `logs`) copied to <logs>/<sha7>/, since the next release writes the same names; a log last written before `since` (an older release's, a stage that did not run) is left out. The names copied. |
 
 ## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
 
