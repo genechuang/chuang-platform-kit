@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
            'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'dispatched_runs', 'watch_jobs', 'gh_seconds',
-           'run_profiles', 'step_seconds', 'log_lines', 'actions_operational', 'GH_STATUS',
+           'run_profiles', 'step_seconds', 'log_lines', 'actions_operational', 'GH_STATUS', 'run_stage',
            'profile_lines', 'keep_logs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
@@ -299,6 +299,39 @@ def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait:
             return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
         sleep(wait)
     return ''
+
+
+def run_stage(name: str, args: list, log: str, cwd: str = None, env: dict = None, say=print, tail: int = 12,
+              run=subprocess.run, now=time.time, stamp=None) -> tuple:
+    """(ok, seconds, the output) for one release stage, its whole output in `log`; `env` added to the environment. The
+    run before this one, whatever ended it, stays as `<log>-prev.log`; a failed stage says its last `tail` lines and
+    keeps its log as `<log>-failed-<HHMMSS>.log` beside it, which a retry cannot overwrite (SMADPickleBot #828, #1258).
+    `say` writes the stage's one line, `ok  <name>: N s` or `FAILED <name>: N s (its log: ...)`."""
+    import shutil
+    began = now()
+    base = os.path.splitext(log)[0]
+    if os.path.exists(log):
+        try:
+            os.replace(log, f'{base}-prev.log')
+        except OSError:
+            pass
+    with open(log, 'w', encoding='utf-8') as out:
+        code = run(args, cwd=cwd, stdout=out, stderr=subprocess.STDOUT,
+                   **({'env': {**os.environ, **env}} if env else {})).returncode
+    with open(log, encoding='utf-8', errors='replace') as f:
+        text = f.read()
+    seconds = round(now() - began)
+    if code == 0:
+        say(f'ok  {name}: {seconds} s')
+        return True, seconds, text
+    kept = f"{base}-failed-{(stamp or (lambda: time.strftime('%H%M%S')))()}.log"   # local-ok: a file name's own clock
+    try:
+        shutil.copyfile(log, kept)
+    except OSError:
+        kept = log
+    last = '\n'.join(text.strip().splitlines()[-tail:])
+    say(f'FAILED {name}: {seconds} s (its log: {kept})\n{last}')
+    return False, seconds, text
 
 
 GH_STATUS = 'https://www.githubstatus.com/api/v2/components.json'   # GitHub's public status page, no token

@@ -408,6 +408,35 @@ check("actions_operational, the positive case: operational and degraded are up; 
        R.actions_operational(lambda url, timeout=None: Page(b'{"components": []}'))),
       (True, True, False, None, None))
 
+stage_dir = tempfile.mkdtemp(prefix='stage-')
+stage_log = os.path.join(stage_dir, 'tests.log')
+said = []
+
+
+def fake_run(code, body):
+    def run(args, cwd=None, stdout=None, stderr=None, **kw):
+        stdout.write(body)
+
+        class Done:
+            returncode = code
+        return Done()
+    return run
+
+
+ticks = iter([100.0, 117.4])
+ok = R.run_stage('tests', ['x'], stage_log, say=said.append, run=fake_run(0, 'all green\n'), now=lambda: next(ticks))
+check("run_stage, the positive case: (True, seconds, the output), the output in the log, one ok line",
+      (ok, open(stage_log, encoding='utf-8').read(), said), ((True, 17, 'all green\n'), 'all green\n', ['ok  tests: 17 s']))
+said.clear()
+body = ''.join(f'line {n}\n' for n in range(20))
+bad = R.run_stage('tests', ['x'], stage_log, say=said.append, run=fake_run(1, body), now=lambda: 0.0, tail=3,
+                  stamp=lambda: '174500')
+failed_log = os.path.join(stage_dir, 'tests-failed-174500.log')
+check("run_stage: a failed stage keeps its log under a failed name and says its last lines; the run before stays -prev",
+      (bad[0], os.path.exists(failed_log), said[0].splitlines(),
+       open(os.path.join(stage_dir, 'tests-prev.log'), encoding='utf-8').read()),
+      (False, True, [f'FAILED tests: 0 s (its log: {failed_log})', 'line 17', 'line 18', 'line 19'], 'all green\n'))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
