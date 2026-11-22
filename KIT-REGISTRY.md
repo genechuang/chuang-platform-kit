@@ -1107,6 +1107,9 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `Lease.take(sha)` | True once this run holds the lease (or there is no store, or it could not be read: pushed blind); False when another run held it past `wait`. |
 | `Lease.renew(sha)` | `until` pushed on while the lease is still this run's; False when another run holds it now. |
 | `Lease.free()` | The lease deleted when it is still this run's; a lease left frees itself after `lease_s`. |
+| `classify_push(returncode, stdout, stderr, say=, tag=)` | 'ok', 'behind' (the branch moved: rebase and try again) or 'refused' (anything else: the hook's own refusal, the network) for one `git push`'s answer. A refusal says the hook's reason lines first, from standard output as well as standard error (SMADPickleBot… |
+| `push_loop(lease, tries, head, rebase, gate, push, carry, last, say=, tag=, branch=)` | The push's tries under `lease`, 0 once it landed, 1 when it stopped. Each try: the lease taken (a push that waited for another run's then rebases onto what that one landed), the rebase, the lease renewed and the gate, the lease renewed, the push. 'behind' reb… |
+| `release_runs(sha, gh, run, at_most, branch=, sleep=, now=, retry_empty=, only_open=, cwd=)` | The runs `sha` started on `branch` by its push, watched to their end (`gh run watch`, never a poll), `at_most` seconds in all; what happened, in one line. `gh(args)` answers `gh run list` (returncode, stdout), `run(argv, cwd=, timeout=)` runs the watch. The l… |
 
 ## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
 

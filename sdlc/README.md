@@ -31,7 +31,8 @@ read-only worktree, one at a time, capped and logged, on the subscriptions' acco
 folded into kinds, a kind fired when it is new, growing or a kept one repeating, the investigator's verdict recorded,
 the kinds kept in the project's collection. And the release train's generic parts, moved from a host's pipeline
 scripts one at a time (`release_train`): `Lease`, one push at a time to a shared branch, a killed run's lease taken
-over and an unreadable store pushed past blind.
+over and an unreadable store pushed past blind; `push_loop` and `classify_push`, the push's tries under it, a gate's
+mark carried when the branch moved; and `release_runs`, a release's own runs watched to their end within a bound.
 
 It is a distribution of its own in the chuang-platform-kit repository, so a release of it redeploys only what runs
 it: a host pins it where its ticket tools run, never in every service the main package is in.

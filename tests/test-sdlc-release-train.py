@@ -127,6 +127,89 @@ check("parse_instant: a Z string, a naive string read as UTC, junk and empty",
        R.parse_instant('')),
       (NOW, NOW, None, None))
 
+lines = []
+check("classify_push: ok, behind (git's words without a hook), refused with the hook's reason from stdout first",
+      (R.classify_push(0, '', '', say=lines.append),
+       R.classify_push(1, '', ' ! [rejected]        HEAD -> dock (fetch first)', say=lines.append), lines[:],
+       R.classify_push(1, 'push gate: refused: no desktop build', 'error: failed to push some refs',
+                       say=lines.append, tag='[push]'), lines),
+      ('ok', 'behind', [], 'refused',
+       ['[push]: push gate: refused: no desktop build', '[push]: the push was refused: error: failed to push some refs']))
+check("classify_push: a pre-push hook's [rejected] is the hook's refusal, never 'behind'",
+      R.classify_push(1, '', 'error: failed to push (pre-push hook declined)\n ! [rejected] x', say=lambda s: None),
+      'refused')
+
+
+class Held:
+    def __init__(self, take=True, renews=()):
+        self.took, self.renews, self.calls = take, list(renews), 0
+
+    def take(self, sha):
+        return self.took
+
+    def renew(self, sha):
+        self.calls += 1
+        return self.renews.pop(0) if self.renews else True
+
+
+def loop(pushes, gate=True, carry=False, lease=None, tries=3, rebases=None):
+    seq, got, said = list(pushes), [], []
+    heads = iter(f'h{n}' for n in range(100))
+    reb = list(rebases or [])
+    rc = R.push_loop(lease or Held(), tries, head=lambda: next(heads),
+                     rebase=lambda: (got.append('rebase'), reb.pop(0) if reb else True)[1],
+                     gate=lambda: (got.append('gate'), gate)[1],
+                     push=lambda: (got.append('push'), seq.pop(0))[1],
+                     carry=lambda old, new: (got.append('carry'), carry)[1], last=lambda: 'abc1234 subject',
+                     say=said.append)
+    return rc, got, said
+
+
+check("push_loop, the positive case: one try gates once and pushes, said with the landed commit",
+      loop(['ok']), (0, ['rebase', 'gate', 'push'], ['dock-push: pushed on try 1: abc1234 subject']))
+check("push_loop: behind with a mark that carries pushes at once; without one the next try gates the rebased tree",
+      (loop(['behind', 'ok'], carry=True), loop(['behind', 'ok'], carry=False)[:2]),
+      ((0, ['rebase', 'gate', 'push', 'rebase', 'carry', 'push'],
+        ['dock-push: dock moved; the mark carried and pushed on try 1: abc1234 subject']),
+       (0, ['rebase', 'gate', 'push', 'rebase', 'carry', 'rebase', 'gate', 'push'])))
+check("push_loop: a refused push, a failed gate, a lease not taken, a failed rebase and tries spent each stop with 1",
+      (loop(['refused'])[0], loop(['ok'], gate=False)[2], loop(['ok'], lease=Held(take=False))[1],
+       loop(['ok'], rebases=[False])[1], loop(['behind', 'behind'], tries=2)[2][-1]),
+      (1, ['dock-push: try 1 stopped before the push; nothing pushed'], [], ['rebase'],
+       'dock-push: not pushed after 2 tries'))
+
+
+class Got:
+    def __init__(self, returncode=0, stdout=''):
+        self.returncode, self.stdout = returncode, stdout
+
+
+def rows(*items):
+    return Got(0, __import__('json').dumps([dict(zip(('databaseId', 'status', 'headBranch', 'event'), r)) for r in items]))
+
+
+watched, naps = [], []
+answers = [rows((1, 'completed', 'main', 'push'), (2, 'in_progress', 'main', 'push'), (3, 'queued', 'main', 'dynamic'),
+                (4, 'queued', 'other', 'push'))]
+said = R.release_runs('abc', gh=lambda args: answers.pop(0), run=lambda argv, cwd=None, timeout=None: watched.append(argv[3]),
+                      at_most=300, sleep=naps.append, now=lambda: 100.0)
+check("release_runs, the positive case: the push's own open runs on the branch watched; a dynamic run and another branch's left",
+      (said, watched, naps), ("the release's 2 run(s) are done (1 waited for, 0 s)", ['2'], []))
+empty = [Got(0, '[]'), Got(0, '[{"databaseId": 5, "status": "completed", "headBranch": "main"}]')]   # no event key
+check("release_runs: an empty list asked once more after 5 s; only_open with none open is ''; unlistable said",
+      (R.release_runs('abc', gh=lambda a: empty.pop(0), run=None, at_most=300, sleep=naps.append, now=lambda: 0.0),
+       naps, R.release_runs('abc', gh=lambda a: rows((6, 'completed', 'main', 'push')), run=None, at_most=300,
+                            only_open=True),
+       R.release_runs('abc', gh=lambda a: Got(1), run=None, at_most=300, retry_empty=False),
+       R.release_runs('abc', gh=lambda a: Got(1), run=None, at_most=300, only_open=True)),
+      ("the release's 1 run(s) are done (0 waited for, 0 s)", [5], '', "the release's runs could not be listed; gating now",
+       ''))
+clock = iter([0.0, 400.0])
+check("release_runs: a bound already spent says how many still ran",
+      R.release_runs('abc', gh=lambda a: rows((7, 'queued', 'main', 'push')), run=None, at_most=300,
+                     now=lambda: next(clock)),
+      "1 of the release's 1 run(s) still ran after 300 s; gating beside them")
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

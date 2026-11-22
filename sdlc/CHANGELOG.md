@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.49.0 - 2026-11-21 PT
+
+- `release_train` gains the dock push's other generic parts (SMADPickleBot #2159, step 2): `classify_push(returncode,
+  stdout, stderr, ...)` ('ok', 'behind' or 'refused', a hook's reason lines said first), `push_loop(lease, tries, head,
+  rebase, gate, push, carry, last, ...)` (each try under the lease; 'behind' rebases and carries the gate's mark or
+  gates the rebased tree next), and `release_runs(sha, gh, run, at_most, branch='main', ...)` (the head's push runs
+  watched to their end, a `dynamic` run or another branch's left out, SMADPickleBot #2152). Every line each says is the
+  dock push's, its tag and branch passed in. No signature changes. Suite: `tests/test-sdlc-release-train.py`.
+
 ## 0.48.0 - 2026-11-21 PT
 
 - New `release_train`: the release train's generic parts, moved from SMADPickleBot's pipeline scripts one at a time
