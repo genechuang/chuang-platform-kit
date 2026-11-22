@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
            'history_bound', 'watch_run', 'run_head', 'dispatched_run', 'dispatched_runs', 'watch_jobs', 'gh_seconds',
-           'run_profiles', 'step_seconds', 'log_lines',
+           'run_profiles', 'step_seconds', 'log_lines', 'actions_operational', 'GH_STATUS',
            'profile_lines', 'keep_logs']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
@@ -299,6 +299,24 @@ def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait:
             return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
         sleep(wait)
     return ''
+
+
+GH_STATUS = 'https://www.githubstatus.com/api/v2/components.json'   # GitHub's public status page, no token
+
+
+def actions_operational(opener=None, url: str = GH_STATUS):
+    """True or False from githubstatus.com's Actions component, degraded performance counting as up (a run may start);
+    None when the page cannot be read or names none (SMADPickleBot #1281, the re-climb's wait for GitHub Actions)."""
+    import urllib.request
+    try:
+        with (opener or urllib.request.urlopen)(url, timeout=10) as r:
+            data = json.loads(r.read() or b'{}')
+    except Exception:   # noqa: BLE001 - unread is unknown, and the caller waits on
+        return None
+    for c in data.get('components') or []:
+        if c.get('name') == 'Actions':
+            return c.get('status') in ('operational', 'degraded_performance')
+    return None
 
 
 def step_seconds(gh, repo: str, run_id, steps: dict) -> dict:

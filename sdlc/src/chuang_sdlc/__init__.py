@@ -47,6 +47,7 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
              their end; newest and history_bound, a wait's bound from the slowest runs on record; watch_run, run_head
              and dispatched_run, a GitHub Actions run watched to GitHub's own end and found after a dispatch, and
              dispatched_runs, a dispatch's several; step_seconds and log_lines, a run's named steps and log lines;
+             actions_operational, GitHub Actions' state from githubstatus.com;
              watch_jobs, a run waited on by its jobs, the host's done and ok rules; run_profiles, profile_lines,
              keep_logs and gh_seconds, a release's profile beside the last of its kind; the collection, id,
              bound, steps and words the host's (standard library only)
@@ -68,4 +69,4 @@ Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.57.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
+__version__ = '0.58.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)

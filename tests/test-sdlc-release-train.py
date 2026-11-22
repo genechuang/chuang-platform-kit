@@ -378,6 +378,36 @@ check("log_lines: the last line of each pattern; absent or an unread log is ''",
        R.log_lines(lambda a, timeout=None: Got(1), 'o/r', 5, {'tf': re.compile(r'(x)')})),
       ({'tf': 'TestFlight: build 31 submitted for external review', 'st': 'App Store: ok', 'none': ''}, {'tf': ''}))
 
+class Page:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self.body
+
+
+def status(state):
+    return lambda url, timeout=None: Page(json.dumps({'components': [{'name': 'Git', 'status': 'major_outage'},
+                                                                     {'name': 'Actions', 'status': state}]}).encode())
+
+
+def down(url, timeout=None):
+    raise OSError('no route')
+
+
+check("actions_operational, the positive case: operational and degraded are up; an outage is down; an unread page or "
+      "one with no Actions component is None",
+      (R.actions_operational(status('operational')), R.actions_operational(status('degraded_performance')),
+       R.actions_operational(status('major_outage')), R.actions_operational(down),
+       R.actions_operational(lambda url, timeout=None: Page(b'{"components": []}'))),
+      (True, True, False, None, None))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:
