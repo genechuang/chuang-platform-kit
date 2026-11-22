@@ -369,6 +369,41 @@ check('  one minute short of it, nothing',
 check('  the lead, a card with no owner, an owner whose every card waits, and an owner mid-push are never told',
       S.idle_owners([row(51, owner='Lee'), row(52, owner=''), row(53, owner='Cap', light='ask'),
                      row(54, owner='Cap', labels=('blocked',))], CFG, {}, NOW), {})
+
+# 0.63.0 (SMADPickleBot #2200; Gene, 11/22/26: "maybe blocked is not a good label, we also need Scheduled for ticket that
+# is blocked until a time/event?"): on a board with a scheduled Light, a wait that names and links no ticket shows it.
+scfg = dict(bcfg, lights=dict(bcfg['lights'], scheduled='clock'))
+splan = lambda c, line=None, **facts: S.plan(c, dict({'line': line or {}, 'blockers': []}, **facts), {}, NOW, scfg)  # noqa: E731
+word = S.scrum_line([say('Scrum: scheduled | a day of dock landings to read | eta 11/11/26 6 PM')], LOGIN)
+p = splan(card(light='busy'), word)
+check('0.63.0, the positive case: `scheduled | <what> | eta <when>` is read as the wait, sets the scheduled light and no '
+      'blocked label, and asks nothing before the ETA',
+      (word['kind'], word['ask'], [a for a in p['actions'] if a[0] in ('light', 'label', 'unlabel')], p['question'],
+       p['state'].startswith('scheduled for a day of dock landings to read, ETA')),
+      ('blocked on', 'a day of dock landings to read', [('light', 'scheduled')], '', True))
+check('  the word without its first bar reads the same',
+      S.scrum_line([say('Scrum: scheduled the Sunday game | eta 11/11/26')], LOGIN)['ask'], 'the Sunday game')
+p = splan(card(light='stop', labels=('blocked',)), S.scrum_line([say('Scrum: blocked on the Monday police email | eta 11/11/26 6 PM')], LOGIN))
+check('  the old word on a card that shows blocked: the scheduled light on and the blocked label off, nobody rewriting it',
+      sorted(a for a in p['actions'] if a[0] in ('light', 'label', 'unlabel')), [('light', 'scheduled'), ('unlabel', 'blocked')])
+p = splan(card(light='clock'), word)
+check('  already scheduled: no light or label written again', [a for a in p['actions'] if a[0] in ('light', 'label', 'unlabel')], [])
+p = splan(card(light='busy'), S.scrum_line([say("Scrum: blocked on Gene's pick on #2079 | eta 11/21/26 6 PM")], LOGIN))
+check('  a wait that names a ticket is a block, not a date: the blocked light and label, as before',
+      sorted(a for a in p['actions'] if a[0] in ('light', 'label')), [('label', 'blocked'), ('light', 'blocked')])
+p = splan(card(light='clock'), S.scrum_line([say('Scrum: scheduled | the dry run | eta 10/28/26 9 AM')], LOGIN))
+check('  past its ETA its owner is asked whether the wait is over, in the scheduled word',
+      ('is scheduled for the dry run, and its ETA' in p['question'], 'is the wait over?' in p['question']), (True, True))
+p = splan(card(light='clock'), {'kind': 'building', 'eta': '5 PM', 'at': NOW.isoformat()})
+check('  `building` after it: the working light back', [a for a in p['actions'] if a[0] == 'light'], [('light', 'working')])
+p = splan(card(light='clock'), {})
+check('  a scheduled light its owner\'s newest line no longer backs comes off, and the owner is asked what is next',
+      ([a for a in p['actions'] if a[0] == 'light'], p['state'], 'is unblocked' in p['question']),
+      ([('light', 'shipyard')], 'no block on record: the scheduled light off', True))
+check('  a board with no scheduled light shows the same wait as blocked, as before',
+      sorted(a for a in bplan(card(light='busy'), word)['actions'] if a[0] in ('light', 'label')), [('label', 'blocked'), ('light', 'blocked')])
+check('  a scheduled card is no card its owner is told to start',
+      S.idle_owners([row(61, light='clock')], scfg, {}, NOW), {})
 pcfg = dict(CFG, lights=dict(CFG['lights'], pushing='push'))
 check('  a dock push under way is work: nothing told',
       S.idle_owners([row(61, light='push'), row(62)], pcfg, {}, NOW), {})

@@ -793,7 +793,7 @@ def start(numbers, run=None, cfg: dict = None, eta: str = '') -> list:
         values = {} if at == target else {'Status': 'shipyard'}
         # 0.22.0: a card its owner says is blocked keeps that light through a commit naming it (the owner's own
         # `Scrum: building` line, read by the scrum master, ends the block), so a commit never flips it back and forth
-        keep = (lights.get('working'), lights.get('needs')) + ((lights['blocked'],) if lights.get('blocked') and at == target else ())
+        keep = (lights.get('working'), lights.get('needs')) + tuple(lights[r] for r in ('blocked', 'scheduled') if lights.get(r) and at == target)   # 0.63.0: the scheduled light too
         if 'Light' in cfg['fields'] and light not in keep:
             values['Light'] = lights['working']
         if eta and 'ETA' in cfg['fields'] and not getattr(got, 'eta', ''):

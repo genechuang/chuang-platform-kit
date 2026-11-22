@@ -3,6 +3,19 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.63.0 - 2026-11-22 PT
+
+- A wait on a date or an event shows a board's **scheduled** Light (SMADPickleBot #2200; its lead, 11/22/26: "maybe
+  blocked is not a good label, we also need Scheduled for ticket that is blocked until a time/event?", with 13 cards
+  showing blocked and three of them blocked on anybody). On a board whose `lights` has `scheduled`, a `blocked on
+  <what> | eta <when>` wait that names and links no ticket sets that Light and carries no `blocked` label (one already
+  on comes off), and its asks say "scheduled for". A wait that names or links a ticket, and every `blocked by`, stay
+  blocked as before. A board with no scheduled Light is unchanged.
+- New owner's word `Scrum: scheduled | <what> | eta <when>` (the first bar optional), read as the same wait.
+- `tickets.start` keeps the scheduled Light through a commit naming the card, as it keeps the blocked one; a scheduled
+  card is not one `scrum.idle_owners` tells its owner to start.
+- No signature changes. Suite: `tests/test-sdlc-scrum.py`.
+
 ## 0.62.0 - 2026-11-22 PT
 
 - New `moves.label_first(column, token)` (SMADPickleBot #2194; its lead, 11/22/26: "keep all static description card

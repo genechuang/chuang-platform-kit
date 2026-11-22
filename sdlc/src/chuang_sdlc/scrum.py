@@ -9,6 +9,9 @@ An owner answers on the ticket with one line, the newest one by the repository's
   Scrum: blocked by #N | <who>        #N blocks it; <who> (a session, or the lead) can unblock it
   Scrum: blocked on <what> | eta <when>  it waits on something outside the board until about then (0.22.0); the
                                       board's blocked Light, if it has one, shows either block
+  Scrum: scheduled | <what> | eta <when>  the same wait by its better name (0.63.0, SMADPickleBot #2200): on a board
+                                      with a scheduled Light, a wait that names and links no ticket shows that
+                                      Light and carries no blocked label, whichever of the two words wrote it
   Scrum: depends on #N                it cannot be finished until #N is: back to the next column
   Scrum: needs <lead> | <the ask>     it waits on the lead's decision, written in full
   Scrum: paused | <why>               its owner set it down: back to the next column, its light off
@@ -123,7 +126,7 @@ def eta_ask(n) -> str:
 
 def _line_re(lead: str):
     """An owner's `Scrum:` line and its kind, the lead's own `needs <lead>` among the kinds."""
-    return re.compile(r'^\s*Scrum:\s*(building|next|blocked by|blocked on|depends on|needs ' + re.escape(lead.lower())
+    return re.compile(r'^\s*Scrum:\s*(building|next|blocked by|blocked on|scheduled|depends on|needs ' + re.escape(lead.lower())
                       + r'|paused|done)\b(.*)$', re.I | re.M)
 
 
@@ -193,6 +196,10 @@ def scrum_line(comments, login: str, skip=()) -> dict:
             continue
         m = found[-1]
         kind, rest = m.group(1).lower(), m.group(2)
+        if kind == 'scheduled':
+            # 0.63.0: `scheduled | <what> | eta <when>` (or `scheduled <what> | eta <when>`) is `blocked on <what>`
+            # by another word, so every rule below reads one kind.
+            kind, rest = 'blocked on', rest.lstrip().lstrip('|:').lstrip() if rest.lstrip()[:1] in ('|', ':') else rest
         # A full reference keeps its repository (`owner/repo#N`, SMADPickleBot #2006: the ChuangFinance session's
         # "after genechuang/ChuangFinance#26" on a SMAD card was read as SMAD's #26); a bare #N is the card's own.
         ref = re.search(r'(?:\b([\w.-]+/[\w.-]+))?#(\d+)', rest)
@@ -410,6 +417,7 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         return out
 
     blocked = lights.get('blocked') or ''   # 0.22.0 (SMADPickleBot #1336): a board with no blocked Light is unchanged
+    scheduled = lights.get('scheduled') or ''   # 0.63.0 (SMADPickleBot #2200): a board with none shows a wait as blocked
     # The blocked light comes from the owner's own line alone, and never replaces Needs you (the lead's ask and
     # assignment are its) or the host's pushing light (a push under way): the review of #1336.
     relight = blocked and light != blocked and light not in (lights.get('needs'), lights.get('pushing'))
@@ -426,6 +434,13 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         # every-blocker-closed rule below was reached.
         named = [int(m) for m in re.findall(r'#(\d+)', what) if int(m) != n]
         linked_now = [b for b, _s in blockers]
+        # 0.63.0 (SMADPickleBot #2200; Gene, 11/22/26: "maybe blocked is not a good label, we also need Scheduled for
+        # ticket that is blocked until a time/event?", with 13 cards Blocked and three of them blocked on anybody): a
+        # wait that names and links no ticket is a date or an event, and on a board with a scheduled Light it shows
+        # that Light and carries no blocked label. A wait on tickets stays blocked, as `blocked by` is.
+        sched = bool(scheduled) and not named and not linked_now
+        wait_role, wait_light = ('scheduled', scheduled) if sched else ('blocked', blocked)
+        word = 'scheduled for' if sched else 'blocked on'
         missing = [r for r in named if r not in linked_now]
         # The wait's own ETA only: a line with none never borrows the field's, which may still hold a build's date.
         eta, write = card_eta(card, line, now, state) if line.get('eta') else (None, '')
@@ -441,27 +456,29 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
             out['state'] = 'every ticket its wait names or links is closed'
             if BLOCKED_LABEL in labels:
                 out['actions'].append(('unlabel', BLOCKED_LABEL))
-            if blocked and light == blocked:
+            if light and light in (blocked, scheduled):
                 out['actions'].append(('light', 'shipyard'))
             out['change'] = 'Unblocked: every ticket its wait names or links is closed (' + ', '.join(f'#{r}' for r in closed) + ').'
             out['question'] = unblocked_q
             return out
         for r in missing:
             out['actions'].append(('link', r))
-        if relight:
-            out['actions'].append(('light', 'blocked'))
-            out['change'] = f'Switched to {blocked}: its owner says it waits on {what}.'
-        if BLOCKED_LABEL not in labels:
+        if wait_light and light != wait_light and light not in (lights.get('needs'), lights.get('pushing')):
+            out['actions'].append(('light', wait_role))
+            out['change'] = f'Switched to {wait_light}: its owner says it waits on {what}.'
+        if sched and BLOCKED_LABEL in labels:
+            out['actions'].append(('unlabel', BLOCKED_LABEL))   # a date is no block: the label is for a person or a ticket
+        elif not sched and BLOCKED_LABEL not in labels:
             out['actions'].append(('label', BLOCKED_LABEL))
         if write and 'ETA' in (cfg.get('fields') or {}):
             out['actions'].append(('eta', (write, line.get('at') or '')))
-        out['state'] = f'blocked on {what}' + (f', ETA {pt(eta)}' if eta else ', no ETA')
+        out['state'] = f'{word} {what}' + (f', ETA {pt(eta)}' if eta else ', no ETA')
         if eta and eta <= now:
-            out['question'] = (f"#{n} is blocked on {what}, and its ETA ({pt(eta)}) has passed: is the wait over? "
+            out['question'] = (f"#{n} is {word} {what}, and its ETA ({pt(eta)}) has passed: is the wait over? "
                                f"`Scrum: building | eta <when>` to pick it up, or `Scrum: blocked on {what} | eta <when>` "
                                "with the new end of the wait.")
         elif not eta:
-            out['question'] = (f"#{n} is blocked on {what} with no ETA: when should the wait be over? "
+            out['question'] = (f"#{n} is {word} {what} with no ETA: when should the wait be over? "
                                f"`Scrum: blocked on {what} | eta <when>`.")
         return out
 
@@ -500,7 +517,7 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         return out
 
     stale_label = BLOCKED_LABEL in labels and not blockers   # a `blocked on` label its line no longer backs
-    if blocked and light == blocked:
+    if light and light in (blocked, scheduled):
         # 0.22.0: blocked no more (its owner's newest line is no block, and no linked ticket blocks it): `building` turns
         # it to the working light; anything else takes the blocked light off and asks what is next, in the words of the
         # unblock above, so a card asked there is not asked again.
@@ -512,7 +529,7 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
             out['change'] = f"Switched to {lights['working']}, as its owner said: the wait is over."
             return out
         out['actions'].append(('light', 'shipyard'))
-        out['state'] = 'no block on record: the blocked light off'
+        out['state'] = 'no block on record: the ' + ('scheduled' if light == scheduled else 'blocked') + ' light off'
         out['question'] = unblocked_q
         return out
     if stale_label:
