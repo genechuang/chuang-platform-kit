@@ -1112,6 +1112,9 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `release_runs(sha, gh, run, at_most, branch=, sleep=, now=, retry_empty=, only_open=, cwd=)` | The runs `sha` started on `branch` by its push, watched to their end (`gh run watch`, never a poll), `at_most` seconds in all; what happened, in one line. `gh(args)` answers `gh run list` (returncode, stdout), `run(argv, cwd=, timeout=)` runs the watch. The l… |
 | `newest(folder, prefix, suffix)` | The paths in `folder` named prefix…suffix, newest first by file time; [] when the folder cannot be read (a file removed since the listing sorts last, and its reader then skips it). |
 | `history_bound(sources, factor, default, last)` | (seconds, found, slowest) for a wait on work that ran before: `factor` times the slowest of the last `last` readable runs of each source, or (`default`, found, None) when no source has one. `sources` is (kind, paths newest first, read) each, `read(path)` the… |
+| `watch_run(gh, repo, run_id, bound_s, again_s=, sleep=, now=)` | A GitHub Actions run watched to its end (`gh run watch`, never a poll); its conclusion. A watch that returns while the run is still going (its conclusion empty, its status not `completed`) is watched again after `again_s`, within `bound_s` in all, so a run is… |
+| `run_head(gh, repo, run_id)` | The commit a run builds (its headSha), which a dispatch on a branch takes from the branch at GitHub's dispatch; '' when GitHub does not say. |
+| `dispatched_run(gh, repo, workflow, since, tries, wait, sleep=)` | The run a `gh workflow run` just made: the oldest `workflow_dispatch` run of `workflow` created at or after `since` (epoch seconds), asked up to `tries` times `wait` seconds apart, since a dispatch's run appears a few seconds after it; '' when none appeared. |
 
 ## `chuang_sdlc.scrum`: The scrum master: a sweep of the board's shipyard column (every few minutes, and on each event nami…
 

@@ -240,6 +240,42 @@ check("history_bound: only the last `last` readable runs of a source count; none
        R.history_bound((('warms', [], seconds),), 1.5, 600, last=20)),
       ((450, {'warms': [300]}, 300), (600, {'warms': []}, None)))
 
+class Gh:
+    """A scripted `gh`: each call's args recorded, the answers given in order by the first word after 'run'."""
+
+    def __init__(self, answers):
+        self.answers, self.calls = answers, []
+
+    def __call__(self, args, timeout=None):
+        self.calls.append(args[:2] + [a for a in args if a.startswith('.')])
+        key = args[1] if args[1] != 'view' else args[args.index('-q') + 1]
+        return self.answers[key].pop(0)
+
+
+naps = []
+done = Gh({'watch': [Got(1)], '.conclusion': [Got(0, 'success\n')]})
+check("watch_run, the positive case: one watch, the conclusion read",
+      (R.watch_run(done, 'o/r', 7, 3600, sleep=naps.append, now=lambda: 0.0), len(done.calls), naps), ('success', 2, []))
+again = Gh({'watch': [Got(1), Got(0)], '.conclusion': [Got(0, ''), Got(0, 'failure')], '.status': [Got(0, 'in_progress')]})
+check("watch_run: a watch that returned while the run was still going is watched again after again_s",
+      (R.watch_run(again, 'o/r', 7, 3600, again_s=30, sleep=naps.append, now=lambda: 0.0), naps), ('failure', [30]))
+odd = Gh({'watch': [Got(0)], '.conclusion': [Got(0, '')], '.status': [Got(0, 'completed')]})
+late = Gh({'watch': [Got(1)], '.conclusion': [Got(0, '')], '.status': [Got(0, 'queued')]})
+check("watch_run: a completed run with no conclusion, or one still going at the bound, is 'unknown'",
+      (R.watch_run(odd, 'o/r', 7, 3600, now=lambda: 0.0), R.watch_run(late, 'o/r', 7, 20, again_s=30, now=lambda: 0.0)),
+      ('unknown', 'unknown'))
+check("run_head: the run's headSha, '' when GitHub refuses",
+      (R.run_head(Gh({'.headSha': [Got(0, 'abc123\n')]}), 'o/r', 7), R.run_head(Gh({'.headSha': [Got(1)]}), 'o/r', 7)),
+      ('abc123', ''))
+listing = Got(0, '[{"databaseId": 9, "createdAt": "2026-11-22T01:00:10Z"}, {"databaseId": 8, "createdAt": "2026-11-22T01:00:30Z"},'
+                 ' {"databaseId": 1, "createdAt": "2026-11-22T00:00:00Z"}]')
+since = datetime(2026, 11, 22, 1, 0, 5, tzinfo=timezone.utc).timestamp()   # utc-ok: GitHub's createdAt is UTC
+naps = []
+check("dispatched_run: the oldest dispatch run made since the dispatch; asked again while none has appeared; '' after",
+      (R.dispatched_run(Gh({'list': [Got(0, '[]'), listing]}), 'o/r', 'app.yml', since, 3, 4, sleep=naps.append), naps,
+       R.dispatched_run(Gh({'list': [Got(0, '[]'), Got(0, 'x')]}), 'o/r', 'app.yml', since, 2, 4, sleep=lambda s: None)),
+      ('9', [4], ''))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

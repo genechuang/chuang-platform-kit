@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.53.0 - 2026-11-21 PT
+
+- `release_train` gains a GitHub Actions run's handling (SMADPickleBot #2159, step 6, from its tf_pipe.py):
+  `watch_run(gh, repo, run_id, bound_s, again_s=30, ...)` (watched again while GitHub still runs it, never called
+  ended before GitHub says so), `run_head(gh, repo, run_id)` and `dispatched_run(gh, repo, workflow, since, tries,
+  wait)` (the run a dispatch made). `gh(args, timeout=)` is the host's. No signature changes. Suite:
+  `tests/test-sdlc-release-train.py`.
+
 ## 0.52.0 - 2026-11-21 PT
 
 - `cicd.pids.HolderLock(path, stale_s)`: a lock file naming its holder, {pid, pid_started, at} (SMADPickleBot #2159,

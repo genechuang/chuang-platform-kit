@@ -26,7 +26,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 __all__ = ['Lease', 'parse_instant', 'classify_push', 'push_loop', 'release_runs', 'BEHIND', 'newest',
-           'history_bound']
+           'history_bound', 'watch_run', 'run_head', 'dispatched_run']
 
 BEHIND = ('non-fast-forward', 'fetch first', '[rejected]')   # git's words for a push the branch moved ahead of
 REASON = r'pre-push|refused|FAILED|no desktop build|has no '      # a hook's reason lines, said before the refusal
@@ -250,3 +250,50 @@ def history_bound(sources, factor: float, default: int, last: int) -> tuple:
         return default, found, None
     slowest = max(every)
     return round(slowest * factor), found, slowest
+
+
+def watch_run(gh, repo: str, run_id, bound_s: int, again_s: int = 30, sleep=time.sleep, now=time.monotonic) -> str:
+    """A GitHub Actions run watched to its end (`gh run watch`, never a poll); its conclusion. A watch that returns
+    while the run is still going (its conclusion empty, its status not `completed`) is watched again after `again_s`,
+    within `bound_s` in all, so a run is never called ended before GitHub says so (SMADPickleBot, 11/21/26: a store run
+    read as "ended unknown" with Apple's TestFlight step still running stopped a passing chain). 'unknown' only for a
+    completed run with no conclusion, or one still going at the bound. `gh(args, timeout=)` answers (returncode,
+    stdout)."""
+    deadline = now() + bound_s
+    while True:
+        left = max(60, int(deadline - now()))
+        gh(['run', 'watch', str(run_id), '--exit-status', '--repo', repo], timeout=left)
+        got = gh(['run', 'view', str(run_id), '--json', 'conclusion', '-q', '.conclusion', '--repo', repo], timeout=60)
+        conclusion = (got.stdout or '').strip() if got.returncode == 0 else ''
+        if conclusion:
+            return conclusion
+        state = gh(['run', 'view', str(run_id), '--json', 'status', '-q', '.status', '--repo', repo], timeout=60)
+        if (state.stdout or '').strip() == 'completed' or now() + again_s >= deadline:
+            return 'unknown'
+        sleep(again_s)
+
+
+def run_head(gh, repo: str, run_id) -> str:
+    """The commit a run builds (its headSha), which a dispatch on a branch takes from the branch at GitHub's dispatch;
+    '' when GitHub does not say."""
+    got = gh(['run', 'view', str(run_id), '--json', 'headSha', '-q', '.headSha', '--repo', repo], timeout=60)
+    return (got.stdout or '').strip() if got.returncode == 0 else ''
+
+
+def dispatched_run(gh, repo: str, workflow: str, since: float, tries: int, wait: float, sleep=time.sleep) -> str:
+    """The run a `gh workflow run` just made: the oldest `workflow_dispatch` run of `workflow` created at or after
+    `since` (epoch seconds), asked up to `tries` times `wait` seconds apart, since a dispatch's run appears a few seconds
+    after it; '' when none appeared."""
+    for _ in range(tries):
+        listed = gh(['run', 'list', '--workflow', workflow, '--event', 'workflow_dispatch', '--limit', '5',
+                     '--json', 'databaseId,createdAt', '--repo', repo], timeout=60)
+        try:
+            runs = json.loads(listed.stdout or '[]')
+        except ValueError:
+            runs = []
+        mine = [r for r in runs if (parse_instant(r.get('createdAt')) or datetime.min.replace(tzinfo=timezone.utc)
+                                    ).timestamp() >= since]
+        if mine:
+            return str(sorted(mine, key=lambda r: r['createdAt'])[0]['databaseId'])
+        sleep(wait)
+    return ''
