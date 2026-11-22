@@ -19,5 +19,6 @@ own names in).
                   the pending check, the sweep, starting a cloud build trigger and dispatching a workflow, a host's
                   names handed to Decider; the per-job claim stays the host's own standard-library file (#1681)
   pids            a process named by its pid and the start a lock recorded: alive, its start, a wait on it with its
-                  exit code, a stop of its tree, and lock_alive, so a reused pid is never taken for it (#1125, #2159)
+                  exit code, a stop of its tree, and lock_alive, so a reused pid is never taken for it (#1125, #2159);
+                  HolderLock, a lock file naming its holder, taken by one taker, freed when its holder is gone
 """

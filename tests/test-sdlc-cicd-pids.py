@@ -80,6 +80,34 @@ if os.name == 'nt':
            P.stop(4120, run=lambda a: calls.append(a)), calls),
           (True, False, None, ['tasklist', ['taskkill', '/PID', '4120', '/T', '/F']]))
 
+import tempfile  # noqa: E402
+
+lock_path = os.path.join(tempfile.mkdtemp(prefix='pids-'), 'ship.lock')
+lock = P.HolderLock(lock_path, stale_s=3600)
+first = lock.take()
+check("HolderLock, the positive case: take creates the lock naming this process and its start; a live holder's is "
+      "not taken again; it is held",
+      (first, lock.read().get('pid'), lock.read().get('pid_started') is not None, lock.take(pid=4321), lock.held()),
+      (True, me, True, False, True))
+check("HolderLock: release by another holder leaves it; by its own removes it; a removed lock is not held",
+      (lock.release(pid=4321), lock.release(), lock.held(), os.path.exists(lock_path)), (False, True, False, False))
+lock.take(pid=4321, started_at=lambda p: 5.0)
+check("HolderLock: a dead holder's lock is removed and taken; hand names another holder",
+      (lock.take(alive=lambda p: p != 4321), lock.read()['pid'], (lock.hand(pid=99, started_at=lambda p: 7.0),
+                                                                  lock.read()['pid'], lock.read()['pid_started'])[1:]),
+      (True, me, (99, 7.0)))
+with open(lock_path, 'w', encoding='utf-8') as f:
+    f.write('')   # a lock that names no holder
+young, old = P.HolderLock(lock_path, 3600), P.HolderLock(lock_path, 3600, now=lambda: time.time() + 7200)
+check("HolderLock: a nameless lock is held stale_s from its mtime, then taken; release of a nameless one removes it",
+      (young.held(), young.take(), old.held(), old.take(), old.read()['pid'], (old.hand(pid=0), old.release(pid=5))[1]),
+      (True, False, False, True, me, False))
+os.remove(lock_path)
+with open(lock_path, 'w', encoding='utf-8') as f:
+    f.write('not json')
+check("HolderLock: an unreadable record reads as {} and is released by anyone", (lock.read(), lock.release(pid=5)),
+      ({}, True))
+
 print()
 print(f"{len(fails)} failure(s)" + (":" if fails else ""))
 for f in fails:

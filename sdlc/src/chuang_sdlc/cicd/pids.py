@@ -18,7 +18,7 @@ import select
 
 from . import proc
 
-__all__ = ['PID_SLACK_S', 'alive', 'stop', 'proc_started', 'other_process', 'wait_pid', 'lock_alive']
+__all__ = ['PID_SLACK_S', 'alive', 'stop', 'proc_started', 'other_process', 'wait_pid', 'lock_alive', 'HolderLock']
 
 # How far a process's own start may sit from the start a lock recorded for it and still be that process: the lock
 # writes it a few milliseconds after the process began, and a pid reused after a reboot or a kill began later.
@@ -163,3 +163,83 @@ def lock_alive(lock: dict, alive=alive, started_at=None) -> bool:
     if lock.get('pid_started') is None:
         return True
     return not other_process((started_at or proc_started)(int(pid)), lock['pid_started'])
+
+
+class HolderLock:
+    """A lock file naming its holder, {pid, pid_started, at} (SMADPickleBot #1136, its ship lock, moved by #2159): take()
+    creates it at once (O_CREAT|O_EXCL, so of two takers one wins), held() reads whether its holder still runs
+    (lock_alive; a lock naming none, an empty file or one caught while it is written, is held `stale_s` from its
+    mtime), a dead holder's lock is removed and taken, hand() names another holder (the process that does the work,
+    so a lock left by a killed parent frees itself when that one ends), release() removes it only while it is this
+    holder's or names none. `alive` and `started_at` are the checks' seams."""
+
+    def __init__(self, path: str, stale_s: float, now=None):
+        import time
+        self.path, self.stale_s, self.now = path, stale_s, now or time.time
+
+    def read(self) -> dict:
+        """The lock's record, {} when there is none, it is empty or not JSON."""
+        import json
+        try:
+            with open(self.path, encoding='utf-8') as f:
+                got = json.load(f)
+        except (OSError, ValueError):
+            return {}
+        return got if isinstance(got, dict) else {}
+
+    def held(self, alive=None, started_at=None) -> bool:
+        """Whether the lock is there and its holder lives (or, naming none, it is under `stale_s` old)."""
+        try:
+            age = self.now() - os.path.getmtime(self.path)
+        except OSError:
+            return False
+        holder = self.read()
+        if holder.get('pid'):
+            return lock_alive(holder, alive or globals()['alive'], started_at)
+        return age < self.stale_s
+
+    def holder(self, pid=None, started_at=None) -> dict:
+        """The record a holder writes: its pid (this process unless named) and that process's start (None when the
+        system cannot say, which lock_alive then reads by the pid alone)."""
+        pid = int(pid or os.getpid())
+        return {'pid': pid, 'pid_started': (started_at or proc_started)(pid), 'at': self.now()}
+
+    def take(self, pid=None, alive=None, started_at=None) -> bool:
+        """True once this holder has the lock; False when a live holder has it (or a dead one's cannot be removed)."""
+        import json
+        record = self.holder(pid, started_at)
+        for _ in range(2):
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                if self.held(alive, started_at):
+                    return False
+                try:   # a dead holder's lock
+                    os.remove(self.path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    return False
+                continue
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+            return True
+        return False
+
+    def hand(self, pid=None, started_at=None) -> None:
+        """The lock's holder rewritten as `pid` (this process when none is given)."""
+        import json
+        with open(self.path, 'w', encoding='utf-8') as f:
+            json.dump(self.holder(pid, started_at), f)
+
+    def release(self, pid=None) -> bool:
+        """The lock removed when it is this holder's (`pid`, this process unless named) or names none; one another
+        holder took since is left. Whether it was removed."""
+        holder = self.read()
+        if holder.get('pid') and int(holder['pid']) != int(pid or os.getpid()):
+            return False
+        try:
+            os.remove(self.path)
+            return True
+        except OSError:
+            return False

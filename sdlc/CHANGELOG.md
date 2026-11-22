@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.52.0 - 2026-11-21 PT
+
+- `cicd.pids.HolderLock(path, stale_s)`: a lock file naming its holder, {pid, pid_started, at} (SMADPickleBot #2159,
+  step 5, from its ship_card.py's ship lock, #1136): `take` by one taker at once (O_CREAT|O_EXCL), a dead holder's lock
+  removed and taken, `held` by `lock_alive` (a lock naming none held `stale_s` from its mtime), `hand` to the process
+  that does the work, `release` only while it is this holder's or names none, `read`. No signature changes. Suite:
+  `tests/test-sdlc-cicd-pids.py`.
+
 ## 0.51.0 - 2026-11-21 PT
 
 - `release_train` gains a wait's bound from what the work took before (SMADPickleBot #2159, step 4, from its

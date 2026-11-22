@@ -1611,6 +1611,13 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `other_process(got, recorded, slack=)` | Whether a process that started at `got` is not the one a lock recorded as starting at `recorded`: both known and further apart than `slack` seconds. |
 | `wait_pid(pid, seconds, started=)` | Wait on a process this one did not start until it ends or `seconds` pass. (ended, code): (True, its exit code) once it ended, the code read from the very handle the wait held, so no writer of the lock can race it (Windows); (True, None) when it ended with no… |
 | `lock_alive(lock, alive=, started_at=)` | Whether the process a lock names ({pid, pid_started}) still runs: its pid alive and, when the lock recorded its start, the process under that pid the one that started then, so a stale lock's pid that the system has since given another program is never taken f… |
+| `class HolderLock` | A lock file naming its holder, {pid, pid_started, at} (SMADPickleBot #1136, its ship lock, moved by #2159): take() creates it at once (O_CREAT\|O_EXCL, so of two takers one wins), held() reads whether its holder still runs (lock_alive; a lock naming none, an… |
+| `HolderLock.read()` | The lock's record, {} when there is none, it is empty or not JSON. |
+| `HolderLock.held(alive=, started_at=)` | Whether the lock is there and its holder lives (or, naming none, it is under `stale_s` old). |
+| `HolderLock.holder(pid=, started_at=)` | The record a holder writes: its pid (this process unless named) and that process's start (None when the system cannot say, which lock_alive then reads by the pid alone). |
+| `HolderLock.take(pid=, alive=, started_at=)` | True once this holder has the lock; False when a live holder has it (or a dead one's cannot be removed). |
+| `HolderLock.hand(pid=, started_at=)` | The lock's holder rewritten as `pid` (this process when none is given). |
+| `HolderLock.release(pid=)` | The lock removed when it is this holder's (`pid`, this process unless named) or names none; one another holder took since is left. Whether it was removed. |
 
 ## `chuang_sdlc.cicd.proc`: One command runner for every pipeline script, the plumbing the scripts used to copy (SMADPickleBot,…
 
