@@ -21,4 +21,6 @@ own names in).
   pids            a process named by its pid and the start a lock recorded: alive, its start, a wait on it with its
                   exit code, a stop of its tree, and lock_alive, so a reused pid is never taken for it (#1125, #2159);
                   HolderLock, a lock file naming its holder, taken by one taker, freed when its holder is gone
+  name_reach      which names of a host's shared package a deploy runs and which a push changed, so a deploy gate
+                  redeploys only what a changed name reaches; the package's import name the host's (#2160)
 """

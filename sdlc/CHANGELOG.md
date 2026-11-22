@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.60.0 - 2026-11-21 PT
+
+- New `cicd.name_reach` (SMADPickleBot #2160, step 1, moved from its pipeline/shared/name_reach.py): `uses(entries,
+  package_dir, package)` (the names of the host's shared package an entry reaches, transitively, each module's start-up
+  code with it, ALL wherever the walk cannot follow), `changed_names(before, after)` (a push's changed names, never a
+  docstring) and `hit`. The package's import name is passed in. No signature changes elsewhere. Suite:
+  `tests/test-sdlc-cicd-name-reach.py`.
+
 ## 0.59.0 - 2026-11-21 PT
 
 - `release_train.run_stage(name, args, log, cwd=None, env=None, say=print, tail=12, ...)`: one release stage timed, its

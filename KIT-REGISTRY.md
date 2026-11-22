@@ -1614,6 +1614,15 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `push_kind(before, after, git=)` | ('expand', '') or ('contract', why) for the migrations a push changes. |
 | `main(argv=)` | (no docstring) |
 
+## `chuang_sdlc.cicd.name_reach`: Which names of a host's shared package a deploy runs, and which names a push changed (SMADPickleBot…
+
+| Name | Purpose |
+|---|---|
+| `definitions(tree)` | {name: [its top-level statements]} and the module's start-up statements, the module's docstring left out. |
+| `changed_names(before, after)` | The names one module's push changed between two sources (None for a side that does not exist): a name whose statements differ, appeared or went, and INIT when the start-up code differs; ALL when a side does not parse. |
+| `uses(entries, core_dir, package)` | {module: {names} \| ALL} that the entry files (whole: a main.py or a job's script runs top to bottom) can reach through `package`, transitively: a reached name brings the module's names its statements reference and their imports, and every reached module its… |
+| `hit(reached, module, changed)` | Whether a push's `changed` names of `module` meet what a deploy `reached` of it ({module: names \| ALL}). |
+
 ## `chuang_sdlc.cicd.pids`: A process another one did not start, named by its pid and the start a lock recorded for it (SMADPic…
 
 | Name | Purpose |
