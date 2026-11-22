@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.50.0 - 2026-11-21 PT
+
+- New `cicd.pids`: a process named by its pid and the start a lock recorded (SMADPickleBot #2159, step 3, moved from its
+  warm-dock.py, the #1125 check its ship card and listener daemon read through it): `alive`, `stop` (the tree),
+  `proc_started` (kernel32 on Windows, /proc on Linux), `other_process` with `PID_SLACK_S`, `wait_pid` (a handle or a
+  pidfd, never a poll; the exit code where the system gives one) and `lock_alive`, so a pid reused after a reboot or a
+  kill is never waited on or stopped. Standard library only; Windows' tasklist and taskkill go through `proc.run` or
+  the host's runner. No signature changes. Suite: `tests/test-sdlc-cicd-pids.py`.
+
 ## 0.49.0 - 2026-11-21 PT
 
 - `release_train` gains the dock push's other generic parts (SMADPickleBot #2159, step 2): `classify_push(returncode,

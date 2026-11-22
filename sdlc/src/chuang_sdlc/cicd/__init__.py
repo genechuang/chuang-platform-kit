@@ -18,4 +18,6 @@ own names in).
   claim           the push decider's half of a two-path pipeline claim: a push's files and the pipelines they touch,
                   the pending check, the sweep, starting a cloud build trigger and dispatching a workflow, a host's
                   names handed to Decider; the per-job claim stays the host's own standard-library file (#1681)
+  pids            a process named by its pid and the start a lock recorded: alive, its start, a wait on it with its
+                  exit code, a stop of its tree, and lock_alive, so a reused pid is never taken for it (#1125, #2159)
 """

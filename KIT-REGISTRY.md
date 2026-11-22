@@ -1599,6 +1599,17 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `push_kind(before, after, git=)` | ('expand', '') or ('contract', why) for the migrations a push changes. |
 | `main(argv=)` | (no docstring) |
 
+## `chuang_sdlc.cicd.pids`: A process another one did not start, named by its pid and the start a lock recorded for it (SMADPic…
+
+| Name | Purpose |
+|---|---|
+| `alive(pid, run=)` | Whether a process with this pid runs (Windows: tasklist through `run`, proc.run by default; else signal 0). |
+| `stop(pid, run=)` | The process and every process it started (Windows: taskkill /T /F through `run`; else its process group). |
+| `proc_started(pid)` | When process `pid` started, in epoch seconds; None when it is gone or this system cannot say. |
+| `other_process(got, recorded, slack=)` | Whether a process that started at `got` is not the one a lock recorded as starting at `recorded`: both known and further apart than `slack` seconds. |
+| `wait_pid(pid, seconds, started=)` | Wait on a process this one did not start until it ends or `seconds` pass. (ended, code): (True, its exit code) once it ended, the code read from the very handle the wait held, so no writer of the lock can race it (Windows); (True, None) when it ended with no… |
+| `lock_alive(lock, alive=, started_at=)` | Whether the process a lock names ({pid, pid_started}) still runs: its pid alive and, when the lock recorded its start, the process under that pid the one that started then, so a stale lock's pid that the system has since given another program is never taken f… |
+
 ## `chuang_sdlc.cicd.proc`: One command runner for every pipeline script, the plumbing the scripts used to copy (SMADPickleBot,…
 
 | Name | Purpose |
