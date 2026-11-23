@@ -1832,6 +1832,30 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `decode(envelope)` | The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable: no message, empty data, data that is not base64, UTF-8 or JSON, or JSON that is not an object. The kit's pubsub.decode reads it. |
 | `handle(payload, ctx)` | One LogEntry by its resource type, or a Cloud Monitoring incident. What it did, for the log. |
 
+## `chuang_app_pipeline.artifact`: An Expo app's build artifact, the parts any app's pipeline needs (SMADPickleBot #2237, step 3a of #…
+
+| Name | Purpose |
+|---|---|
+| `class JoinError` | Two platforms' exports disagree on a file that is neither one of the joined JSON files nor the same bytes. |
+| `config_hash(values)` | The public config a bundle carries as one short hash: the values joined by '\|', sha256, the first 8 hex digits. A host's workflow that computes the same key must join the same values in the same order. |
+| `key(tree, values)` | A build artifact's key: the app folder's git tree, its first 12, and the config hash. The content of the app and its public config, never the commit, so a rebase that leaves the app alone still finds its build and a changed config value never reuses a stale o… |
+| `sha256(path)` | A file's sha256 as hex, read a megabyte at a time. |
+| `pack(src, dest)` | The folder `src` as the gzipped tar `dest`, under its own name, at the lightest compression (the upload's time is the transfer's, not the packing's). |
+| `release_check(folder, api, non_prod)` | What makes an export unfit to ship, read from its JavaScript (source maps left out): a host `non_prod` (a compiled pattern of the hosts a release must never name) finds, or no mention of the release API `api` at all. Empty when it is a release build. |
+| `stamp_check(folder, stamp)` | What says an export is not this build's (a bundler cache kept between builds): its JavaScript must carry this build's stamp as a quoted string. Empty when it does. |
+| `stale_packages(app, limit=)` | The installed packages under `app` that differ from its package-lock.json, as "name: lock X, installed Y" (at most `limit`); [] when they match. A release must be built from the committed lock, not whatever an older install left. Optional packages, platform b… |
+| `sizes(out, kinds=)` | {kind: bytes} of what an export ships: fonts, javascript, images and other; source maps left out, since they go to the error tracker and never to a site or a phone. |
+| `mb(n)` | Bytes as megabytes to two places, '?' for none. |
+| `size_line(shipped, archive, last)` | 'ships 5.21 MB (javascript 3.94 MB, images 0.40 MB, fonts 0.85 MB), archive 5.97 MB (last 10.40 MB)'. |
+| `runtime_versions(path)` | An app's runtime file: {platform: {runtime, inputs, since}}, the runtime each platform's builds and updates carry and the native inputs it was set from. |
+| `expo_error(text)` | Expo's own words for a failed read: the first line naming a PluginError, or `expo config`'s error, from the command's output; '' when it names neither, so the caller keeps its own line. |
+| `config_files(config)` | Every local file an app.json's `expo` section names (a "./" string anywhere in it: icons, the splash, a service's config file, a plugin's image), relative to the app folder, sorted. |
+| `join_exports(parts, out)` | The phone bundle's one folder `out` made from each platform's own export in `parts`: the first becomes `out`, and every later one's files are moved in beside it. A file both hold is one file when its bytes are the same (the images and fonts, named by their co… |
+| `bundle_has(out, platform)` | Whether the phone export at `out` carries `platform`'s half (its metadata.json's fileMetadata). |
+| `tested_here(manifest)` | Whether a build's manifest says the typecheck and every suite passed for it and carries their results file: only then may a later stage skip its own (an older build, or one tested only by the suites related to its change, is tested again). |
+| `checks_to_run(full, wanted, old)` | Which checks a build runs beside its exports: 'full' for a ship whose web build is new or was tested only for a lower rung (a phone bundle added to such a build must not keep its related-only pass), 'related' for a new web build that is not a ship, None for a… |
+| `posix_metadata(out)` | The phone export's metadata.json with forward slashes in its asset paths. On Windows Expo writes backslashes, and `eas update` on a Linux runner then cannot find a single asset ("Failed to upload"). |
+
 ## `chuang_app_pipeline.expo_channel`: What an Expo update channel serves a phone, checked after a release (SMADPickleBot #1891, moved her…
 
 | Name | Purpose |
