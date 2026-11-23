@@ -792,6 +792,22 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `Lease.decide(doc, now=)` | (verdict, why) for one read of the twin's document: 'take' when the cloud must take the work first (no document, the desktop's beat `stale_s` old or from a clock that far ahead, or its run ended with an error), 'book' when the cloud already holds it, 'stand d… |
 | `Lease.take(store, key, doc, now, why)` | The cloud's twin takes `key`: the document written whole, holder cloud, with who held it before. |
 | `Lease.gate(store, key, name, until, now=, sleep=, log=, unreachable=)` | The cloud twin's stand-by before it runs `key`: True to run (taken, or the cloud's already), False to stand down (the desktop's run ended well, or `until` passed with the desktop still holding). Reads every `poll_s`; a store that cannot be read for `stale_s`… |
+| `class SwitchFailed` | A Pub/Sub or Cloud Tasks call of a handover was refused or could not be made: the message says which and why. |
+| `class Handover` | One Pub/Sub subscription two owners take turns holding (module docstring). `subscription` and `queue` are resource names, `pusher` the service account the subscription pushes as and the dead man's task calls as, `cloud_url` the cloud worker's address (the pus… |
+| `Handover.push_config(url=)` | The subscription's push config for the cloud worker: its URL and the pusher's OIDC token for that audience. |
+| `Handover.set_push(token, config=, opener=)` | Make the subscription a push subscription with `config`, or a pull subscription with none. |
+| `Handover.subscription_holder(token, opener=)` | Who the subscription itself says holds it: the cloud while it pushes, the desktop while it is a pull subscription. |
+| `Handover.read(store)` | The owner record, or {} before the first switch (the cloud then holds it: the subscription pushes). |
+| `Handover.write(store, holder, reason, now=, since=)` | The owner record whole: holder, beat_at now, the reason and since when, every instant cut to the second. With a `signal`, that document is written too when it names another holder or is missing; reading or writing it never fails the record's own write, and th… |
+| `Handover.send_signal(store, holder, since, now=)` | The change signal written whole: {holder, since, at} and the host's `signal_extra`. |
+| `Handover.take(store, token, reason, now=, opener=)` | The desktop takes the subscription: the owner written first (so a failover that fires meanwhile sees the desktop as the holder and restores the push), then the subscription made a pull one. The line to log. |
+| `Handover.give_back(store, token, reason, now=, opener=)` | The cloud takes the subscription back: the push endpoint restored first (messages flow at once), then the owner written. The line to log. |
+| `Handover.failover(store, token, now=, opener=)` | The dead man's task fired: (changed, line). Nothing when the cloud already holds the subscription (an old task, or a hand-back that raced it), and nothing when the desktop has beaten within `deadman_s`: a task fires `deadman_s` after it was armed, so a beat s… |
+| `Handover.deadman_task(token, host_url, seq, now=, opener=)` | Arm one dead man's task due `deadman_s` from now, posting `host_url` + `failover_path` with the pusher's OIDC token; its name, for the next beat to delete. |
+| `Handover.disarm(token, name, opener=)` | Delete one dead man's task; one already gone (it fired, or was deleted) is fine. |
+| `Handover.pending_tasks(token, opener=)` | Every task waiting on the queue, by name: the orphans a resuming worker deletes once its own is armed. |
+| `Handover.may_resume(doc, now=)` | Whether a worker just started may resume the desktop's hold: the record names the desktop and its last beat is under `deadman_s` old, so the stopped worker's dead man task has not fired yet (a crash or a restart skipped the hand-back, and waiting out the stea… |
+| `Handover.may_take_back(doc, steady_since, now=, busy=)` | Why the desktop may not take the subscription back now, or '' when it may: it must not already hold it, the host must not be `busy` (its own reason, returned as it is: work in flight that a switch would disturb), and the desktop's heartbeat must have been ste… |
 
 ## `timecheck`: The scanner behind "in code, every calendar day is a day in the kit's zone" (Gene, 2026-10-07 PT).
 

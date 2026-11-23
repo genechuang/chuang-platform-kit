@@ -2,6 +2,19 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.53.0 - 2026-11-22 PT
+
+Addition to `standby`, no signature changes (SMADPickleBot #2231, the other half of #1685's failover pattern):
+`Handover(subscription, pusher, queue, cloud_url, collection, doc, failover_path=, desktop=, cloud=, deadman_s=,
+steady_s=, timeout=, what=, cloud_what=, tag=, signal=, signal_extra=, error=)`, one Pub/Sub subscription two owners
+take turns holding: a pull subscription while the desktop holds it, a push subscription to the cloud's own service
+otherwise, an owner record, and a dead man's Cloud Tasks task that gives it back to the cloud when the desktop stops
+re-arming it. Methods `push_config`, `set_push`, `subscription_holder`, `read`, `write`, `send_signal`, `take`,
+`give_back`, `failover`, `deadman_task`, `disarm`, `pending_tasks`, `may_resume`, `may_take_back`; `SwitchFailed` is
+its default error. It is SMADPickleBot's vote-worker owner switch with the names taken out. Its Google calls are
+`google_rest`'s, imported when a call is made, so `Lease` still needs nothing installed. Suite:
+`tests/test-standby.py`.
+
 ## 0.52.0 - 2026-11-22 PT
 
 `answer_cache`: an answer ends only when something it was built from changes (SMADPickleBot #2175; Gene, 11/22/26:
