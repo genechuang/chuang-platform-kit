@@ -10,7 +10,9 @@ kit (a kit commit, a tag, the pin bump in each host). A host's own registry list
 
 The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned
 only where they run (its own tags, `sdlc-v<version>`). The `chuang_alerts.` sections are chuang-alerts, a
-project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`).
+project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`). The
+`chuang_app_pipeline.` sections are chuang-app-pipeline, an Expo app's pipeline: a distribution of its own in
+`app-pipeline/` (its own tags, `app-v<version>`), standard library only.
 
 ## `answer_cache`: Read answers kept in Firestore in front of a database that sleeps, rebuilt at the write and pushed…
 
@@ -1829,4 +1831,16 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `on_incident(ctx, payload)` | A Cloud Monitoring incident on the watcher's channel: an opened dead-letter incident is one message (once per incident id, held in the pending collection as sent) and an incident of kind `dead_letter_kind`; a closed one is not told (the messages still wait on… |
 | `decode(envelope)` | The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable: no message, empty data, data that is not base64, UTF-8 or JSON, or JSON that is not an object. The kit's pubsub.decode reads it. |
 | `handle(payload, ctx)` | One LogEntry by its resource type, or a Cloud Monitoring incident. What it did, for the log. |
+
+## `chuang_app_pipeline.expo_channel`: What an Expo update channel serves a phone, checked after a release (SMADPickleBot #1891, moved her…
+
+| Name | Purpose |
+|---|---|
+| `parse(body)` | The server's multipart answer as {'manifest': {...}, 'headers': {asset key: {header: value}}}: the manifest part, and the extensions part's assetRequestHeaders, which each asset's download must carry. ValueError when the answer holds no manifest (a directive,… |
+| `manifest(platform, runtime, channel, url, run=)` | What `channel` serves `platform` at `runtime` from the update server at `url`, asked as expo-updates asks: parse()'s answer. ValueError when the server refuses or answers no manifest. |
+| `judge(note, prod, dev=, channel=, lower=, within_s=)` | (failures, notes) for the released channel's manifest `prod` against the release's notice `note` and, when given, the lower channel's manifest `dev` (the update the device ran). A failure is a reason the delivery is wrong; a note is said and not judged. `chan… |
+| `bundle(prod, headers, run=, work=)` | '' when the launch bundle downloads with its own asset headers and its sha256 is the manifest's hash; else why not, in one line. |
+| `same_tree(sha, named, tree)` | Whether the notice's commit `named` holds the same app tree as the release `sha`, by the host's own reader `tree(rev)` (the app folder's tree id, '' when unread): a rebuild of one app tree reuses its artifact, so a release publishes the update built at an ear… |
+| `check(sha, platform, note, url, run=, same=, channel=, lower=, by=)` | One platform's verdict for the release `sha`: {sha, platform, passed, checked (False when the release published no update for it), detail [lines], update, group, published_at, label, seconds, at, by}. The release's update is the notice's when the notice names… |
+| `line(v, channel=)` | One verdict in one line, an ERROR when it failed. |
 

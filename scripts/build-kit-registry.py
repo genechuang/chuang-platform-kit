@@ -28,8 +28,10 @@ SDLC_PKG = os.path.join(ROOT, 'sdlc', 'src', 'chuang_sdlc')
 # Its subpackage chuang_sdlc.cicd (SMADPickleBot #235): the generic half of a release pipeline, listed as `chuang_sdlc.cicd.<module>`.
 # The third, chuang-alerts (alerts/, SMADPickleBot #1964): listed as `chuang_alerts.<module>`.
 ALERTS_PKG = os.path.join(ROOT, 'alerts', 'src', 'chuang_alerts')
+# The fourth, chuang-app-pipeline (app-pipeline/, SMADPickleBot #2161): listed as `chuang_app_pipeline.<module>`.
+APP_PKG = os.path.join(ROOT, 'app-pipeline', 'src', 'chuang_app_pipeline')
 PACKAGES = ((PKG, ''), (SDLC_PKG, 'chuang_sdlc.'), (os.path.join(SDLC_PKG, 'cicd'), 'chuang_sdlc.cicd.'),
-            (ALERTS_PKG, 'chuang_alerts.'))
+            (ALERTS_PKG, 'chuang_alerts.'), (APP_PKG, 'chuang_app_pipeline.'))
 OUT = os.path.join(ROOT, 'KIT-REGISTRY.md')
 SUMMARY_CHARS = 260
 NO_DOC = '(no docstring)'
@@ -94,7 +96,9 @@ def render():
            "kit (a kit commit, a tag, the pin bump in each host). A host's own registry lists only its own code.", "",
            "The `chuang_sdlc.` sections are chuang-sdlc, the ticket tools: a distribution of its own in `sdlc/`, pinned",
            "only where they run (its own tags, `sdlc-v<version>`). The `chuang_alerts.` sections are chuang-alerts, a",
-           "project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`).", ""]
+           "project's alerting: a distribution of its own in `alerts/` (its own tags, `alerts-v<version>`). The",
+           "`chuang_app_pipeline.` sections are chuang-app-pipeline, an Expo app's pipeline: a distribution of its own in",
+           "`app-pipeline/` (its own tags, `app-v<version>`), standard library only.", ""]
     paths = [(p, prefix) for pkg, prefix in PACKAGES for p in sorted(glob.glob(os.path.join(pkg, '*.py')))]
     for path, prefix in paths:
         base = os.path.basename(path)

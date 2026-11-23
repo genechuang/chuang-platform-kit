@@ -41,6 +41,10 @@ check(f'chuang-platform-kit: __version__ {kit[1]} is pyproject.toml\'s {kit[0]}'
 sdlc = (pyproject_version(os.path.join(ROOT, 'sdlc', 'pyproject.toml')), module_version(os.path.join(ROOT, 'sdlc', 'src', 'chuang_sdlc', '__init__.py')))
 check(f'chuang-sdlc: __version__ {sdlc[1]} is sdlc/pyproject.toml\'s {sdlc[0]}', sdlc[1], sdlc[0])
 check('both versions were read', (kit[0] is not None, sdlc[0] is not None), (True, True))
+# chuang-app-pipeline (app-pipeline/, SMADPickleBot #2161): the same rule for the fourth distribution.
+app = (pyproject_version(os.path.join(ROOT, 'app-pipeline', 'pyproject.toml')),
+       module_version(os.path.join(ROOT, 'app-pipeline', 'src', 'chuang_app_pipeline', '__init__.py')))
+check(f'chuang-app-pipeline: __version__ {app[1]} is app-pipeline/pyproject.toml\'s {app[0]}', (app[1], app[0] is not None), (app[0], True))
 
 print(f'\n{len(fails)} failure(s)')
 sys.exit(1 if fails else 0)

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+# chuang-app-pipeline: an Expo app's build, check and publish pipeline, a distribution of its own beside
+# chuang-platform-kit, chuang-sdlc and chuang-alerts in the same repository, so a release of it reaches only the app's
+# own pipeline (SMADPickleBot #2161, Gene's "yes build it", 11/22/26).
+# Installed from its tag with the subdirectory:
+#   chuang-app-pipeline @ git+https://github.com/genechuang/chuang-platform-kit@app-v<version>#subdirectory=app-pipeline
+[project]
+name = "chuang-app-pipeline"
+version = "0.1.0"
+description = "An Expo app's pipeline, project-agnostic: what an update channel serves a phone, asked as expo-updates asks it and judged against a release's own notice."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Gene Chuang" }]
+# Standard library only: a host's pipeline loads it on a bare runner, before anything is installed.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/genechuang/chuang-platform-kit"
+
+[tool.setuptools.packages.find]
+where = ["src"]
