@@ -19,4 +19,10 @@ Standard library only, so a host's pipeline can load it on a bare runner from th
   this build's (its stamp), whether the installed packages are the lockfile's, the join of each platform's phone
   export into one bundle, and what a build's manifest says was tested.
 
+- `chuang_app_pipeline.runtime` (0.3.0): the parts of a native runtime guard that stand on their own. An installed
+  store build takes only the updates made for its own runtime, so before an update is published a pipeline asks
+  whether the commit's native inputs are the ones its runtime was set from and whether that runtime is the installed
+  build's: `guard_verdict` is that decision with no I/O, beside the package checks a fingerprint depends on, a memo
+  for a passing answer, and a store read tried again. The host keeps its own commands and its own words.
+
 Nothing here names a project, an app, a bucket or a person: those are the host's arguments.

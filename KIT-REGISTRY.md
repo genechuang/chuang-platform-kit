@@ -1868,3 +1868,17 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `check(sha, platform, note, url, run=, same=, channel=, lower=, by=)` | One platform's verdict for the release `sha`: {sha, platform, passed, checked (False when the release published no update for it), detail [lines], update, group, published_at, label, seconds, at, by}. The release's update is the notice's when the notice names… |
 | `line(v, channel=)` | One verdict in one line, an ERROR when it failed. |
 
+## `chuang_app_pipeline.runtime`: An Expo app's native runtime, the parts of its guard that stand on their own (SMADPickleBot #2244,…
+
+| Name | Purpose |
+|---|---|
+| `guard_verdict(inputs_now, recorded, installed_runtime, allow=)` | The guard's decision for one platform, with no I/O: `inputs_now` is the commit's native inputs, `recorded` the runtime file's row for the platform ({runtime, inputs}), `installed_runtime` the runtime the installed store build runs, `allow` the host's explicit… |
+| `install_stale(app, label=)` | Why the packages installed under `app` cannot be trusted for a fingerprint, or None: node_modules missing, no npm install record in it (`.package-lock.json`), that record older than package-lock.json, or a package.json dependency not in node_modules. A finger… |
+| `lock_hash(app)` | sha256 of `app`/package-lock.json, '' when there is none. |
+| `installed(app, mark)` | Whether `app`'s packages are the ones its package-lock.json names: node_modules there, and the file `mark` holding the lock's hash, as the install that made them left it. |
+| `memo_get(path, key, seconds, now=)` | The answer kept for `key` in the JSON file `path` while it is under `seconds` old ({..., at}), else None; a missing or unreadable file is None. |
+| `memo_put(path, key, answer, seconds, now=)` | Keep `answer` under `key` in `path` with the time it was kept, dropping the entries past `seconds`; a failed write only costs the next asker its own read. |
+| `class ReadFailed` | A host's read of its store builds failed on every try: the message is the last try's cause. |
+| `read_builds(ask, tries, pauses, need=, sleep=, on_retry=)` | A host's store builds, read with `ask()` (the text of a command that prints a JSON list, as `eas build:list --json` does, after any preamble) and tried `tries` times: on a command that exits (SystemExit), an answer that is not a list, or, with `need`, an answ… |
+| `record_inputs(data, platform, inputs, keep=, since=)` | Record `inputs` as `platform`'s native inputs in a runtime file's `data` ({platform: {runtime, inputs, since}}), in place: (the runtime before, the row now). Unless `keep`, the inputs become the runtime too and `since` its stamp; with `keep` the runtime stays… |
+

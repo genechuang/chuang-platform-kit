@@ -1,5 +1,16 @@
 # chuang-app-pipeline changelog
 
+## 0.3.0 (2026-11-22)
+
+- New module `runtime` (SMADPickleBot #2244, step 3b of #2161), no signature changes elsewhere: the parts of a native
+  runtime guard that stand on their own, each a function of what it is handed, with no command run and no word
+  printed. `guard_verdict(inputs_now, recorded, installed_runtime, allow)` answers `inputs_moved`, `ok`,
+  `runtime_differs` or `allowed`; `install_stale(app, label=)`; `lock_hash(app)` and `installed(app, mark)`;
+  `memo_get` / `memo_put` (a passing answer kept `seconds` under a key); `read_builds(ask, tries, pauses, need=,
+  sleep=, on_retry=)` (a host's store read tried again, `ReadFailed` with the last cause); `record_inputs(data,
+  platform, inputs, keep=, since=)`. The host keeps its own fingerprint read, where it runs Expo, and every sentence
+  it tells its people. Suite: `tests/test-app-runtime.py`.
+
 ## 0.2.0 (2026-11-22)
 
 - New module `artifact` (SMADPickleBot #2237, step 3a of #2161), no signature changes elsewhere: `config_hash` and
