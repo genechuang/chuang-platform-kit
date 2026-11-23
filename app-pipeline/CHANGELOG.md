@@ -1,5 +1,11 @@
 # chuang-app-pipeline changelog
 
+## 0.3.1 (2026-11-22)
+
+- `runtime.guard_verdict`: a store runtime that was not read (None or empty) is never a match, even against a row that
+  records none; 0.3.0 answered `ok` for two unknowns, which would have let an update through unchecked. No host had
+  released on 0.3.0.
+
 ## 0.3.0 (2026-11-22)
 
 - New module `runtime` (SMADPickleBot #2244, step 3b of #2161), no signature changes elsewhere: the parts of a native

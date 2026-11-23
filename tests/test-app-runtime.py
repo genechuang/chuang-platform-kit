@@ -49,6 +49,9 @@ check("the other verdicts: moved inputs are refused whatever the override says; 
        R.guard_verdict('in-1', ROW, 'rt-0'), R.guard_verdict('in-1', ROW, 'rt-0', allow=True), R.guard_verdict('in-1', ROW, None),
        R.guard_verdict('in-1', {}, None)),
       ('inputs_moved', 'inputs_moved', 'inputs_moved', 'runtime_differs', 'allowed', 'runtime_differs', 'inputs_moved'))
+check("a store runtime that was not read is never a match, even against a row that records none (0.3.1)",
+      [R.guard_verdict('in-1', {'inputs': 'in-1'}, unread) for unread in (None, '')] + [R.guard_verdict('in-1', {'inputs': 'in-1', 'runtime': ''}, '')],
+      ['runtime_differs'] * 3)
 
 with tempfile.TemporaryDirectory() as app:
     none = R.install_stale(app)

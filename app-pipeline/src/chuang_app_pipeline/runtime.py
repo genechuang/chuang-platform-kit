@@ -38,7 +38,7 @@ def guard_verdict(inputs_now: str, recorded: dict, installed_runtime, allow: boo
     The host words each verdict and decides what an unread store answer means before it asks."""
     if inputs_now != recorded.get('inputs'):
         return 'inputs_moved'
-    if recorded.get('runtime') == installed_runtime:
+    if installed_runtime and recorded.get('runtime') == installed_runtime:   # two unknowns are never a match
         return 'ok'
     return 'allowed' if allow else 'runtime_differs'
 

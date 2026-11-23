@@ -5,4 +5,4 @@ is this build's, the join of each platform's export, and what a manifest says wa
 `runtime`: the native runtime guard's decision, its memo, the package checks and a store read tried again (#2244). A
 distribution of its own beside chuang-platform-kit, chuang-sdlc and chuang-alerts in the same repository
 (app-pipeline/, tags app-v<version>), standard library only, pinned only where an app's pipeline runs."""
-__version__ = '0.3.0'
+__version__ = '0.3.1'

@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 #   chuang-app-pipeline @ git+https://github.com/genechuang/chuang-platform-kit@app-v<version>#subdirectory=app-pipeline
 [project]
 name = "chuang-app-pipeline"
-version = "0.3.0"
+version = "0.3.1"
 description = "An Expo app's pipeline, project-agnostic: a build artifact's key, sizes and release checks, the join of each platform's export, and what an update channel serves a phone, judged against a release's own notice."
 readme = "README.md"
 license = { text = "MIT" }
