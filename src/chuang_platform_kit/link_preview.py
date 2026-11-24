@@ -110,15 +110,23 @@ def fetch(url: str, opener=None, resolve=socket.getaddrinfo, *, agent: str = AGE
 _META = re.compile(r'<meta\s+[^>]*>', re.I)
 _ATTR = re.compile(r'([\w:-]+)\s*=\s*("([^"]*)"|\'([^\']*)\')', re.I)
 _TITLE = re.compile(r'<title[^>]*>(.*?)</title>', re.I | re.S)
+_ENTITY = re.compile(r'&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);', re.I)
 
 
 def _clean(text: str, cap: int) -> str:
     return re.sub(r'\s+', ' ', html.unescape(text or '')).strip()[:cap]
 
 
+def _address(raw: str) -> str:
+    """An address out of an HTML attribute, its entities decoded as a browser decodes them there: only those that end
+    in a semicolon, since html.unescape would read the `&reg` of an unescaped `?w=1&region=us` as a sign."""
+    return _ENTITY.sub(lambda m: html.unescape(m.group(0)), raw or '').strip()
+
+
 def parse(page: str, url: str, max_bytes: int = MAX_BYTES) -> dict:
     """{url, title, description, image, site} from a page's head: og:* first, then twitter:* and <meta name=description>,
-    then <title>; an image only as an https address; empty fields left out."""
+    then <title>; an image only as an https address, its HTML entities decoded (a page writes `&` in it as `&amp;`, and a
+    signed address asked for undecoded is refused); empty fields left out."""
     head = page[:max_bytes]
     found = {}
     for tag in _META.findall(head):
@@ -128,7 +136,7 @@ def parse(page: str, url: str, max_bytes: int = MAX_BYTES) -> dict:
             found[key] = attrs['content']
     title_tag = _TITLE.search(head)
     title = found.get('og:title') or found.get('twitter:title') or (title_tag.group(1) if title_tag else '')
-    raw = (found.get('og:image') or found.get('twitter:image') or '').strip()
+    raw = _address(found.get('og:image') or found.get('twitter:image') or '')
     image = urljoin(url, raw) if raw else ''
     out = {'url': url,
            'title': _clean(title, TEXT_MAX['title']),

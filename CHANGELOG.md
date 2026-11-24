@@ -2,6 +2,12 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.54.3 - 2026-11-24 PT
+
+`link_preview`: the image's address has its HTML entities decoded (SMADPickleBot #2331). A page writes the `&` of an
+address as `&amp;`, so a Facebook picture's signed address was asked for undecoded and refused with a 403. Only an
+entity that ends in a semicolon is decoded, as a browser reads an attribute.
+
 ## 0.54.2 - 2026-11-24 PT
 
 `monitoring`: every span carries the service `init()` was given (SMADPickleBot #2313). sentry-sdk 3 puts a scope's tags on

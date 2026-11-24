@@ -100,6 +100,15 @@ check('twitter and <title> stand in; an http image is left out; empty fields go'
               '<meta property="og:image" content="http://x/y.png">', 'https://example.org/b'),
       {'url': 'https://example.org/b', 'title': 'T', 'description': 'D', 'site': 'example.org'})
 
+IMAGES = (('og:image', 'https://img.example.org/a.jpg?w=1&amp;sig=2&#38;oe=3'), ('twitter:image', 'https://img.example.org/a.jpg?w=1&amp;sig=2&#x26;oe=3'),
+          ('og:image', 'https://img.example.org/a.jpg?w=1&sig=2&oe=3'))
+check("0.54.3: an image's address has its HTML entities decoded, og: and twitter: alike, and a plain & stands",
+      [L.parse(f'<meta property="{k}" content="{v}">', 'https://example.org/b')['image'] for k, v in IMAGES],
+      ['https://img.example.org/a.jpg?w=1&sig=2&oe=3'] * 3)
+check("  and an undecoded name that begins like an entity is left as the page wrote it",
+      L.parse('<meta property="og:image" content="/a.jpg?w=1&region=us&copy=2">', 'https://example.org/b')['image'],
+      'https://example.org/a.jpg?w=1&region=us&copy=2')
+
 
 def why(url):
     try:
