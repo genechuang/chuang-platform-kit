@@ -228,9 +228,11 @@ class AnswerCache:
         return earliest(now + LASTING, until(answer, now) if until else None)
 
     def _keep(self, route, name, who, key, answer, body, version, stamp, now, until, keep, pushed=None,
-              shape=None) -> bool:
+              shape=None, asked=None) -> bool:
         """Write the kept document unless the answer is too large, the route says not to keep it or it has ended
-        already. False, never an exception, when it is not kept."""
+        already. False, never an exception, when it is not kept. `asked` is when a reader last asked, now unless the
+        rebuild pass passes the document's own: a pass is no reader (0.55.0, SMADPickleBot #2336; until then a pass
+        stamped its own time, so while writes kept coming an answer nobody read was rebuilt at every one)."""
         if len(body.encode('utf-8')) > self.max_bytes or (keep is not None and not keep(answer)):
             return False
         ends = self._ends(answer, now, until)
@@ -238,7 +240,7 @@ class AnswerCache:
             return False
         fields = {'json': body, 'version': version, 'revision': self.revision,
                   'shape': '' if shape is None else str(shape), 'inputs': stamp, 'until': ends.isoformat(),
-                  'at': now.isoformat(), 'asked': now.isoformat(), 'scope': self.scope, 'route': route,
+                  'at': now.isoformat(), 'asked': asked or now.isoformat(), 'scope': self.scope, 'route': route,
                   'who': [str(w) for w in who], 'key': json.dumps(key, default=str, separators=(',', ':'))}
         if pushed is not None:
             fields['pushed'] = pushed
@@ -305,8 +307,10 @@ class AnswerCache:
                     break
                 seen = signal.get('version')
                 report['left'] = 0
+                recent = self._recent(at)
                 for name in (routes or sorted(self.routes)):
-                    self._rebuild_route(self.routes[name], signal, at, report, pushed, lambda: clock() - started >= budget)
+                    self._rebuild_route(self.routes[name], signal, at, report, pushed, lambda: clock() - started >= budget,
+                                        recent)
                 if report['left']:
                     break
         except firestore.Unreachable as e:
@@ -324,11 +328,34 @@ class AnswerCache:
         except Exception:   # noqa: BLE001 - a test that fails is no refusal: the answer is kept and tried again
             return False
 
-    def _rebuild_route(self, reg, signal, now, report, pushed, spent) -> None:
+    def _recent(self, now) -> dict | None:
+        """{route: [(doc_id, fields)]}: this scope's kept answers asked for within keep_days, in one query (0.55.0,
+        SMADPickleBot #2336: a query a route read every kept answer of it, billed a document each, to drop nearly all
+        of them). It needs a composite index on the collection, (`scope`, `asked`) ascending, which the host declares;
+        None while Firestore has none, and the pass then asks route by route as it did before. `asked` is always an
+        ISO instant in UTC, so its text orders as its time does."""
+        since = now - timedelta(days=self.keep_days)
+        try:
+            docs = self.store().run_query(self.collection, where=[('scope', '==', self.scope), ('asked', '>=', since.isoformat())],
+                                          select=list(SELECT))
+        except (firestore.Conflict, firestore.Unreachable) as e:
+            if 'FAILED_PRECONDITION' not in str(e):
+                raise
+            log.warning("answer_cache: no (scope, asked) index on %s yet; the pass reads each route whole", self.collection)
+            return None
+        out = {}
+        for doc_id, d in docs:
+            out.setdefault(d.get('route'), []).append((doc_id, d))
+        return out
+
+    def _rebuild_route(self, reg, signal, now, report, pushed, spent, recent=None) -> None:
         stamp = reg.inputs() if reg.inputs else ''
         since = now - timedelta(days=self.keep_days)
-        docs = self.store().run_query(self.collection, where=[('scope', '==', self.scope), ('route', '==', reg.name)],
-                                      select=list(SELECT))
+        if recent is not None:
+            docs = recent.get(reg.name) or []
+        else:
+            docs = self.store().run_query(self.collection, where=[('scope', '==', self.scope), ('route', '==', reg.name)],
+                                          select=list(SELECT))
         never = datetime.min.replace(tzinfo=timezone.utc)  # utc-ok: an instant before every other, for a document never asked for
         live = [(doc_id, d) for doc_id, d in docs if (instant(d.get('asked')) or never) >= since]
         live.sort(key=lambda item: str(item[1].get('asked') or ''), reverse=True)
@@ -367,7 +394,7 @@ class AnswerCache:
                     log.info("answer_cache: %s could not be rebuilt for one caller (%s)", reg.name, type(e).__name__)
                     continue
                 if not self._keep(reg.name, doc_id, who, key, answer, body, version, stamp, now, reg.until, reg.keep,
-                                  pushed=version, shape=reg.shape):
+                                  pushed=version, shape=reg.shape, asked=d.get('asked')):
                     continue
                 report['rebuilt'] += 1
             else:

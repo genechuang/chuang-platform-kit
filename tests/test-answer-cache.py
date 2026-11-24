@@ -43,6 +43,7 @@ class Store:
 
     def __init__(self):
         self.docs, self.locked, self.down, self.writes = {}, set(), False, 0
+        self.queries, self.read, self.unindexed = [], 0, False   # a pass's queries, the documents they read, no index yet
 
     def _up(self):
         if self.down:
@@ -70,10 +71,14 @@ class Store:
 
     def run_query(self, collection, where=(), select=None, **kw):
         self._up()
+        self.queries.append([(f, op) for f, op, _v in where])
+        if self.unindexed and any(op == '>=' for _f, op, _v in where):
+            raise firestore.Conflict('HTTP 400 FAILED_PRECONDITION')
         out = []
         for (c, doc_id), doc in self.docs.items():
-            if c == collection and all(doc.get(f) == v for f, _op, v in where):
+            if c == collection and all(doc.get(f) == v if op == '==' else (doc.get(f) or '') >= v for f, op, v in where):
                 out.append((doc_id, {k: v for k, v in doc.items() if not select or k in select}))
+                self.read += 1
         return out
 
     def lock(self, collection, doc_id, ttl, data=None):
@@ -243,6 +248,17 @@ built.clear()
 report = cache.rebuild(now=NOW)
 check("the pass skips a document nobody asked for in keep_days, counts a rebuild that raises, newest asked first",
       (built, report['rebuilt'], report['failed']), (['c', 'b', 'a'], 3, 1))
+check("  0.55.0: in one query a round, and the document nobody asked for lately is never read (SMADPickleBot #2336)",
+      (store.queries, store.read), ([[('scope', '=='), ('asked', '>=')]], 4))
+cache.bump(['games'], now=NOW)
+built.clear()
+store.unindexed, store.queries = True, []
+report = cache.rebuild(now=NOW)
+check("  with no index yet the pass asks route by route, as before, and rebuilds the same",
+      (built, store.queries), (['c', 'b', 'a'], [[('scope', '=='), ('asked', '>=')], [('scope', '=='), ('route', '==')]]))
+check("  a pass is no reader: a rebuilt answer keeps when it was last asked for, so one nobody reads ages out while writes keep coming",
+      store.docs[(cache.collection, cache.doc_id('home', ('a', ''), {'year': 2026}))]['asked'], (NOW - timedelta(minutes=30)).isoformat())
+store.unindexed = False
 bad_id = cache.doc_id('home', ('bad', ''), {'year': 2026})
 check("  the failed caller's document is left as it was, for its next reader",
       json.loads(store.docs[(cache.collection, bad_id)]['json'])['n'], 1)

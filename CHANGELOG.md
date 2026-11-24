@@ -2,6 +2,14 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.55.0 - 2026-11-24 PT
+
+`answer_cache`: a rebuild pass reads only the kept answers asked for within `keep_days`, in one query for every route
+(SMADPickleBot #2336); it read every kept answer of every route and dropped nearly all of them, each billed. A host
+declares the composite index (`scope`, `asked`) ascending on its answers collection; without it the pass asks as it
+did. And a pass is no reader: the answer it rebuilds keeps the `asked` a reader gave it, so one nobody reads ages out
+while writes keep coming.
+
 ## 0.54.3 - 2026-11-24 PT
 
 `link_preview`: the image's address has its HTML entities decoded (SMADPickleBot #2331). A page writes the `&` of an
