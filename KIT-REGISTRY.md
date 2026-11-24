@@ -519,8 +519,9 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 |---|---|
 | `scrub(text)` | `text` with secrets masked (redact), then every email address and phone number; anything that is not a string is returned as it is. |
 | `drop_events_when(predicate)` | Register `predicate(event, hint) -> bool`: an error event for which any registered predicate is true is not sent (0.31.0). For a host that knows an error is not news, which the SDK cannot: a read that failed on a dropped database connection and is about to be… |
-| `before_send(event, hint=)` | Sentry's before_send (and before_send_transaction): the event with every string scrubbed, or None (not sent) for an error event a host's drop_events_when predicate names. |
-| `before_breadcrumb(crumb, hint=)` | Sentry's before_breadcrumb: the breadcrumb with every string scrubbed. |
+| `before_send(event, hint=)` | Sentry's before_send: the event with every string scrubbed, or None (not sent) for an error event a host's drop_events_when predicate names. An event the scrub itself fails on is sent as its id, time, level, release, environment and tags alone: the error is s… |
+| `before_send_span(span, hint=)` | Sentry's before_send_span: the span's name and attributes scrubbed, the two parts the SDK lets a hook change. One the scrub fails on goes out with neither: the SDK sends a span whose hook raised as it was. |
+| `before_breadcrumb(crumb, hint=)` | Sentry's before_breadcrumb: the breadcrumb with every string scrubbed; one the scrub fails on is left out. |
 | `init(dsn, environment, release=, service=, traces_sample_rate=, sdk=)` | Start sending errors and traces to Sentry; True when it did. A no-op (False) without a DSN, or without sentry_sdk installed (one WARNING). `service` is a tag on every event, so one Sentry project can hold several processes (each Cloud Function and Job). `sdk`… |
 | `flush(timeout=, sdk=)` | Send what is queued before the request, message or job ends. On Cloud Run the CPU is throttled once a response is returned, so an event left in the queue is sent late, or retried, or lost; call this at the end of each unit of work. A no-op when monitoring is… |
 | `enabled()` | Whether init() turned sending on in this process. |

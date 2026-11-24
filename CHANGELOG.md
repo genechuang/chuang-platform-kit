@@ -2,6 +2,23 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.54.0 - 2026-11-23 PT
+
+`monitoring` runs on sentry-sdk 3 and no longer on 2 (`monitoring = ["sentry-sdk>=3,<4"]`; SMADPickleBot #2270). No
+function of ours changes its signature; a host bumps the pin and its lock and calls what it called.
+
+- What 3.0 renamed, removed or defaults differently is set by name: an ERROR log line is still an issue (3.0's default
+  makes none), no line is sent as a Sentry log (its default sends INFO up), a logged message keeps no stack (its issue is
+  grouped by its words), `transaction()` starts a trace of its own in a scope of its own, `span()` carries its op as an
+  attribute, and the unraisable-hook integration stays off.
+- New constant `DATA_COLLECTION`, what the SDK may attach by itself, stricter than 2.x was: no request body, cookie or
+  query string, only the user agent, the content headers and the `x-app-` ones, no database or queue data, and **no
+  stack frame's local variables**. Read whole, a failed web request's frames carried every request header, a device
+  credential among them, and the body, on 2.x as on 3: a variable is an object with no name a filter could match. The
+  stack and its source lines are kept. `tests/test-monitoring.py` fails when a later SDK adds a category not named here.
+- New function `before_send_span`. An event, span or breadcrumb the scrub itself fails on goes out with its contents left
+  out: 3.0 drops the event of a hook that raises and sends the span as it was.
+
 ## 0.53.0 - 2026-11-22 PT
 
 Addition to `standby`, no signature changes (SMADPickleBot #2231, the other half of #1685's failover pattern):

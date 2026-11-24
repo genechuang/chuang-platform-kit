@@ -8,9 +8,13 @@ trace requests and queries. Callers use `capture()`, `span()`, `transaction()` a
 of each request, message or job, since Cloud Run throttles CPU between requests), never sentry_sdk,
 so the vendor can be swapped by changing this file alone.
 
-Nothing private leaves: every event, transaction and breadcrumb passes `scrub()` first, which is
+Nothing private leaves: every event, span and breadcrumb passes `scrub()` first, which is
 `redact.redact()` (tokens, keys, the process's secret values) plus email addresses and phone numbers;
-`send_default_pii` stays off, so no IP, cookie or user header is attached either.
+`DATA_COLLECTION` keeps the SDK from attaching who a request came from, what it carried, or any local
+variable.
+
+sentry_sdk 3 (0.54.0): its defaults collect more than 2.x's did, create no event from a log line, and
+send every INFO line as a Sentry log, so each of those is set here by name; 2.x is not supported.
 
 sentry_sdk is an optional dependency (`pip install chuang-platform-kit[monitoring]`): a host without it
 gets the no-op, with one WARNING from init() if a DSN was given.
@@ -32,6 +36,27 @@ WHATSAPP_ID_RE = re.compile(r'(?<![\w.])\+?\d{6,20}(?:-\d+)?(?=@[cg]\.us\b)')
 PHONE_RE = re.compile(r'(?<![\w.(])\+?\(?(?:\d[\s().-]{0,2}){9,14}\d(?![\w.])')
 EMAIL_MASK = '[email]'
 PHONE_MASK = '[phone]'
+
+# What the SDK may attach by itself. 3.0's own defaults collect user identity, request bodies, query data and more headers;
+# this is stricter than its migration guide's restrictive form: no body, no cookie, no query string, the few request headers
+# named here, and no stack frame's local variables. The last was found reading one failed request whole, as 2.x sent it too:
+# the web framework's frames hold the request, so a variable carried every header (a device credential among them, which no
+# scrub knows by its shape) and the body with a person's name. The stack itself, with its source lines, is kept. A new
+# category of a later release would come in at the SDK's default: test_monitoring fails when one appears not named here.
+DATA_COLLECTION = {
+    'user_info': False,
+    'http_bodies': [],
+    'http_headers': {'request': {'mode': 'allowlist', 'terms': ['user-agent', 'content-type', 'content-length', 'x-app-']}},
+    'cookies': {'mode': 'off'},
+    'url_query_params': {'mode': 'off'},
+    'graphql': {'document': False, 'variables': False},
+    'gen_ai': {'inputs': False, 'outputs': False},
+    'mcp': {'inputs': False, 'outputs': False},
+    'database_query_data': False,
+    'queues': False,
+    'stack_frame_variables': False,
+    'frame_context_lines': 5,
+}
 
 _enabled = False
 
@@ -67,28 +92,49 @@ def drop_events_when(predicate) -> None:
     """Register `predicate(event, hint) -> bool`: an error event for which any registered predicate is true is not
     sent (0.31.0). For a host that knows an error is not news, which the SDK cannot: a read that failed on a dropped
     database connection and is about to be run once more (SMADPickleBot #1454: the retry answered 200, and Sentry
-    still filed the first attempt as an issue and an alert). A transaction is never dropped, and a predicate that
+    still filed the first attempt as an issue and an alert). A span is never dropped, and a predicate that
     raises drops nothing: a broken filter must not hide errors. Registering the same function twice keeps one."""
     if predicate not in _drops:
         _drops.append(predicate)
 
 
+UNSCRUBBED = 'monitoring: this could not be scrubbed, so its contents were left out'
+
+
 def before_send(event, hint=None):
-    """Sentry's before_send (and before_send_transaction): the event with every string scrubbed, or None (not sent)
-    for an error event a host's drop_events_when predicate names."""
-    if isinstance(event, dict) and event.get('type') != 'transaction':
+    """Sentry's before_send: the event with every string scrubbed, or None (not sent) for an error event a host's
+    drop_events_when predicate names. An event the scrub itself fails on is sent as its id, time, level, release,
+    environment and tags alone: the error is still heard of, and nothing unscrubbed leaves."""
+    if isinstance(event, dict):
         for predicate in list(_drops):
             try:
                 if predicate(event, hint):
                     return None
             except Exception:   # noqa: BLE001 - a filter that fails hides nothing
                 log.warning('monitoring: a drop_events_when predicate raised; the event is sent')
-    return _scrub_all(event)
+    try:
+        return _scrub_all(event)
+    except Exception:   # noqa: BLE001 - 3.0 drops the event of a hook that raises
+        log.warning('monitoring: an event could not be scrubbed; it is sent without its contents')
+        kept = ('event_id', 'timestamp', 'level', 'platform', 'release', 'environment', 'tags')
+        return {**{k: event[k] for k in kept if k in event}, 'message': UNSCRUBBED}
+
+
+def before_send_span(span, hint=None):
+    """Sentry's before_send_span: the span's name and attributes scrubbed, the two parts the SDK lets a hook change. One
+    the scrub fails on goes out with neither: the SDK sends a span whose hook raised as it was."""
+    try:
+        return _scrub_all(span)
+    except Exception:   # noqa: BLE001 - never as it was
+        return {'name': UNSCRUBBED, 'attributes': {}}
 
 
 def before_breadcrumb(crumb, hint=None):
-    """Sentry's before_breadcrumb: the breadcrumb with every string scrubbed."""
-    return _scrub_all(crumb)
+    """Sentry's before_breadcrumb: the breadcrumb with every string scrubbed; one the scrub fails on is left out."""
+    try:
+        return _scrub_all(crumb)
+    except Exception:   # noqa: BLE001
+        return None
 
 
 def init(dsn: str, environment: str, release: str = '', service: str = '',
@@ -109,10 +155,17 @@ def init(dsn: str, environment: str, release: str = '', service: str = '',
             _enabled = False
             return False
     from sentry_sdk.integrations.logging import LoggingIntegration
+    from sentry_sdk.integrations.unraisablehook import UnraisablehookIntegration
     sdk.init(dsn=dsn, environment=environment or 'production', release=release or None,
-             traces_sample_rate=traces_sample_rate, send_default_pii=False,
-             before_send=before_send, before_send_transaction=before_send, before_breadcrumb=before_breadcrumb,
-             integrations=[LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)])
+             traces_sample_rate=traces_sample_rate, data_collection=DATA_COLLECTION, max_request_body_size='never',
+             # A logged message's issue is grouped by its words, as it was: with a stack attached (3.0's default) two
+             # different messages from one line of code would be one issue.
+             attach_stacktrace=False,
+             before_send=before_send, before_send_span=before_send_span, before_breadcrumb=before_breadcrumb,
+             # `level` None: no line is sent as a Sentry log (3.0's default sends INFO up); `event_level` by name, since
+             # 3.0's default makes no event of an ERROR line and every alert rests on it.
+             integrations=[LoggingIntegration(level=None, event_level=logging.ERROR, breadcrumb_level=logging.INFO)],
+             disabled_integrations=[UnraisablehookIntegration()])
     if service:
         sdk.set_tag('service', service)
     # The transport's own retries are not the host's news: on Cloud Run, where CPU is throttled between
@@ -161,7 +214,7 @@ def span(name: str, op: str = 'function', sdk=None):
         return
     if sdk is None:
         import sentry_sdk as sdk
-    with sdk.start_span(op=op, name=name) as s:
+    with sdk.start_span(name=name, attributes={'sentry.op': op}) as s:
         yield s
 
 
@@ -174,5 +227,8 @@ def transaction(name: str, op: str = 'task', sdk=None):
         return
     if sdk is None:
         import sentry_sdk as sdk
-    with sdk.start_transaction(op=op, name=name) as t:
-        yield t
+    # Its own scope, so the new trace it starts is not left on the thread for the next unit of work to inherit.
+    with sdk.isolation_scope():
+        sdk.new_trace()
+        with sdk.start_span(name=name, attributes={'sentry.op': op}, parent_span=None) as t:
+            yield t

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.53.0"
+version = "0.54.0"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -27,7 +27,7 @@ gmail = ["google-api-python-client>=2.100", "google-auth>=2.23", "google-auth-oa
 # SQLAlchemy is the host's own pin for db.engine() and outbox's rows; the suites need it (tests/test-outbox.py).
 dev = ["pytest>=8", "pytest-xdist>=3", "pyflakes>=3", "sqlalchemy>=2"]
 # Errors and traces to Sentry (monitoring.py); without it monitoring.init() is a no-op.
-monitoring = ["sentry-sdk>=2.20,<3"]
+monitoring = ["sentry-sdk>=3,<4"]
 # The OpenFeature provider over a Config (config.provider()); Config itself needs nothing.
 config = ["openfeature-sdk>=0.7,<1"]
 # Postgres (db.py): psycopg 3 with the bundled libpq. SQLAlchemy, for db.engine(), is the host's own pin.
