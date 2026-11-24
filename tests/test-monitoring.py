@@ -40,10 +40,13 @@ class FakeScope:
     def set_extra(self, k, v):
         self.sdk.extras[k] = v
 
+    def set_attribute(self, k, v):
+        self.sdk.attributes[k] = v
+
 
 class FakeSdk:
     def __init__(self):
-        self.inits, self.tags, self.extras, self.captured, self.spans = [], {}, {}, [], []
+        self.inits, self.tags, self.extras, self.attributes, self.captured, self.spans = [], {}, {}, {}, [], []
 
     def init(self, **kw):
         self.inits.append(kw)
@@ -52,6 +55,9 @@ class FakeSdk:
         self.tags[k] = v
 
     def new_scope(self):
+        return FakeScope(self)
+
+    def get_global_scope(self):
         return FakeScope(self)
 
     def capture_exception(self, exc):
@@ -210,6 +216,8 @@ try:
     check("a unit of work and its step are two spans of one trace, the work's name scrubbed",
           (sorted(s['name'] for s in spans), len({s['trace_id'] for s in spans}), any('carl@' in repr(s) for s in spans)),
           (['job for [email]', 'step'], 1, False))
+    check("0.54.2: every span says its service, which 3 does not take from the scope's tag",
+          {((s.get('attributes') or {}).get('service') or {}).get('value') for s in spans}, {'kit-test'})
     check("0.54.1: every event and span names the release init was given, its date and time never taken for a phone number",
           ({e.get('release') for e in sent if e.get('exception') or msgs},
            {((s.get('attributes') or {}).get('sentry.release') or {}).get('value') for s in spans}),

@@ -2,6 +2,11 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.54.2 - 2026-11-24 PT
+
+`monitoring`: every span carries the service `init()` was given (SMADPickleBot #2313). sentry-sdk 3 puts a scope's tags on
+errors alone, so a trace, and the performance hint Sentry makes of one, said no service.
+
 ## 0.54.1 - 2026-11-24 PT
 
 `monitoring`: an event's and a span's release, dist and environment go out as `init()` was given them (SMADPickleBot

@@ -187,6 +187,8 @@ def init(dsn: str, environment: str, release: str = '', service: str = '',
              disabled_integrations=[UnraisablehookIntegration()])
     if service:
         sdk.set_tag('service', service)
+        # 3's spans take no tag of a scope's, so a slow trace and the performance hint made of it said no service (0.54.2).
+        sdk.get_global_scope().set_attribute('service', service)
     # The transport's own retries are not the host's news: on Cloud Run, where CPU is throttled between
     # requests, they logged ~636 SSL-retry WARNINGs a day (SMADPickleBot, Feb 2026). Hosts call flush().
     for name in ('sentry_sdk', 'sentry_sdk.errors', 'urllib3.connectionpool'):
