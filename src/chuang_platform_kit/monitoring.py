@@ -85,6 +85,21 @@ def _scrub_all(value, depth: int = 0):
     return value
 
 
+# What the host itself named when it called init(): never a person's, and Sentry finds a release's commits and deploys by
+# it, so it goes out as it was. A release named by its date and time ('20261123-2351+6a18bb6') is twelve digits and a dash,
+# which the phone pattern took for a number, so every event named a release no deploy had marked (SMADPickleBot #2313).
+OWN_FIELDS = ('release', 'dist', 'environment')
+OWN_ATTRIBUTES = ('sentry.release', 'sentry.dist', 'sentry.environment')
+
+
+def _scrub_event(event):
+    """The event scrubbed, but for the fields of OWN_FIELDS (a trace's in `contexts` and the tags are scrubbed as ever)."""
+    out = _scrub_all(event)
+    if isinstance(event, dict):
+        out.update({k: event[k] for k in OWN_FIELDS if k in event})
+    return out
+
+
 _drops = []
 
 
@@ -113,7 +128,7 @@ def before_send(event, hint=None):
             except Exception:   # noqa: BLE001 - a filter that fails hides nothing
                 log.warning('monitoring: a drop_events_when predicate raised; the event is sent')
     try:
-        return _scrub_all(event)
+        return _scrub_event(event)
     except Exception:   # noqa: BLE001 - 3.0 drops the event of a hook that raises
         log.warning('monitoring: an event could not be scrubbed; it is sent without its contents')
         kept = ('event_id', 'timestamp', 'level', 'platform', 'release', 'environment', 'tags')
@@ -124,7 +139,11 @@ def before_send_span(span, hint=None):
     """Sentry's before_send_span: the span's name and attributes scrubbed, the two parts the SDK lets a hook change. One
     the scrub fails on goes out with neither: the SDK sends a span whose hook raised as it was."""
     try:
-        return _scrub_all(span)
+        out = _scrub_all(span)
+        was = span.get('attributes') if isinstance(span, dict) else None
+        if was:
+            out['attributes'].update({k: was[k] for k in OWN_ATTRIBUTES if k in was})
+        return out
     except Exception:   # noqa: BLE001 - never as it was
         return {'name': UNSCRUBBED, 'attributes': {}}
 

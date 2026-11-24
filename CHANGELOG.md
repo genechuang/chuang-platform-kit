@@ -2,6 +2,12 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.54.1 - 2026-11-24 PT
+
+`monitoring`: an event's and a span's release, dist and environment go out as `init()` was given them (SMADPickleBot
+#2313). A release named by its date and time (`20261123-2351+6a18bb6`) was masked as a phone number, so Sentry held a
+second release for every deploy, with no commits and no deploy of its own, and every event named that one.
+
 ## 0.54.0 - 2026-11-23 PT
 
 `monitoring` runs on sentry-sdk 3 and no longer on 2 (`monitoring = ["sentry-sdk>=3,<4"]`; SMADPickleBot #2270). No

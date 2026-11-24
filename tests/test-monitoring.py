@@ -126,6 +126,10 @@ check("ordinary numbers pass: a count, a score, a year, an amount; keys are scru
       out['extra'], {'[email]': 'key as email', 'count': 42, 'score': '11-9', 'year': '2026', 'amount': '$38.50'})
 check("a breadcrumb goes through the same scrub", M.before_breadcrumb({'message': 'to bob@x.org'})['message'], 'to [email]')
 check("non-strings and empties pass untouched", (M.scrub(None), M.scrub(''), M.scrub(5)), (None, '', 5))
+named = {'release': '20261123-2351+6a18bb6', 'environment': 'prod', 'dist': '1124', 'message': 'release 20261123-2351 for 626-555-0104'}
+check("0.54.1: the release, dist and environment init was given go out as they were; a number anywhere else is masked as ever",
+      (M.before_send(named), M.before_send_span({'name': 'n', 'attributes': {'sentry.release': '20261123-2351+6a18bb6', 'who': '626-555-0104'}})),
+      ({**named, 'message': 'release [phone] for [phone]'}, {'name': 'n', 'attributes': {'sentry.release': '20261123-2351+6a18bb6', 'who': '[phone]'}}))
 del os.environ['MONITORING_TEST_TOKEN']
 
 print("\n-- drop_events_when (0.31.0): a host says which errors are not news")
@@ -182,7 +186,7 @@ try:
         def init(self, **kw):
             real(transport=Memory, **kw)
 
-    M.init('https://k@o1.ingest.sentry.io/2', 'test', service='kit-test', sdk=WithTransport())
+    M.init('https://k@o1.ingest.sentry.io/2', 'test', '20261123-2351+6a18bb6', service='kit-test', sdk=WithTransport())
     import logging
     logging.getLogger('kit-test').info('an ordinary line')
     logging.getLogger('kit-test').error('could not reach carl@example.com at 626.555.0104')
@@ -206,6 +210,10 @@ try:
     check("a unit of work and its step are two spans of one trace, the work's name scrubbed",
           (sorted(s['name'] for s in spans), len({s['trace_id'] for s in spans}), any('carl@' in repr(s) for s in spans)),
           (['job for [email]', 'step'], 1, False))
+    check("0.54.1: every event and span names the release init was given, its date and time never taken for a phone number",
+          ({e.get('release') for e in sent if e.get('exception') or msgs},
+           {((s.get('attributes') or {}).get('sentry.release') or {}).get('value') for s in spans}),
+          ({'20261123-2351+6a18bb6'}, {'20261123-2351+6a18bb6'}))
     check("a captured exception carries its stack with its source line, and no local variable",
           (len(failures), any(f.get('function') == 'lookup' and 'raise ValueError' in (f.get('context_line') or '') for f in frames),
            [f for f in frames if f.get('vars')]), (1, True, []))
