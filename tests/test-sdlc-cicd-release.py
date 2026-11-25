@@ -210,6 +210,31 @@ def test_nothing_outside_the_listed_files_is_in_the_image():
     eq('the context', (found, refused), (['rules.md', 'src/a.py'], ['outside', 'outside', 'missing']))
 
 
+def test_the_build_asks_no_registry_cache():
+    """  a hosted runner's plain docker driver refuses to export a registry cache: the release's build loads the image and asks for none; build_once's own command line still does"""
+    asked = []
+    keep = (build_once._docker, build_once.find_image, build_once.image_size)
+    build_once._docker = lambda *argv, **kw: asked.append(argv) or types.SimpleNamespace(returncode=0, stderr='')
+    found = iter(['', '', REF, REF, '', REF])
+    build_once.find_image = lambda image, key: next(found)
+    build_once.image_size = lambda image, ref: None
+    try:
+        with project() as root, contextlib.redirect_stdout(None), contextlib.redirect_stderr(None):
+            cfg = R.load(os.path.join(root, 'release.toml'))
+            ref, _key = R.image_ref(cfg, cfg['components']['api'], root)
+            build_once.LOCK_PATH, lock = os.path.join(root, 'base.json'), build_once.LOCK_PATH
+            try:
+                with tempfile.TemporaryDirectory() as out:
+                    ctx, dockerfile = R.stage(cfg['components']['api'], root, out)
+                    build_once.main(['build', '--image', 'r/x', '--dockerfile', dockerfile, '--context', ctx, '--ignore', os.path.join(root, '.env')])
+            finally:
+                build_once.LOCK_PATH = lock
+    finally:
+        build_once._docker, build_once.find_image, build_once.image_size = keep
+    builds = [a for a in asked if a[:2] == ('buildx', 'build')]
+    eq('the two builds', (ref, ['--load' in b for b in builds], ['--cache-to' in b for b in builds]), (REF, [True, False], [False, True]))
+
+
 def test_a_bad_file_is_refused_by_name():
     """  a missing part, an unknown kind, a service with no path, a job with no checks and a check with no args are each refused before anything runs; main answers 1 with one ERROR line; an unknown component is named"""
     bad = {'no project': CFG.replace('project = "p"', ''), 'kind': CFG.replace('kind = "job"', 'kind = "cron"'),

@@ -174,7 +174,7 @@ def image_ref(cfg: dict, c: dict, root: str, build=True) -> tuple:
             if ref or not build:
                 return ref, key
             code = build_once.cmd_build(argparse.Namespace(dockerfile=dockerfile, context=ctx, ignore=None, arg=[], image=image,
-                                                           mark='', force=False, verbose=True))
+                                                           mark='', force=False, verbose=True, registry_cache=False))
             if code != 0:
                 raise Refused(f"{c['name']}: the image did not build")
             return build_once.find_image(image, key), key

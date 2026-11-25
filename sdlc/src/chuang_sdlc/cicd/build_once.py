@@ -510,9 +510,10 @@ def cmd_build(a):
         # needs. The `:latest` layers stay a second source for an image built before the cache ref existed. The
         # desktop's docker driver exports a registry cache with the containerd image store, which it has; the Cloud
         # Build twin (build-once-gcb.sh) and the GitHub action read the same ref and export what their builders can.
-        r = _docker("buildx", "build", "--provenance=false", "--sbom=false",
-                    "--cache-to", f"type=registry,ref={cache},mode=max", "--cache-from", f"type=registry,ref={cache}",
-                    "--cache-from", latest, *build_args,
+        # `registry_cache` off (release.py): a hosted runner's plain docker driver refuses to export a registry cache.
+        kept = (["--cache-to", f"type=registry,ref={cache},mode=max", "--cache-from", f"type=registry,ref={cache}",
+                 "--cache-from", latest] if getattr(a, "registry_cache", True) else ["--load"])
+        r = _docker("buildx", "build", "--provenance=false", "--sbom=false", *kept, *build_args,
                     "-f", os.path.join(tmp, "Dockerfile"), *[x for t in tags for x in ("-t", t)], ctx,
                     stdout=sys.stderr if a.verbose else subprocess.DEVNULL, stderr=subprocess.STDOUT if a.verbose else subprocess.PIPE)
         built = time.monotonic() - t0
