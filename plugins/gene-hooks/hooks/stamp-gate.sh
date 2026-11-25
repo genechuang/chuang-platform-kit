@@ -96,6 +96,10 @@ judge() { tail -c 262144 "$t" | awk -v nm="$nm" -v nd="$nd" -v ny="$ny" -v nh="$
   /"type":"user"/ { if ($0 !~ /"tool_result"/ && $0 !~ /"isMeta":true/) { last = ""; id = "" } next }
   /"type":"assistant"/ {
     s = $0; found = 0
+    # The message alone, never a block inside a tool call (1.41.1, SMADPickleBot #2395): a call whose input holds
+    # {"type":"text","text":"x"} of its own (a document write) read as a message with no stamp, eight calls in a row
+    # on 11/25/26. A quote inside a message is escaped, so this marker is always the call itself.
+    if ((i = index(s, "\"type\":\"tool_use\"")) > 0) s = substr(s, 1, i)
     while ((i = index(s, "\"type\":\"text\",\"text\":\"")) > 0) { s = substr(s, i + 22); last = substr(s, 1, 200); found = 1 }
     if (found) { id = ""; if (match($0, /"uuid":"[^"]*"/)) id = substr($0, RSTART + 8, RLENGTH - 9) }
   }

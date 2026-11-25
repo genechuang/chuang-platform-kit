@@ -237,6 +237,17 @@ def main():
         dst = march + timedelta(days=(6 - march.weekday()) % 7) <= now < nov + timedelta(days=(6 - nov.weekday()) % 7)
         t = now + timedelta(hours=-7 if dst else -8, minutes=minutes)
         return f"{t.month}/{t.day}/{t:%y} " + t.strftime('%I:%M %p').lstrip('0')
+    # #2395: a tool call whose input holds a text block of its own (a document write) is no message.
+    def prose(t):
+        return line('assistant', [{'type': 'tool_use', 'name': 'mcp__docs__update', 'input': {'payload': {'content': [{'type': 'text', 'text': t}]}}}])
+    said = text(f'{at(0)} PT · ticket: #2395: writing the document')
+    s = Session()
+    check('#2395: a text block inside a tool call passes on a stamped message, and the call is charged to its ticket',
+          (s.gate([prompt(), said, prose('PlayersTable')])[0], s.activity()), (0, [(s.sid, '2395')]))
+    check('  a stamped block inside one clears no unstamped message', gate([prompt(), text('unstamped'), prose(f'{at(0)} PT · ticket: #2395: x')])[0], 2)
+    check('  a message quoting the marker is read whole: unstamped refused, stamped passes',
+          (gate([prompt(), text('the block {"type":"tool_use"} said'), tool_use()])[0],
+           gate([prompt(), text(f'{at(0)} PT · ticket: #2395: {{"type":"tool_use"}} x'), tool_use()])[0]), (2, 0))
     check('drift: the clock now passes', gate([prompt(), text(f'{at(0)} PT · ticket: #671 ok'), tool_use()])[0], 0)
     check('  an older stamp passes here (the line before a call is often not on disk yet; Stop judges behind)',
           gate([prompt(), text(f'{at(-40)} PT · ticket: #671 ok'), tool_use()])[0], 0)
