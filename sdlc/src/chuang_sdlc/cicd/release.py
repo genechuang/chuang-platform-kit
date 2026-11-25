@@ -55,7 +55,7 @@ import tomllib
 import urllib.error
 import urllib.request
 
-from chuang_sdlc.cicd import build_once, gh_deploy, proc, smoke_rest
+from chuang_sdlc.cicd import build_once, gh_deploy, proc
 
 SMOKE_TRIES = 4        # a new revision's first answer may be a cold start's
 SMOKE_WAIT = 3
@@ -210,24 +210,29 @@ def ask(url: str, token: str = '', opener=None) -> tuple:
         return 0, str(getattr(e, 'reason', e))
 
 
-def id_token(audience: str, env=None, run=None) -> str:
-    """An identity token for a private service: the runner's own sign-in's, through gcloud, else the kit's mint."""
+def id_token(audience: str, env=None, run=None, opener=None) -> str:
+    """An identity token for a private service. With RELEASE_ACCOUNT (a runner signed in with no key), that account's, from
+    IAM Credentials with the runner's own access token, since gcloud mints none from such a sign-in; else gcloud's."""
     account = (env if env is not None else os.environ).get('RELEASE_ACCOUNT', '')
-    extra = [f'--impersonate-service-account={account}'] if account else []
-    done = (run or proc.run)(['gcloud', 'auth', 'print-identity-token', f'--audiences={audience}', *extra])
-    if done.returncode == 0 and (done.stdout or '').strip():
-        return done.stdout.strip().splitlines()[-1]
-    token, why = smoke_rest.mint_id_token(audience, smoke_rest.access_token(env), account, env)
-    if not token:
-        raise Refused(f'no identity token for {audience}: {why}')
-    return token
+    if not account:
+        return _gcloud(['auth', 'print-identity-token', f'--audiences={audience}'], run).strip().splitlines()[-1]
+    access = _gcloud(['auth', 'print-access-token'], run).strip().splitlines()[-1]
+    req = urllib.request.Request(f'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{account}:generateIdToken', method='POST',
+                                 data=json.dumps({'audience': audience, 'includeEmail': True}).encode(),
+                                 headers={'Authorization': f'Bearer {access}', 'Content-Type': 'application/json'})
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=SMOKE_TIMEOUT) as r:
+            return json.loads(r.read())['token']
+    except urllib.error.HTTPError as e:
+        raise Refused(f'no identity token as {account}: HTTP {e.code} {e.read(400).decode("utf-8", "replace").strip()}')
+    except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        raise Refused(f'no identity token as {account}: {type(e).__name__}')
 
 
-def smoke(c: dict, url: str, audience: str, token=None, opener=None, sleep=time.sleep) -> str:
+def smoke(c: dict, url: str, bearer: str = '', opener=None, sleep=time.sleep) -> str:
     """A service's smoke at `url`: its path answers the code it names and its body holds what it expects. '' when it
     passes, else what it answered, after SMOKE_TRIES tries."""
     want, said = int(c['smoke'].get('code') or 200), ''
-    bearer = (token or id_token)(audience) if c['smoke'].get('private') else ''
     for i in range(SMOKE_TRIES):
         if i:
             sleep(SMOKE_WAIT)
@@ -246,12 +251,13 @@ def release_service(cfg: dict, c: dict, ref: str, say=print, run=None, token=Non
     place = [f"--project={cfg['project']}", f"--region={cfg['region']}", '--quiet']
     before = describe(cfg, c, run)
     was, home = serving(before), before.get('status', {}).get('url') or ''
+    bearer = (token or id_token)(home) if c['smoke'].get('private') else ''   # before anything is deployed: no smoke, no revision
     _gcloud(['run', 'deploy', c['name'], f'--image={ref}', '--no-traffic', f'--tag={DEV_TAG}', *place], run)
     doc = describe(cfg, c, run)
     revision, url = tagged(doc)
     if not revision or image_of(doc, 'service') != ref:
         raise Refused(f"{c['name']}: the dev revision was not made from {ref}; production keeps {', '.join(was)}")
-    failed = smoke(c, url, home, token, opener, sleep)
+    failed = smoke(c, url, bearer, opener, sleep)
     if failed:
         raise Refused(f"{c['name']}: {revision} failed its smoke on the dev rung: {failed}. Production keeps {', '.join(was)}")
     say(f"{c['name']}: {revision} passed on the dev rung")
@@ -259,7 +265,7 @@ def release_service(cfg: dict, c: dict, ref: str, say=print, run=None, token=Non
     now = serving(describe(cfg, c, run))
     if now != [revision]:
         raise Refused(f"{c['name']}: {revision} was promoted and traffic goes to {', '.join(map(str, now)) or 'nothing'}")
-    failed = smoke(c, home, home, token, opener, sleep)
+    failed = smoke(c, home, bearer, opener, sleep)
     if failed:
         raise Refused(f"{c['name']}: {revision} serves and failed its smoke: {failed}. Back: gcloud run services update-traffic "
                       f"{c['name']} --to-revisions={was[0] if was else '<the one before>'}=100 {' '.join(place[:2])}")
@@ -307,9 +313,9 @@ def release(cfg: dict, name: str, root: str, plan=False, force=False, say=print,
     did = record(f'{name} · production', 'start', description=f'{name} {key}')
     try:
         (release_job if c['kind'] == 'job' else release_service)(cfg, c, ref, say, run, **(smokes if c['kind'] == 'service' else {}))
-    except Refused:
+    except Exception as e:   # noqa: BLE001 - whatever stopped it, the record says so and the line is an ERROR, never a traceback
         record(f'{name} · production', 'failure', did, f'{name} {key}')
-        raise
+        raise e if isinstance(e, Refused) else Refused(f'{name}: {type(e).__name__}: {e}') from e
     record(f'{name} · production', 'success', did, f'{name} {key} is live')
     say(f'{name}: live on {ref} (image {built:.0f} s, ladder {clock() - began - built:.0f} s)')
     return 'released'

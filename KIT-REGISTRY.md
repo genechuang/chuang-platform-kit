@@ -1716,8 +1716,8 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `image_ref(cfg, c, root, build=)` | (IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or built and pushed when no build of that content exists; ('', key) with `build` off and none there. |
 | `check_image(c, ref, run=)` | Each of the component's `checks`, a run of the image on this machine with no network and no environment of ours: its exit code and, when it names one, the words it prints. Refused names the one that did not. |
 | `ask(url, token=, opener=)` | (HTTP code, body) of one GET; (0, why) when nothing answered. |
-| `id_token(audience, env=, run=)` | An identity token for a private service: the runner's own sign-in's, through gcloud, else the kit's mint. |
-| `smoke(c, url, audience, token=, opener=, sleep=)` | A service's smoke at `url`: its path answers the code it names and its body holds what it expects. '' when it passes, else what it answered, after SMOKE_TRIES tries. |
+| `id_token(audience, env=, run=, opener=)` | An identity token for a private service. With RELEASE_ACCOUNT (a runner signed in with no key), that account's, from IAM Credentials with the runner's own access token, since gcloud mints none from such a sign-in; else gcloud's. |
+| `smoke(c, url, bearer=, opener=, sleep=)` | A service's smoke at `url`: its path answers the code it names and its body holds what it expects. '' when it passes, else what it answered, after SMOKE_TRIES tries. |
 | `release_service(cfg, c, ref, say=, run=, token=, opener=, sleep=)` | The service up its ladder: a revision of `ref` at no traffic on the dev tag, its smoke, every request, and the smoke once more at the service's own address. Refused leaves production on the revision it had, named. |
 | `release_job(cfg, c, ref, say=, run=)` | The job moved to `ref`, its image checked already, read back: its next run is the new image, nothing is executed. |
 | `record(environment, state, did=, description=, deploy=)` | A rung's GitHub deployment, best effort: started (its id) or finished; '' when GitHub kept none. |

@@ -163,6 +163,33 @@ def test_a_dev_rung_that_fails_leaves_production():
     eq('  a promotion that did not take is refused', 'was promoted and traffic goes to my-api-1' in got, True)
 
 
+def test_the_smokes_token_is_had_before_anything_is_deployed():
+    """  a private service whose identity token cannot be minted is refused with no revision made, in IAM's own words; minted, it is the account's from IAM Credentials for the service's own address; a fault that is no refusal is still one ERROR line and a failed record"""
+    import io
+    import urllib.error
+    asked = []
+
+    def iam(req, timeout=None):
+        asked.append((req.full_url.rsplit('/', 1)[1], json.loads(req.data), req.headers['Authorization']))
+        return contextlib.nullcontext(types.SimpleNamespace(read=lambda: b'{"token": "idt"}'))
+
+    def no(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 403, 'x', {}, io.BytesIO(b'getOpenIdToken denied'))
+    gcloud = lambda args, **kw: types.SimpleNamespace(returncode=0, stdout='acc\n' if 'print-access-token' in args else 'gid\n', stderr='')  # noqa: E731
+    env = {'RELEASE_ACCOUNT': 'deploy@p.iam'}
+    eq('minted', (R.id_token('https://api', env, gcloud, iam), asked, R.id_token('https://api', {}, gcloud)),
+       ('idt', [('deploy@p.iam:generateIdToken', {'audience': 'https://api', 'includeEmail': True}, 'Bearer acc')], 'gid'))
+    cloud, said = Cloud(), []
+    for token in (lambda aud: R.id_token(aud, env, gcloud, no), lambda aud: 1 / 0):
+        with project() as root, world(cloud) as records:
+            try:
+                R.release(R.load(os.path.join(root, 'release.toml')), 'api', root, say=lambda s: None, run=cloud.run, token=token, opener=cloud.open)
+            except R.Refused as e:
+                said.append((str(e), records[-1]))
+    eq('  refused with nothing deployed', (['getOpenIdToken denied' in said[0][0], 'ZeroDivisionError' in said[1][0]], [s[1] for s in said], cloud.said('run', 'deploy')),
+       ([True, True], [('api · production', 'failure')] * 2, []))
+
+
 def test_an_image_that_does_not_start_deploys_nothing():
     """  an image check that ends wrong stops the release before any deploy, and no rung is recorded"""
     cloud = Cloud(docker=(1, 'ImportError: no module named api'))

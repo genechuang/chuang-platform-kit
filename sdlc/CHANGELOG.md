@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.64.2 - 2026-11-25 PT
+
+- `cicd.release`: a private service's identity token is minted before its revision is made, through IAM Credentials on a
+  runner signed in with no key (gcloud mints none there), with no other package; any fault ends as one ERROR line and a
+  failed record, never a traceback. Suite: `tests/test-sdlc-cicd-release.py`.
+
 ## 0.64.1 - 2026-11-25 PT
 
 - `build_once` builds with no registry cache when its caller says so, and `cicd.release` does: a hosted runner's plain
