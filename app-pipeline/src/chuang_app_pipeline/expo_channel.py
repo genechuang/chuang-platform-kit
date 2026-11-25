@@ -81,12 +81,20 @@ def _instant(text: str):
     return at if at.tzinfo else at.replace(tzinfo=timezone.utc)   # utc-ok: a stamp with no zone is the server's UTC
 
 
+BUILT_WITHIN_S = 900   # how long after its build was made a release's update may reach the lower channel
+
+
 def judge(note: dict, prod: dict, dev: dict = None, channel: str = 'production', lower: str = 'dev',
-          within_s: int = PUBLISHED_WITHIN_S) -> tuple:
+          within_s: int = PUBLISHED_WITHIN_S, built=None, built_within_s: int = BUILT_WITHIN_S) -> tuple:
     """(failures, notes) for the released channel's manifest `prod` against the release's notice `note` and, when
     given, the lower channel's manifest `dev` (the update the device ran). A failure is a reason the delivery is wrong;
     a note is said and not judged. `channel` and `lower` are the two channels' names, for the branch check and the
-    words."""
+    words.
+
+    The lower channel has moved on when its update was made after the released one's, or, with `built` (the datetime
+    the release's own build was made, with its zone) given, more than `built_within_s` after that build (0.5.0): a
+    release is republished when it ships, so a newer build that reached the lower channel between the device's run and
+    the ship is made before the released update, and read as the wrong files until then."""
     fails, notes = [], []
     meta = prod.get('metadata') or {}
     if meta.get('branchName') != channel:
@@ -104,7 +112,7 @@ def judge(note: dict, prod: dict, dev: dict = None, channel: str = 'production',
         same = (dev.get('launchAsset') or {}).get('hash') == (prod.get('launchAsset') or {}).get('hash')
         if same:
             notes.append(f'the bundle is the one the {lower} channel serves, the files the device ran')
-        elif dev_made and made and dev_made > made:
+        elif dev_made and ((made and dev_made > made) or (built and (dev_made - built).total_seconds() > built_within_s)):
             notes.append(f'the {lower} channel has moved on to a newer build, so the bundle is not compared with the one the device ran')
         else:
             fails.append(f"{channel}'s bundle is not the one the {lower} channel serves: not the files the device ran")
@@ -148,11 +156,11 @@ def same_tree(sha: str, named: str, tree) -> bool:
 
 
 def check(sha: str, platform: str, note: dict, url: str, run=subprocess.run, same=None, channel: str = 'production',
-          lower: str = 'dev', by: str = 'expo_channel') -> dict:
+          lower: str = 'dev', by: str = 'expo_channel', built=None) -> dict:
     """One platform's verdict for the release `sha`: {sha, platform, passed, checked (False when the release published
     no update for it), detail [lines], update, group, published_at, label, seconds, at, by}. The release's update is
     the notice's when the notice names `sha`, or, with `same(sha, named)` given, a commit holding the same app tree.
-    `note` is the release's notice for the platform ({} or None when it could not be read)."""
+    `note` is the release's notice for the platform ({} or None when it could not be read); `built` is judge()'s."""
     began = time.monotonic()
     out = {'sha': sha, 'platform': platform, 'passed': False, 'checked': True, 'detail': [],
            'at': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'by': by}   # utc-ok: an instant, never a day
@@ -174,7 +182,7 @@ def check(sha: str, platform: str, note: dict, url: str, run=subprocess.run, sam
         dev = manifest(platform, note['runtime'], lower, url, run)['manifest']
     except ValueError:
         dev = None
-    fails, notes = judge(note, prod['manifest'], dev, channel, lower)
+    fails, notes = judge(note, prod['manifest'], dev, channel, lower, built=built)
     if dev is None:
         notes.append(f'the {lower} channel could not be read, so the bundle is not compared with the one the device ran')
     if not fails:

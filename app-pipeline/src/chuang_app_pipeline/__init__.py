@@ -6,4 +6,4 @@ is this build's, the join of each platform's export, and what a manifest says wa
 0.4.0 `gradle` and `android`: a local Android build's Gradle side and a device read (#2310). A
 distribution of its own beside chuang-platform-kit, chuang-sdlc and chuang-alerts in the same repository
 (app-pipeline/, tags app-v<version>), standard library only, pinned only where an app's pipeline runs."""
-__version__ = '0.4.0'
+__version__ = '0.5.0'

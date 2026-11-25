@@ -1,5 +1,11 @@
 # chuang-app-pipeline changelog
 
+## 0.5.0 (2026-11-25)
+
+- `expo_channel.check` and `judge` take `built`, the datetime the release's own build was made (SMADPickleBot #2391): a
+  lower channel whose update was made more than `BUILT_WITHIN_S` (900 s, judge's `built_within_s`) after it has moved on
+  to a newer build, though the released update, republished at the ship, was made later still. Left out, as before.
+
 ## 0.4.0 (2026-11-24)
 
 - New modules `gradle` and `android` (SMADPickleBot #2310, step 4 of #2161), no signature changes elsewhere: the parts

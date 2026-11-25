@@ -105,6 +105,17 @@ blind = C.check(SHA, 'ios', NOTICE, URL, run=Curl(prod=manifest(), dev=None))
 check('a lower channel that moved on, or cannot be read, is said and the delivery still passes on the rest',
       (moved['passed'], moved['detail'][0][:36], blind['passed'], any('could not be read' in d for d in blind['detail'])),
       (True, 'the dev channel has moved on to a ne', True, True))
+# 0.5.0 (SMADPickleBot #2391): a newer build reached the lower channel between the device's run and the ship, so its
+# update was made before the released one's
+early = manifest(bundle_hash='n' * 43, created='2026-11-19T18:00:00.000Z')
+at = lambda text: __import__('datetime').datetime.fromisoformat(text)   # noqa: E731
+newer = C.check(SHA, 'ios', NOTICE, URL, run=Curl(prod=manifest(), dev=early), built=at('2026-11-19T17:00:00+00:00'))
+own = C.check(SHA, 'ios', NOTICE, URL, run=Curl(prod=manifest(), dev=early), built=at('2026-11-19T09:55:00-08:00'))
+unsaid = C.check(SHA, 'ios', NOTICE, URL, run=Curl(prod=manifest(), dev=early))
+check("a newer build on the lower channel by the release's own build time is said, not failed; within that build's own "
+      "time, or with no build time, other files are still a failure",
+      (newer['passed'], newer['detail'][0][:36], own['passed'], unsaid['passed']),
+      (True, 'the dev channel has moved on to a ne', False, False))
 other_note = {**NOTICE, 'sha': 'abc1234'}
 asked = []
 check("a release that published no update is not checked: no notice, a notice naming another commit with no tree reader "
