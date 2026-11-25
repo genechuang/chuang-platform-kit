@@ -25,4 +25,9 @@ Standard library only, so a host's pipeline can load it on a bare runner from th
   build's: `guard_verdict` is that decision with no I/O, beside the package checks a fingerprint depends on, a memo
   for a passing answer, and a store read tried again. The host keeps its own commands and its own words.
 
+- `chuang_app_pipeline.gradle` and `chuang_app_pipeline.android` (0.4.0): a local Android build's Gradle side (the edits
+  to a prebuilt project, the watched run, the profile report, the inputs compared, the files found) and a device read
+  (its screen, its crash, an install's refusal, a flow's failure, the guest's health). Each is a function of what it is
+  handed; a host drives its own device and words its own lines.
+
 Nothing here names a project, an app, a bucket or a person: those are the host's arguments.

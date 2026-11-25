@@ -1833,6 +1833,28 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `decode(envelope)` | The pushed Pub/Sub message's JSON (a LogEntry from the sink); {} when unreadable: no message, empty data, data that is not base64, UTF-8 or JSON, or JSON that is not an object. The kit's pubsub.decode reads it. |
 | `handle(payload, ctx)` | One LogEntry by its resource type, or a Cloud Monitoring incident. What it did, for the log. |
 
+## `chuang_app_pipeline.android`: An Android device or emulator, read: what adb, uiautomator, Maestro and the guest say, each a funct…
+
+| Name | Purpose |
+|---|---|
+| `adb_server_down(words)` | Whether a failed adb call says its own server was down, as opposed to the device refusing the command. |
+| `screen_texts(xml)` | Every text and content-desc on a uiautomator dump, in order, empty ones left out; [] for one that does not parse. |
+| `anr(texts, words=)` | The text of a not-responding dialog on the screen, '' when there is none; `words` in lower case. |
+| `wait_button(xml)` | The centre of a not-responding dialog's "Wait" button in a uiautomator dump, (x, y), or None. |
+| `crash_lines(log, package)` | The crash buffer's lines that name `package`: a FATAL EXCEPTION of its process or a native crash. |
+| `launch_ms(am_output)` | `am start -W`'s TotalTime in milliseconds, None when it gave none. |
+| `install_error(said)` | An install's own words for why it failed: the package manager's `Failure [...]`, else the first exception line, else the first line that says anything (a long stack's foot says nothing). |
+| `maestro_failure(report, said, code)` | Why a Maestro flow failed: its JUnit report's <failure> text (`report` its path), else Maestro's last plain lines (its boxed cloud advert left out), else the exit code. |
+| `reopen_due(elapsed, opened, wait_s, at)` | Whether a smoke waiting on an update opens the app again now: `elapsed` s after its first open, having reopened `opened` times. Each time in `at` is one reopen, in order; one at or past `wait_s` never happens. |
+| `guest_up_s(uptime)` | The guest's seconds up from /proc/uptime's first figure, None when the text has none. |
+| `guest_load(text)` | The guest's 1-minute load from /proc/loadavg's line, after /proc/uptime's, None when there is none. |
+| `data_free_kb(df_text)` | /data's free kilobytes from `adb shell df /data` (Available is the fourth column of its one data line), None when the text has no such line. |
+| `worn(meminfo, uptime, max_up_s)` | Why an emulator is too worn for a smoke, '' when it is fresh enough or its uptime cannot be parsed: up past `max_up_s` (/proc/uptime's first figure), its swap in use (/proc/meminfo) said beside it. Swap alone never makes it worn: a guest swaps a gigabyte with… |
+| `guest_facts(text)` | The guest's own memory, swap, uptime and load from one `cat /proc/meminfo /proc/uptime /proc/loadavg`; a figure that cannot be read is left out. |
+| `host_facts(text)` | The box's CPU load and free memory from one line `<cpu %> <free MB> <total MB>`; {} when it is not that. |
+| `process_mb(tasklist_csv, watched)` | Megabytes held by the `watched` processes ((label, name prefix) pairs) from Windows' `tasklist /FO CSV /NH`, each summed; {} when nothing parses. |
+| `avd_config(text)` | An AVD's RAM, Java heap and cores from its config.ini, as written; a key written twice is its last line, the one the emulator reads. |
+
 ## `chuang_app_pipeline.artifact`: An Expo app's build artifact, the parts any app's pipeline needs (SMADPickleBot #2237, step 3a of #…
 
 | Name | Purpose |
@@ -1868,6 +1890,28 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `same_tree(sha, named, tree)` | Whether the notice's commit `named` holds the same app tree as the release `sha`, by the host's own reader `tree(rev)` (the app folder's tree id, '' when unread): a rebuild of one app tree reuses its artifact, so a release publishes the update built at an ear… |
 | `check(sha, platform, note, url, run=, same=, channel=, lower=, by=)` | One platform's verdict for the release `sha`: {sha, platform, passed, checked (False when the release published no update for it), detail [lines], update, group, published_at, label, seconds, at, by}. The release's update is the notice's when the notice names… |
 | `line(v, channel=)` | One verdict in one line, an ERROR when it failed. |
+
+## `chuang_app_pipeline.gradle`: A local Android build's Gradle side, the parts that stand on their own (SMADPickleBot #2310, step 4…
+
+| Name | Purpose |
+|---|---|
+| `with_jvmargs(text, jvmargs)` | gradle.properties with the daemon's memory set to `jvmargs`, the line replaced or added. |
+| `with_update_channel(manifest, channel)` | The prebuilt AndroidManifest.xml with expo-updates' request headers naming `channel`. An EAS build adds `expo-channel-name` itself; a local build has none, so the update server cannot pick a channel and the app takes no update. A manifest that has the key is… |
+| `with_version_code(gradle_text, code)` | The prebuilt app/build.gradle with `versionCode code`; a ValueError when the file has no versionCode line. |
+| `with_no_sentry_telemetry(gradle_text)` | The prebuilt app/build.gradle with `telemetry = false` in its `sentry { }` block: Sentry's Android Gradle plugin reports every build to Sentry's own telemetry project unless told not to, and its Expo plugin has no option for it. A file with no sentry block, o… |
+| `next_version_code(tracks)` | The version code after the highest a store's tracks hold ([{releases: [{versionCodes}]}], Google Play's answer), 1 for an app with none: a code the store has seen is refused at the upload. |
+| `last_task(log_tail)` | The last task a plain-console log's text names, '' for none. |
+| `args(task, jvmargs, abi=, extra=)` | Gradle's arguments: the task, plain output, the build cache (it keys tasks on their inputs, not the folder, so a fresh prebuild reuses them), its own task times (`--profile`), the daemon's memory, `extra`, and `abi` alone when asked (React Native's architectu… |
+| `watched_run(command, cwd, env, log, stale_s, task_max_s, max_s, kill, tell=, now=, sleep=, popen=)` | `command` run with its output live into `log`: (its exit code, ''), or (124, why) once it was stopped with `kill(pid)`: silent for `stale_s`, one task running for `task_max_s` (a task printing warnings is not a task making progress), or past `max_s` in all. `… |
+| `profile_tasks(html)` | Gradle's --profile report's task rows, (task path, seconds, result), slowest first: the Task Execution table's rows whose result is not a project's `(total)`; a duration Gradle wrote as 1h2m3.45s, 1m3.45s or 0.123s. |
+| `task_kind(path)` | A task's kind by its name (the last part of its path): the first of TASK_KINDS whose words it holds, else other. |
+| `keep_profile(android, log)` | Gradle's newest --profile report under android/build/reports/profile copied beside the build's log as `<log less .log>-profile.html`, and one line of its task seconds by kind and its ten slowest tasks. The seconds are each task's own, run in parallel, so they… |
+| `ccache_hits(tsv)` | (hits, misses) from `ccache --print-stats`' tab-separated counters. |
+| `source_key(s)` | A native fingerprint source's name: its type and its path, or its id. |
+| `diff_sources(a, b)` | The sources two fingerprints disagree on: (key, 'added'\|'removed'\|'changed'), sorted. |
+| `built(android, aab)` | Where a release build leaves its file: the bundle (`aab`) or the APK. |
+| `mapping_beside(android, dest)` | The build's R8 mapping (app/build/outputs/mapping/release/mapping.txt) copied beside the bundle as `<dest>.mapping.txt` for a store's deobfuscation upload; the line to say. A build that did not minify writes none, and the line says so. |
+| `signing_env(store_file, store_password, alias, key_password)` | The Android Gradle plugin's injected signing (what Android Studio passes), as Gradle project properties in the environment, so no password is on a command line or in Gradle's log; it overrides the release build type's own signing config. |
 
 ## `chuang_app_pipeline.runtime`: An Expo app's native runtime, the parts of its guard that stand on their own (SMADPickleBot #2244,…
 

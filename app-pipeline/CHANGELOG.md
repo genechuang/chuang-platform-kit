@@ -1,5 +1,17 @@
 # chuang-app-pipeline changelog
 
+## 0.4.0 (2026-11-24)
+
+- New modules `gradle` and `android` (SMADPickleBot #2310, step 4 of #2161), no signature changes elsewhere: the parts
+  of a local Android build and of a device's smoke that read nothing but what they are handed. `gradle`: the edits to a
+  prebuilt project's text (`with_jvmargs`, `with_update_channel`, `with_version_code`, `with_no_sentry_telemetry`),
+  `next_version_code`, `args`, `last_task`, `watched_run` (a run stopped when silent, stuck in one task or past its
+  bound, answering why), `profile_tasks` / `task_kind` / `keep_profile`, `ccache_hits`, `source_key` / `diff_sources`,
+  `built`, `mapping_beside`, `signing_env`. `android`: `screen_texts`, `anr`, `wait_button`, `crash_lines`, `launch_ms`,
+  `install_error`, `maestro_failure`, `reopen_due`, `guest_up_s`, `guest_load`, `data_free_kb`, `worn`, `guest_facts`,
+  `host_facts`, `process_mb`, `avd_config`, `adb_server_down`. The emulator's lifecycle stays its host's. Suite:
+  `tests/test-app-android.py`.
+
 ## 0.3.1 (2026-11-22)
 
 - `runtime.guard_verdict`: a store runtime that was not read (None or empty) is never a match, even against a row that
