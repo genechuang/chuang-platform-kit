@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.64.0 - 2026-11-25 PT
+
+- `cicd.release`: a project's Cloud Run releases up one ladder, from a file in its own repository (SMADPickleBot #2432):
+  each image built once by content from the files listed and nothing else, checked with a `docker run` on the runner with
+  no network and no secret, deployed by digest with no traffic on the `dev` tag, smoked there, promoted in one step and
+  smoked again; a job moves once its checks pass and runs nothing. Only the image ever changes. A failure leaves
+  production on what it ran and says so in one ERROR line. Suite: `tests/test-sdlc-cicd-release.py`.
+
 ## 0.63.1 - 2026-11-22 PT
 
 - `moves.light_fix` keeps the scheduled Light on a card in the shipyard column, as it keeps the blocked one: without

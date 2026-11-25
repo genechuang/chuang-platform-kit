@@ -63,10 +63,12 @@ chuang_platform_kit (whose github and clock modules it uses; the record store is
   cicd       the generic half of a release pipeline, standard library only (SMADPickleBot #235): proc, one command
              runner for every pipeline script; build_once, an image or function source built once by content key;
              smoke_rest, a backend smoke's reads over REST; migration_kind, whether a push's migrations only add;
-             pids, a process named by its pid and the start a lock recorded, waited on or stopped
+             pids, a process named by its pid and the start a lock recorded, waited on or stopped; release, a project's
+             Cloud Run services and jobs up one ladder from a file in its repository: built once, checked on the
+             runner, a dev rung with no traffic, its smoke, the promotion
 
 Every version is tagged `sdlc-v<version>`; a host pins
 `chuang-sdlc @ git+https://github.com/genechuang/chuang-platform-kit@sdlc-v<version>#subdirectory=sdlc` only where the
 code that runs it is installed.
 """
-__version__ = '0.63.1' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
+__version__ = '0.64.0' # pyproject.toml's version; tests/test-versions.py holds the two equal (sdlc-v0.7.0 shipped with 0.6.0 here, read 11/8/26; 0.20.0 to 0.23.0 shipped with 0.19.0, read 11/11/26; 0.27.0 and 0.28.0 with 0.26.0, read 11/15/26)
