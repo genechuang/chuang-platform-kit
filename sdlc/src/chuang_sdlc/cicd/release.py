@@ -159,6 +159,14 @@ def serving(doc: dict) -> list:
     return [t.get('revisionName') for t in doc.get('status', {}).get('traffic') or [] if (t.get('percent') or 0) > 0]
 
 
+def running(doc: dict, kind: str) -> str:
+    """The image that serves: a job's own; a service's newest revision's only when that revision takes every request, ''
+    while traffic is elsewhere (a release that stopped on its dev rung leaves its image in the spec, serving nothing)."""
+    status = doc.get('status', {})
+    newest = status.get('latestCreatedRevisionName') or status.get('latestReadyRevisionName')
+    return image_of(doc, kind) if kind == 'job' or serving(doc) == [newest] else ''
+
+
 # ------------------------------------------------------------------ the build
 def image_ref(cfg: dict, c: dict, root: str, build=True) -> tuple:
     """(IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or
@@ -299,7 +307,7 @@ def release(cfg: dict, name: str, root: str, plan=False, force=False, say=print,
     c, began = cfg['components'][name], clock()
     ref, key = image_ref(cfg, c, root, build=not plan)
     built = clock() - began
-    current = image_of(describe(cfg, c, run), c['kind'])
+    current = running(describe(cfg, c, run), c['kind'])
     if ref and current == ref and not force:
         say(f'{name}: unchanged (it runs the image of this content, {key})')
         return 'unchanged'

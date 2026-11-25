@@ -1713,6 +1713,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `image_of(doc, kind)` | The image a described service or job runs. |
 | `tagged(doc, tag=)` | (revision, URL) on a described service's traffic tag; ('', '') with none. |
 | `serving(doc)` | The revisions a described service sends traffic to. |
+| `running(doc, kind)` | The image that serves: a job's own; a service's newest revision's only when that revision takes every request, '' while traffic is elsewhere (a release that stopped on its dev rung leaves its image in the spec, serving nothing). |
 | `image_ref(cfg, c, root, build=)` | (IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or built and pushed when no build of that content exists; ('', key) with `build` off and none there. |
 | `check_image(c, ref, run=)` | Each of the component's `checks`, a run of the image on this machine with no network and no environment of ours: its exit code and, when it names one, the words it prints. Refused names the one that did not. |
 | `ask(url, token=, opener=)` | (HTTP code, body) of one GET; (0, why) when nothing answered. |

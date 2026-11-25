@@ -3,6 +3,11 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.64.3 - 2026-11-25 PT
+
+- `cicd.release`: a component is unchanged only when the image its files make is what serves; a release that stopped on
+  its dev rung climbs again. Suite: `tests/test-sdlc-cicd-release.py`.
+
 ## 0.64.2 - 2026-11-25 PT
 
 - `cicd.release`: a private service's identity token is minted before its revision is made, through IAM Credentials on a

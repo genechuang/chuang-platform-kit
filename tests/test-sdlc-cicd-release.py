@@ -82,7 +82,7 @@ class Cloud:
 
     def service(self):
         traffic = [{'revisionName': self.serving, 'percent': 100}] + ([{'revisionName': self.dev, 'tag': 'dev', 'url': 'https://dev---api'}] if self.dev else [])
-        return {'spec': {'template': {'spec': {'containers': [{'image': self.image}]}}}, 'status': {'url': 'https://api', 'traffic': traffic}}
+        return {'spec': {'template': {'spec': {'containers': [{'image': self.image}]}}}, 'status': {'url': 'https://api', 'traffic': traffic, 'latestCreatedRevisionName': self.dev or self.serving}}
 
     def run(self, args, **kw):
         self.calls.append(args)
@@ -219,6 +219,17 @@ def test_a_component_on_its_contents_image_is_left_alone():
             plan, words = go(planned, root, 'api', plan=True)
     eq('unchanged', (got, [c[:3] for c in quiet], forced, plan, words[0].split(' (')[1], planned.built, len(planned.calls)),
        ('unchanged', [['gcloud', 'run', 'services']], 'released', 'planned', 'to build); it runs old:v1', False, 1))
+
+
+def test_a_release_that_stopped_on_its_dev_rung_is_not_unchanged():
+    """  the service's spec names the new image and its revision serves nothing (a dev rung that failed): the next release climbs again, and once that revision serves it is unchanged"""
+    cloud = Cloud(dev_ok=False)
+    with project() as root, world(cloud):
+        first, _ = go(cloud, root, 'api')
+        cloud.dev_ok = True
+        second, _ = go(cloud, root, 'api')
+        third, _ = go(cloud, root, 'api')
+    eq('again', (first.startswith('refused'), second, third), (True, 'released', 'unchanged'))
 
 
 def test_nothing_outside_the_listed_files_is_in_the_image():
