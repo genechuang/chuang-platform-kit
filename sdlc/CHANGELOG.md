@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.66.1 - 2026-11-26 PT
+
+- `cli.status`: a move into the Shipyard calls the project's `mark` (its mark_started, passed to `dispatch`) first, so
+  a session's own `status shipyard N --back` is never read as the lead's drag that wakes the card's owner (ChuangFinance
+  found it on its first `--back`, 11/26/26). A mark that raises is a WARNING line and the move still runs. Additive.
+
 ## 0.66.0 - 2026-11-26 PT
 
 - `cli`: the board subcommands every project's ticket tool shares, `status` (with `--back`, the one deliberate step

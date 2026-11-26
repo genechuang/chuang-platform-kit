@@ -80,6 +80,23 @@ def test_back_steps_back_and_a_refusal_exits_1():
     assert (code, calls, out.lines) == (1, [True], ['tickets: Shipyard (back): #8, #10 (not moved)']), (code, out.lines)
 
 
+def test_a_move_into_the_shipyard_is_marked_first():
+    """`status shipyard 31 --back` calls mark([31]) before the move, so the decider never reads it as the lead's drag;
+    a move to another column marks nothing; a mark that raises is a WARNING and the move still runs"""
+    order, out = [], Out()
+    stubs = _common(move=lambda ns, st, run=None, cfg=None, back=False: order.append('move') or [(n, True) for n in ns],
+                    stage=lambda role, cfg=None: 'Shipyard')
+
+    def boom(ns):
+        raise OSError('no store')
+    with Stubs(**stubs):
+        cli.dispatch(['status', 'shipyard', '31', '--back'], 'run', CFG, out=out, mark=lambda ns: order.append(('mark', ns)))
+        cli.dispatch(['status', 'dock', '31'], 'run', CFG, out=out, mark=lambda ns: order.append(('mark', ns)))
+        code = cli.dispatch(['status', 'shipyard', '31'], 'run', CFG, out=out, mark=boom)
+    assert (order, code, 'start was not recorded' in ' '.join(out.lines)) == (
+        [('mark', [31]), 'move', 'move', 'move'], 0, True), (order, code)
+
+
 def test_status_without_tickets_is_usage():
     """no ticket number is the usage line and exit 2, nothing moved"""
     out = Out()

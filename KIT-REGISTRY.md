@@ -943,11 +943,11 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 
 | Name | Purpose |
 |---|---|
-| `status(argv, run=, cfg=, out=)` | `status <role or column> N ... [--back]`: T.move, forward only unless --back; exit 1 on any refusal. |
+| `status(argv, run=, cfg=, out=, mark=)` | `status <role or column> N ... [--back]`: T.move, forward only unless --back; exit 1 on any refusal. A move into the Shipyard is the session's own: `mark` (the project's mark_started) records it before the move, so the push decider never reads it as the lead'… |
 | `eta(argv, run=, cfg=, out=, now=)` | `eta N <when \| none>`: the board's ETA field, the day the scrum master reads; 2 for a word it cannot read. |
 | `light(argv, run=, cfg=, out=)` | `light N ... needs --ask "<ask>"` or `light N ... clear`: 🟡 Needs you in the card's column with its ask posted and the lead's account assigned, or the light off and unassigned. A closed ticket takes no Needs you. |
 | `triage(argv, run=, cfg=, out=)` | `triage N[,N ...] P1..P4 [--owner O] [--area A] [--feature F]`: one card through T.triage, several through T.triage_many (one batched read, one batched write). |
-| `dispatch(argv, run=, cfg=, out=)` | The exit code of a shared subcommand, or None when argv names none (the project's own wiring runs it). |
+| `dispatch(argv, run=, cfg=, out=, mark=)` | The exit code of a shared subcommand, or None when argv names none (the project's own wiring runs it). `mark` is the project's mark_started, which `status` calls before a move into the Shipyard. |
 
 ## `chuang_sdlc.listeners`: The board's event listeners: what a host's webhook receiver does with one board or ticket event, on…
 

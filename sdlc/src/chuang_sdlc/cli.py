@@ -24,13 +24,20 @@ def _numbers(args) -> list:
     return [int(a.lstrip('#')) for a in args if a.lstrip('#').isdigit()]
 
 
-def status(argv, run=None, cfg: dict = None, out=print) -> int:
-    """`status <role or column> N ... [--back]`: T.move, forward only unless --back; exit 1 on any refusal."""
+def status(argv, run=None, cfg: dict = None, out=print, mark=None) -> int:
+    """`status <role or column> N ... [--back]`: T.move, forward only unless --back; exit 1 on any refusal. A move into
+    the Shipyard is the session's own: `mark` (the project's mark_started) records it before the move, so the push
+    decider never reads it as the lead's drag and wakes its owner (0.66.1; ChuangFinance, 11/26/26)."""
     words = [a for a in argv[1:] if not a.startswith('--')]
     if len(words) < 2 or not _numbers(words[1:]):
         out('tickets: usage: tickets.py status <role or column> N [N ...] [--back]', file=sys.stderr)
         return 2
     back = '--back' in argv
+    if mark is not None and T.column(words[0], cfg) == T.stage('shipyard', cfg):
+        try:
+            mark(_numbers(words[1:]))
+        except Exception as e:   # noqa: BLE001 - a record that cannot be written never stops the move; said
+            out(f'tickets: WARNING: the start was not recorded ({type(e).__name__}); the owner may be woken', file=sys.stderr)
     moved = T.move(_numbers(words[1:]), words[0], run, cfg, back=back)
     out(f'tickets: {T.column(words[0], cfg)}{" (back)" if back else ""}: '
         + ', '.join(f'#{n}{"" if ok else " (not moved)"}' for n, ok in moved))
@@ -109,7 +116,10 @@ def triage(argv, run=None, cfg: dict = None, out=print) -> int:
 COMMANDS = {'status': status, 'eta': eta, 'light': light, 'triage': triage}
 
 
-def dispatch(argv, run=None, cfg: dict = None, out=print):
-    """The exit code of a shared subcommand, or None when argv names none (the project's own wiring runs it)."""
+def dispatch(argv, run=None, cfg: dict = None, out=print, mark=None):
+    """The exit code of a shared subcommand, or None when argv names none (the project's own wiring runs it). `mark`
+    is the project's mark_started, which `status` calls before a move into the Shipyard."""
     handler = COMMANDS.get((argv or [''])[0])
-    return handler(argv, run, cfg, out=out) if handler else None
+    if not handler:
+        return None
+    return handler(argv, run, cfg, out=out, mark=mark) if handler is status else handler(argv, run, cfg, out=out)
