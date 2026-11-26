@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.65.0 - 2026-11-26 PT
+
+- `cicd.release`: `rebuild` (`--rebuild` on the command line) builds a component's image afresh even when its content's
+  image is in the registry (the content key's tag moved to the new build), then releases it up the ladder; a plan with
+  it builds nothing. For a base or a tool the Dockerfile installs that moved while the listed files did not
+  (SMADPickleBot #2439). Additive: no call site changes. Suite: `tests/test-sdlc-cicd-release.py`.
+
 ## 0.64.3 - 2026-11-25 PT
 
 - `cicd.release`: a component is unchanged only when the image its files make is what serves; a release that stopped on

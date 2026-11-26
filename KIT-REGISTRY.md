@@ -1714,7 +1714,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `tagged(doc, tag=)` | (revision, URL) on a described service's traffic tag; ('', '') with none. |
 | `serving(doc)` | The revisions a described service sends traffic to. |
 | `running(doc, kind)` | The image that serves: a job's own; a service's newest revision's only when that revision takes every request, '' while traffic is elsewhere (a release that stopped on its dev rung leaves its image in the spec, serving nothing). |
-| `image_ref(cfg, c, root, build=)` | (IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or built and pushed when no build of that content exists; ('', key) with `build` off and none there. |
+| `image_ref(cfg, c, root, build=, rebuild=)` | (IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or built and pushed when no build of that content exists; ('', key) with `build` off and none there. `rebuild` builds it even when that content's ima… |
 | `check_image(c, ref, run=)` | Each of the component's `checks`, a run of the image on this machine with no network and no environment of ours: its exit code and, when it names one, the words it prints. Refused names the one that did not. |
 | `ask(url, token=, opener=)` | (HTTP code, body) of one GET; (0, why) when nothing answered. |
 | `id_token(audience, env=, run=, opener=)` | An identity token for a private service. With RELEASE_ACCOUNT (a runner signed in with no key), that account's, from IAM Credentials with the runner's own access token, since gcloud mints none from such a sign-in; else gcloud's. |
@@ -1722,7 +1722,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `release_service(cfg, c, ref, say=, run=, token=, opener=, sleep=)` | The service up its ladder: a revision of `ref` at no traffic on the dev tag, its smoke, every request, and the smoke once more at the service's own address. Refused leaves production on the revision it had, named. |
 | `release_job(cfg, c, ref, say=, run=)` | The job moved to `ref`, its image checked already, read back: its next run is the new image, nothing is executed. |
 | `record(environment, state, did=, description=, deploy=)` | A rung's GitHub deployment, best effort: started (its id) or finished; '' when GitHub kept none. |
-| `release(cfg, name, root, plan=, force=, say=, run=, clock=, **smokes)` | One component's release: 'unchanged', 'released', or with `plan` what it would be. Refused stops it. |
+| `release(cfg, name, root, plan=, force=, say=, run=, clock=, rebuild=, **smokes)` | One component's release: 'unchanged', 'released', or with `plan` what it would be. Refused stops it. `rebuild` builds its image afresh whatever the registry holds (image_ref) and releases it, so it climbs the ladder as any. |
 | `main(argv=, say=, run=)` | The command line above; 0 when every component asked for was released or unchanged, 1 at the first that was not. |
 
 ## `chuang_sdlc.cicd.smoke_rest`: The backend smoke's reads in one process over REST, not a gcloud start per call (#1128, the CO #112…

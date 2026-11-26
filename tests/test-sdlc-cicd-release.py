@@ -221,6 +221,22 @@ def test_a_component_on_its_contents_image_is_left_alone():
        ('unchanged', [['gcloud', 'run', 'services']], 'released', 'planned', 'to build); it runs old:v1', False, 1))
 
 
+def test_rebuild_builds_an_image_whose_content_exists():
+    """SMADPickleBot #2439: `rebuild` builds the image afresh though its content's image is in the registry (the build
+    asked with force), then releases it up the ladder; a plan with it builds nothing"""
+    cloud = Cloud(image=REF)
+    asked = []
+    with project() as root, world(cloud):
+        keep = build_once.cmd_build
+        build_once.cmd_build = lambda a: asked.append(a.force) or 0
+        try:
+            got, _ = go(cloud, root, 'api', rebuild=True)
+            plan, _ = go(cloud, root, 'api', rebuild=True, plan=True)
+        finally:
+            build_once.cmd_build = keep
+    eq('rebuilt', (got, asked, plan), ('released', [True], 'planned'))
+
+
 def test_a_release_that_stopped_on_its_dev_rung_is_not_unchanged():
     """  the service's spec names the new image and its revision serves nothing (a dev rung that failed): the next release climbs again, and once that revision serves it is unchanged"""
     cloud = Cloud(dev_ok=False)

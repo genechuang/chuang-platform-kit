@@ -168,9 +168,11 @@ def running(doc: dict, kind: str) -> str:
 
 
 # ------------------------------------------------------------------ the build
-def image_ref(cfg: dict, c: dict, root: str, build=True) -> tuple:
+def image_ref(cfg: dict, c: dict, root: str, build=True, rebuild=False) -> tuple:
     """(IMAGE@sha256:..., its key): the image this component's files make, found in the registry by its content key, or
-    built and pushed when no build of that content exists; ('', key) with `build` off and none there."""
+    built and pushed when no build of that content exists; ('', key) with `build` off and none there. `rebuild` builds
+    it even when that content's image exists (SMADPickleBot #2439: a base or a tool the Dockerfile installs moved while
+    the listed files did not), the content key's tag moved to the new build."""
     image = f"{cfg['registry']}/{c['image']}"
     keep = build_once.LOCK_PATH
     build_once.LOCK_PATH = os.path.join(root, cfg.get('base_images') or 'config/base-images.json')
@@ -179,10 +181,10 @@ def image_ref(cfg: dict, c: dict, root: str, build=True) -> tuple:
             ctx, dockerfile = stage(c, root, tmp)
             _files, key, _pinned = build_once.image_plan(dockerfile, ctx, None, [])
             ref = build_once.find_image(image, key)
-            if ref or not build:
+            if (ref and not rebuild) or not build:
                 return ref, key
             code = build_once.cmd_build(argparse.Namespace(dockerfile=dockerfile, context=ctx, ignore=None, arg=[], image=image,
-                                                           mark='', force=False, verbose=True, registry_cache=False))
+                                                           mark='', force=rebuild, verbose=True, registry_cache=False))
             if code != 0:
                 raise Refused(f"{c['name']}: the image did not build")
             return build_once.find_image(image, key), key
@@ -302,13 +304,15 @@ def record(environment: str, state: str, did: str = '', description: str = '', d
     return did
 
 
-def release(cfg: dict, name: str, root: str, plan=False, force=False, say=print, run=None, clock=time.monotonic, **smokes) -> str:
-    """One component's release: 'unchanged', 'released', or with `plan` what it would be. Refused stops it."""
+def release(cfg: dict, name: str, root: str, plan=False, force=False, say=print, run=None, clock=time.monotonic,
+            rebuild=False, **smokes) -> str:
+    """One component's release: 'unchanged', 'released', or with `plan` what it would be. Refused stops it. `rebuild`
+    builds its image afresh whatever the registry holds (image_ref) and releases it, so it climbs the ladder as any."""
     c, began = cfg['components'][name], clock()
-    ref, key = image_ref(cfg, c, root, build=not plan)
+    ref, key = image_ref(cfg, c, root, build=not plan, rebuild=rebuild and not plan)
     built = clock() - began
     current = running(describe(cfg, c, run), c['kind'])
-    if ref and current == ref and not force:
+    if ref and current == ref and not (force or rebuild):
         say(f'{name}: unchanged (it runs the image of this content, {key})')
         return 'unchanged'
     if plan:
@@ -337,6 +341,8 @@ def main(argv=None, say=print, run=None) -> int:
     ap.add_argument('--root', default='.', help="the repository's root")
     ap.add_argument('--plan', action='store_true')
     ap.add_argument('--force', action='store_true', help='release a component whose image did not change')
+    ap.add_argument('--rebuild', action='store_true',
+                    help="build each component's image afresh even when its content's image exists, then release it")
     a = ap.parse_args(argv)
     try:
         cfg = load(a.config)
@@ -345,7 +351,7 @@ def main(argv=None, say=print, run=None) -> int:
         if unknown:
             raise Refused(f"{a.config} has no component {unknown[0]} (it has {', '.join(cfg['components'])})")
         for name in names:
-            release(cfg, name, a.root, a.plan, a.force, say, run)
+            release(cfg, name, a.root, a.plan, a.force, say, run, rebuild=a.rebuild)
     except Refused as e:
         say(f'ERROR: release: {e}')
         return 1
