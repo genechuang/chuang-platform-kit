@@ -939,6 +939,16 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `ticket_trailers(message)` | (numbers, none_reason) from a commit message's `Ticket:` trailers: ([12, 14], '') or ([], 'session notes'), the numbers sorted and each once; ([], None) when it names none. |
 | `ticket_numbers(message)` | The tickets a commit message's `Ticket:` trailers name, sorted ([] for `Ticket: none (why)` or no trailer). |
 
+## `chuang_sdlc.cli`: The board subcommands every project's `scripts/tickets.py` shares (0.66.0; SMADPickleBot #2449).
+
+| Name | Purpose |
+|---|---|
+| `status(argv, run=, cfg=, out=)` | `status <role or column> N ... [--back]`: T.move, forward only unless --back; exit 1 on any refusal. |
+| `eta(argv, run=, cfg=, out=, now=)` | `eta N <when \| none>`: the board's ETA field, the day the scrum master reads; 2 for a word it cannot read. |
+| `light(argv, run=, cfg=, out=)` | `light N ... needs --ask "<ask>"` or `light N ... clear`: 🟡 Needs you in the card's column with its ask posted and the lead's account assigned, or the light off and unassigned. A closed ticket takes no Needs you. |
+| `triage(argv, run=, cfg=, out=)` | `triage N[,N ...] P1..P4 [--owner O] [--area A] [--feature F]`: one card through T.triage, several through T.triage_many (one batched read, one batched write). |
+| `dispatch(argv, run=, cfg=, out=)` | The exit code of a shared subcommand, or None when argv names none (the project's own wiring runs it). |
+
 ## `chuang_sdlc.listeners`: The board's event listeners: what a host's webhook receiver does with one board or ticket event, on…
 
 | Name | Purpose |

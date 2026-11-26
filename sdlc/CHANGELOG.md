@@ -3,6 +3,14 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.66.0 - 2026-11-26 PT
+
+- `cli`: the board subcommands every project's ticket tool shares, `status` (with `--back`, the one deliberate step
+  back), `eta`, `light` and `triage`; `dispatch(argv, run, cfg)` runs one and answers None for any other command. Every
+  line says what was refused, and a command exits 1 when anything was (a refused move had read as a success on
+  ChuangFinance's board). Lifted from SMADPickleBot's scripts/tickets.py (#2449). Additive. Suite:
+  `tests/test-sdlc-cli.py`.
+
 ## 0.65.0 - 2026-11-26 PT
 
 - `cicd.release`: `rebuild` (`--rebuild` on the command line) builds a component's image afresh even when its content's
