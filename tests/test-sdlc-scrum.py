@@ -671,6 +671,15 @@ check('  a board that does not answer says so, and a refused move is said for th
 dry = Board({'no:status': [dict(card(960), status='')]})
 S.unplaced_sweep(CFG, S.GitHub(CFG, run=dry, dry=True), {}, dry=True)
 check('  a dry run writes nothing', dry.writes, [])
+# 0.66.2 (SMADPickleBot #1654): a moved ticket GitHub's sub-issue auto-add put back on this board is another
+# repository's issue; its number names a different issue here, so the sweep leaves it alone and writes nothing
+moved = Board({'no:status': [dict(card(35), status='', url='https://github.com/acme/other-tickets/issues/35')]})
+moved_letters = {}
+moved_lines = S.unplaced_sweep(CFG, S.GitHub(CFG, run=moved), moved_letters)
+check("  a card of another repository is left alone and tells nobody",
+      (moved_lines, moved.writes, moved_letters),
+      (['scrum: a card of another repository has no column (https://github.com/acme/other-tickets/issues/35); left alone'],
+       [], {}))
 S.configure(start_command='')
 check("  with no start command the question says to move it to the shipyard",
       'move it to the shipyard' in S.wrecked_question(9, 'Broken', 30), True)

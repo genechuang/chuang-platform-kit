@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.66.2 - 2026-11-26 PT
+
+- `scrum.unplaced_sweep`: a card with no column whose issue is another repository's is left alone and said, never given
+  this board's backlog column. On 11/26/26 four tickets moved to another repository were put back on SMAD's board by
+  GitHub's sub-issue auto-add (their parent stayed), and the sweep placed and so reopened them (SMADPickleBot #1654).
+
 ## 0.66.1 - 2026-11-26 PT
 
 - `cli.status`: a move into the Shipyard calls the project's `mark` (its mark_started, passed to `dispatch`) first, so

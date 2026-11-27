@@ -1586,6 +1586,13 @@ def unplaced_sweep(cfg: dict, gh, letters: dict, dry: bool = False) -> list:
         n = (c.get('content') or {}).get('number')
         if not n or c.get('status') or _tickets.is_draft(c) or _tickets.is_placeholder(c.get('title'), cfg):
             continue
+        url, repo = (c.get('content') or {}).get('url') or '', cfg.get('repo') or ''
+        if url and repo and f'/{repo.lower()}/issues/' not in url.lower():
+            # 0.66.2 (SMADPickleBot #1654): an issue of another repository on this board (GitHub's auto-add of a
+            # sub-issue whose parent is here, after the ticket moved away) is not this board's to place; a write by
+            # its number would act on this repository's issue of that number. Said, never touched.
+            lines.append(f'scrum: a card of another repository has no column ({url}); left alone')
+            continue
         gh.remember([c])   # the card's item is in the listing: the write needs no read of its own
         ok = gh.field(n, 'Status', backlog)
         lacks = [name for key, name in (('owner', 'Owner'), ('priority', 'Priority'), ('area', 'Area')) if not c.get(key)]
