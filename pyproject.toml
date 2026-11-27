@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chuang-platform-kit"
-version = "0.55.0"
+version = "0.56.0"
 description = "Gene Chuang's project-agnostic platform kit: secret redaction, structured Cloud Logging, a WhatsApp transport over GREEN-API and Pub/Sub, a Gmail sender, phone normalization, a per-request scope and a lazy importer."
 readme = "README.md"
 license = { text = "MIT" }
@@ -34,6 +34,8 @@ config = ["openfeature-sdk>=0.7,<1"]
 db = ["psycopg[binary]>=3.1"]
 # App Store Connect (app_store_connect.py): PyJWT with cryptography signs the ES256 bearer; the readers need nothing else.
 asc = ["pyjwt[crypto]>=2.8"]
+# A GitHub App's installation tokens (github_app.py): PyJWT with cryptography signs the RS256 JWT.
+github-app = ["pyjwt[crypto]>=2.8"]
 # Clerk's session check (clerk_api.verify_session): PyJWT with cryptography; its Backend and Platform clients need nothing.
 clerk = ["pyjwt[crypto]>=2.8"]
 # Web Push (web_push.py): cryptography alone does the RFC 8291 encryption and the VAPID ES256 signature.

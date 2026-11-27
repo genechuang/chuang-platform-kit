@@ -55,9 +55,18 @@ LOCAL_CAP = {'core': 120, 'search': 10, 'graphql': 60, 'code_search': 5}
 SPENT_FOR = 60          # seconds a resource stays spent after a refusal naming a rate limit with no reset to read
 RATE_WORDS = re.compile(r'rate limit', re.I)
 _lock = threading.Lock()
-_limits = {}            # resource -> {'remaining', 'reset' (epoch seconds), 'limit'}: GitHub's count, from its headers
-_spent = {}             # resource -> epoch seconds until which no call is sent
-_recent = {}            # resource -> the epoch seconds of this process's calls in the last minute
+# Each dict is kept per LANE (0.56.0, SMAD PickleBot #1280): a GitHub App's installation token (GitHub's `ghs_`
+# prefix) has its own quota, apart from a person's token, so its count, spent marks and cap are its own; every other
+# token (a PAT, gh's sign-in) is the default lane ''. A function that takes only a resource reads the default lane.
+APP_LANE = 'app'
+_limits = {}            # lane -> resource -> {'remaining', 'reset' (epoch seconds), 'limit'}: GitHub's count
+_spent = {}             # lane -> resource -> epoch seconds until which no call is sent
+_recent = {}            # lane -> resource -> the epoch seconds of this process's calls in the last minute
+
+
+def lane_of(tok: str) -> str:
+    """The throttle lane a token draws on: APP_LANE for a GitHub App installation token (`ghs_`), '' for any other."""
+    return APP_LANE if (tok or '').startswith('ghs_') else ''
 _now = time.time        # the clock, a seam for the suite
 # The fine-grained permission each kind of call needs, for a refusal's message.
 NEEDS = {'releases': 'Contents: read and write', 'git': 'Contents: read', 'compare': 'Contents: read',
@@ -98,24 +107,25 @@ def resource_of(path: str) -> str:
     return 'core'
 
 
-def _check(resource: str, path: str = '') -> None:
+def _check(resource: str, path: str = '', lane: str = '') -> None:
     """Before a call: RateLimited, with no network call, when the resource is spent, under its floor or over this
-    process's cap for the minute; otherwise the call is counted."""
+    process's cap for the minute, in the token's lane; otherwise the call is counted."""
     now = _now()
     with _lock:
-        lim = _limits.get(resource) or {}
-        until = _spent.get(resource, 0)
+        lim = _limits.get(lane, {}).get(resource) or {}
+        until = _spent.get(lane, {}).get(resource, 0)
         if until > now:
             raise RateLimited(resource, lim.get('remaining', 0), until, 'spent', path)
         if lim and lim['remaining'] <= FLOOR.get(resource, 0) and lim['reset'] > now:
             raise RateLimited(resource, lim['remaining'], lim['reset'], f"under the floor of {FLOOR.get(resource, 0)}", path)
-        recent = [t for t in _recent.get(resource, ()) if t > now - 60]
+        mine = _recent.setdefault(lane, {})
+        recent = [t for t in mine.get(resource, ()) if t > now - 60]
         if len(recent) >= LOCAL_CAP.get(resource, 120):
-            _recent[resource] = recent
+            mine[resource] = recent
             raise RateLimited(resource, lim.get('remaining', -1), recent[0] + 60,
                               f'this process sent {len(recent)} in a minute, its cap', path)
         recent.append(now)
-        _recent[resource] = recent
+        mine[resource] = recent
     _tally(resource)
 
 
@@ -139,10 +149,10 @@ def scope_calls() -> dict:
     return dict(request_scope.peek(SCOPE_KEY) or {})
 
 
-def _note(resource: str, headers, status: int = 200, message: str = '') -> str:
+def _note(resource: str, headers, status: int = 200, message: str = '', lane: str = '') -> str:
     """GitHub's count from an answer's headers (its X-RateLimit-Resource names the resource when it differs from the
-    path's); a 403 or 429 with remaining 0, a Retry-After or a message naming a rate limit marks the resource spent.
-    The resource's name when it is spent, '' otherwise."""
+    path's), in the token's lane; a 403 or 429 with remaining 0, a Retry-After or a message naming a rate limit marks
+    the resource spent. The resource's name when it is spent, '' otherwise."""
     h = {}
     try:
         h = {str(k).lower(): str(v) for k, v in (headers.items() if headers is not None else ())}
@@ -151,26 +161,33 @@ def _note(resource: str, headers, status: int = 200, message: str = '') -> str:
     res = h.get('x-ratelimit-resource') or resource
     now = _now()
     with _lock:
+        lims, spent = _limits.setdefault(lane, {}), _spent.setdefault(lane, {})
         try:
-            _limits[res] = {'remaining': int(h['x-ratelimit-remaining']), 'reset': float(h['x-ratelimit-reset']),
-                            'limit': int(h.get('x-ratelimit-limit') or 0)}
+            lims[res] = {'remaining': int(h['x-ratelimit-remaining']), 'reset': float(h['x-ratelimit-reset']),
+                         'limit': int(h.get('x-ratelimit-limit') or 0)}
         except (KeyError, ValueError):
             pass
         if status in (403, 429):
-            retry, lim = h.get('retry-after', ''), _limits.get(res) or {}
+            retry, lim = h.get('retry-after', ''), lims.get(res) or {}
             if retry.isdigit():
-                _spent[res] = now + int(retry)
+                spent[res] = now + int(retry)
             elif lim.get('remaining') == 0 and lim.get('reset', 0) > now:
-                _spent[res] = lim['reset']
+                spent[res] = lim['reset']
             elif RATE_WORDS.search(message or ''):
-                _spent[res] = now + SPENT_FOR
-        return res if _spent.get(res, 0) > now else ''
+                spent[res] = now + SPENT_FOR
+        return res if spent.get(res, 0) > now else ''
 
 
-def limits() -> dict:
-    """GitHub's last count per resource as the answers gave it: {resource: {'remaining', 'reset', 'limit'}}, a copy."""
+def _spend(resource: str, until: float, lane: str = '') -> None:
     with _lock:
-        return {k: dict(v) for k, v in _limits.items()}
+        _spent.setdefault(lane, {})[resource] = until
+
+
+def limits(lane: str = '') -> dict:
+    """GitHub's last count per resource as the answers gave it, for one lane (the default: every token but an App's):
+    {resource: {'remaining', 'reset', 'limit'}}, a copy."""
+    with _lock:
+        return {k: dict(v) for k, v in _limits.get(lane, {}).items()}
 
 
 def reset_limits() -> None:
@@ -181,13 +198,13 @@ def reset_limits() -> None:
         _recent.clear()
 
 
-def wait_until(resource: str, cap: float = 120, sleep=time.sleep) -> float:
+def wait_until(resource: str, cap: float = 120, sleep=time.sleep, lane: str = '') -> float:
     """For a script that can afford it: sleep until `resource` is back (its spent mark, or its reset while it is under
-    the floor), at most `cap` seconds; the seconds slept."""
+    the floor) in `lane`, at most `cap` seconds; the seconds slept."""
     now = _now()
     with _lock:
-        lim = _limits.get(resource) or {}
-        until = _spent.get(resource, 0)
+        lim = _limits.get(lane, {}).get(resource) or {}
+        until = _spent.get(lane, {}).get(resource, 0)
         if lim and lim.get('remaining', 1) <= FLOOR.get(resource, 0):
             until = max(until, lim.get('reset', 0))
     wait = min(max(0.0, until - now), cap)
@@ -196,9 +213,16 @@ def wait_until(resource: str, cap: float = 120, sleep=time.sleep) -> float:
     return wait
 
 
-def token(env=None, run=subprocess.run) -> str:
-    """The token: GH_TOKEN or GITHUB_TOKEN in the environment, else the signed-in `gh`'s (a desktop); '' with none."""
+def token(env=None, run=subprocess.run, person: bool = False) -> str:
+    """The token: a GitHub App's installation token when the process is given an App and its owner (github_app: GH_APP_ID,
+    GITHUB_APP_PRIVATE_KEY and GH_APP_OWNER, 0.56.0), so a pipeline's writes show as the App; else, or with
+    `person=True` (a call only a person's token can make, such as a user's billing report), GH_TOKEN or GITHUB_TOKEN in
+    the environment, else the signed-in `gh`'s (a desktop); '' with none."""
     env = os.environ if env is None else env
+    if not person:
+        from . import github_app
+        if github_app.configured(env) and (env.get(github_app.OWNER_ENV) or '').strip():
+            return github_app.token(env=env)
     for name in TOKEN_ENV:
         if (env.get(name) or '').strip():
             return env[name].strip()
@@ -221,8 +245,8 @@ def request(tok: str, method: str, path: str, body=None, opener=None, timeout: i
     GitHubError on a refusal (4xx/5xx) or no answer (status 0); RateLimited, before any network call, when the path's
     rate-limit resource is spent, under its floor or over this process's cap, and after a 403 or 429 that spends it."""
     url = path if path.startswith('http') else API + path
-    short, resource = path.split('?')[0], resource_of(path)
-    _check(resource, short)
+    short, resource, lane = path.split('?')[0], resource_of(path), lane_of(tok)
+    _check(resource, short, lane)
     headers = {'Accept': accept or 'application/vnd.github+json', 'User-Agent': 'chuang-platform-kit',
                'X-GitHub-Api-Version': '2022-11-28'}
     if tok:
@@ -234,7 +258,7 @@ def request(tok: str, method: str, path: str, body=None, opener=None, timeout: i
     try:
         with (opener or keepalive.urlopen)(req, timeout=timeout) as r:   # kept-alive: 159 ms off a warm call (#562)
             text, status = r.read().decode('utf-8', 'replace'), getattr(r, 'status', 200)
-            _note(resource, getattr(r, 'headers', None), status)
+            _note(resource, getattr(r, 'headers', None), status, lane=lane)
     except urllib.error.HTTPError as e:
         raw = e.read().decode('utf-8', 'replace') if e.fp else ''
         try:
@@ -243,11 +267,11 @@ def request(tok: str, method: str, path: str, body=None, opener=None, timeout: i
             msg = raw[:200]
         if not msg and isinstance(getattr(e, 'reason', None), str):
             msg = e.reason   # the HTTP reason phrase ("Not Found") when the body carries no message (0.17.1)
-        spent = _note(resource, getattr(e, 'headers', None), e.code, msg)
+        spent = _note(resource, getattr(e, 'headers', None), e.code, msg, lane=lane)
         if spent:
-            lim = _limits.get(spent) or {}
-            raise RateLimited(spent, lim.get('remaining', 0), _spent.get(spent, _now() + SPENT_FOR), msg or f'HTTP {e.code}',
-                              short) from None
+            lim = _limits.get(lane, {}).get(spent) or {}
+            raise RateLimited(spent, lim.get('remaining', 0), _spent.get(lane, {}).get(spent, _now() + SPENT_FOR),
+                              msg or f'HTTP {e.code}', short) from None
         if e.code in (401, 403) and _needs(path):
             msg = f"{msg}; the token needs {_needs(path)}" if msg else f'the token needs {_needs(path)}'
         raise GitHubError(e.code, msg, short) from None
@@ -276,8 +300,7 @@ def graphql(tok: str, query: str, variables: dict = None, opener=None, timeout: 
         msg = str((body['errors'][0] or {}).get('message') or 'GraphQL error')[:200]
         if RATE_WORDS.search(msg):
             until = _now() + SPENT_FOR
-            with _lock:
-                _spent['graphql'] = until
+            _spend('graphql', until, lane_of(tok))
             raise RateLimited('graphql', 0, until, msg, '/graphql')
         raise GitHubError(status, msg, '/graphql')
     return body.get('data') or {}
@@ -307,8 +330,7 @@ def cli(args, run=subprocess.run, timeout: int = 60, check: bool = False, **kw) 
         err = err.decode('utf-8', 'replace')
     if getattr(got, 'returncode', 0) and RATE_WORDS.search(err):
         until = _now() + SPENT_FOR
-        with _lock:
-            _spent[resource] = until
+        _spend(resource, until)   # gh runs on a person's sign-in: the default lane
         raise RateLimited(resource, 0, until, err.strip()[:160], 'gh ' + ' '.join(args[:2]))
     if check and getattr(got, 'returncode', 0):
         raise subprocess.CalledProcessError(got.returncode, ['gh', *args], getattr(got, 'stdout', None), err)

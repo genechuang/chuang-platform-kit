@@ -2,6 +2,16 @@
 
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change.
 
+## 0.56.0 - 2026-11-27 PT
+
+`github_app` (new; SMADPickleBot #1280): a GitHub App's installation tokens, minted from the App's RS256 JWT and kept per
+owner until 5 minutes before GitHub's end, so a pipeline's writes show as the App, never as a person. A process is given
+the App by its environment: `GH_APP_ID`, `GITHUB_APP_PRIVATE_KEY` and `GH_APP_OWNER`; PyJWT with cryptography signs it
+(the new `github-app` extra). `github.token()` returns the App's token when the process is given one, and takes
+`person=True` for a call only a person's token can make (a user's billing report). The throttle keeps its count, spent
+marks and cap per lane: an installation token (`ghs_`) draws on the App's own quota, apart from a person's; `limits()`
+and `wait_until()` take `lane=` and read the default lane, as before, without it. No signature breaks.
+
 ## 0.55.0 - 2026-11-24 PT
 
 `answer_cache`: a rebuild pass reads only the kept answers asked for within `keep_days`, in one query for every route

@@ -281,14 +281,15 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 
 | Name | Purpose |
 |---|---|
+| `lane_of(tok)` | The throttle lane a token draws on: APP_LANE for a GitHub App installation token (`ghs_`), '' for any other. |
 | `class GitHubError` | A call GitHub refused or could not answer: `status` (0 for no answer) and GitHub's `message`. |
 | `class RateLimited` | A call not sent, or refused by GitHub, because `resource`'s quota is spent, under its floor or over this process's cap: `remaining` (GitHub's count, -1 unknown) and `reset_at` (epoch seconds) say when it returns. Status 429 whatever GitHub answered, so an `ex… |
 | `resource_of(path)` | GitHub's rate-limit resource a path draws on: graphql, code_search, search or core. |
 | `scope_calls()` | The GitHub calls this request scope has sent so far, {resource: count} (core, graphql, search, code_search), a copy; {} outside a scope or before any call (0.45.0: a host logs it per delivery, so a burst's spenders are read from its logs, SMADPickleBot #1994)… |
-| `limits()` | GitHub's last count per resource as the answers gave it: {resource: {'remaining', 'reset', 'limit'}}, a copy. |
+| `limits(lane=)` | GitHub's last count per resource as the answers gave it, for one lane (the default: every token but an App's): {resource: {'remaining', 'reset', 'limit'}}, a copy. |
 | `reset_limits()` | Forget every count, spent mark and cap (a suite's seam; nothing in production calls it). |
-| `wait_until(resource, cap=, sleep=)` | For a script that can afford it: sleep until `resource` is back (its spent mark, or its reset while it is under the floor), at most `cap` seconds; the seconds slept. |
-| `token(env=, run=)` | The token: GH_TOKEN or GITHUB_TOKEN in the environment, else the signed-in `gh`'s (a desktop); '' with none. |
+| `wait_until(resource, cap=, sleep=, lane=)` | For a script that can afford it: sleep until `resource` is back (its spent mark, or its reset while it is under the floor) in `lane`, at most `cap` seconds; the seconds slept. |
+| `token(env=, run=, person=)` | The token: a GitHub App's installation token when the process is given an App and its owner (github_app: GH_APP_ID, GITHUB_APP_PRIVATE_KEY and GH_APP_OWNER, 0.56.0), so a pipeline's writes show as the App; else, or with `person=True` (a call only a person's t… |
 | `request(tok, method, path, body=, opener=, timeout=, accept=)` | (status, parsed JSON or text) for one call; `path` relative to the API ("/repos/o/r/issues/1") or a full URL. GitHubError on a refusal (4xx/5xx) or no answer (status 0); RateLimited, before any network call, when the path's rate-limit resource is spent, under… |
 | `get(tok, path, opener=, **kw)` | The JSON of a GET. |
 | `graphql(tok, query, variables=, opener=, timeout=)` | The `data` of one GraphQL call (POST /graphql), through the throttle on the graphql resource; GitHubError with the first error's message when GitHub answers errors, RateLimited when that message names the rate limit. |
@@ -321,6 +322,17 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `runner_online(tok, repo, label, opener=)` | Whether a runner with `label` is online; False when the list cannot be read. |
 | `create_deployment(tok, repo, ref, environment, description=, opener=)` | A deployment record's id (no merge check, no required contexts: a record, never a gate). |
 | `deployment_status(tok, repo, deployment_id, state, environment_url=, description=, opener=)` | A deployment's state: in_progress, success, failure, error or inactive. |
+
+## `github_app`: A GitHub App's installation tokens: what a pipeline writes to GitHub with, so its work shows as the…
+
+| Name | Purpose |
+|---|---|
+| `configured(env=)` | True when this process is given an App: its id and its private key in the environment. |
+| `app_jwt(pem, app_id, now=)` | The App's RS256 JWT: issued 60 s back, JWT_SECONDS long, its issuer the App's id. |
+| `installation_id(app_token, owner, opener=)` | The App's installation on `owner`, an organization or a user; GitHubError 404 when it is installed on neither. |
+| `mint(owner, app_id, pem, opener=, now=)` | (token, epoch seconds it ends) for the App's installation on `owner`, minted now. |
+| `token(owner=, env=, opener=)` | The App's installation token on `owner` (GH_APP_OWNER by default), kept until EARLY seconds before it ends; '' when the process is given no App or no owner. A refused mint raises GitHubError: a misconfigured App is loud. |
+| `forget()` | Drop every kept token (a suite's seam, and a process that rotated the key). |
 
 ## `gmail`: Gmail, one client per mailbox for every project (SMAD PickleBot #661; Gene, 10/31/26 8:42 AM PT: "s…
 
