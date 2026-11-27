@@ -324,6 +324,20 @@ def test_a_move_that_breaks_a_rule_is_named_with_where_it_goes_back():
     assert not M.guarded(moved(node(col='Building'), was='Backlog'))
 
 
+def test_a_waiting_ticket_moved_into_the_dock_goes_back_to_the_shipyard():
+    """0.68.0 (SMADPickleBot #2531): a ticket moved into the Dock while its Light says it waits (Needs you, Queued, Blocked, Scheduled) goes back to the Shipyard; a working one, a draft, the pipeline's marked move and a board with no wait Light stand; the move is guarded and its put-back's echo is known"""
+    to, why = M.put_back_to(moved(node(col='Ready', light='Needs you'), was='Building'))
+    assert (to, why.startswith('#7 still waits (Needs you)')) == ('Building', True), (to, why)
+    assert M.put_back_to(moved(node(col='Ready', light='Queued'), was='Building'))[0] == 'Building'
+    assert M.put_back_to(moved(node(col='Ready', light='Working'), was='Building')) == ('', '')
+    assert M.put_back_to(moved(node(col='Ready', light=''), was='Building')) == ('', '')
+    assert M.put_back_to(moved(node(number=None, title='a note', col='Ready', light='Needs you'), was='Building')) == ('', '')
+    assert M.put_back_to(moved(node(col='Ready', light='Needs you'), was='Building'), marked=lambda n: True) == ('', '')
+    bare = dict(CFG, lights={'dock': 'Warming', 'working': 'Working'})
+    assert M.put_back_to(moved(node(col='Ready', light='Needs you'), was='Building'), bare) == ('', '')
+    assert M.guarded(moved(node(col='Ready'), was='Building')) and not M.guarded(moved(node(col='Ready'), was='Building'), bare)
+
+
 def test_a_put_back_writes_its_mark_sets_the_status_and_tells_the_owner():
     """put_back: the echo mark first, the one Status write, one letter from the configured sender; its echo is dropped."""
     opener, store, letters = Opener(lambda q, v: {'s0': {'projectV2Item': {'id': 'IT_7'}}}), Store(), []

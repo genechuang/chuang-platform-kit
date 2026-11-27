@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.68.0 - 2026-11-27 PT
+
+- `moves.put_back_to` guards the Dock (SMADPickleBot #2531; Gene, 11/27/26 2:21 PM PT: "if the 2 tickets on Dock aren't
+  ready for shipping, then they shouldn't be on dock, should be in Shipyard with Blocked/Scheduled/Needs You tag"): a
+  ticket moved into the dock column while its Light is one of the board's wait Lights (`WAIT_ROLES`: blocked,
+  scheduled, needs, queued) goes back to the shipyard column, its Light kept, its owner told (`still_waits`). The
+  pipeline's own marked move stands; a board with no wait Light, or no dock or shipyard column, guards nothing new.
+  `guarded` reads a move into the Dock, and `put_back_echo` knows a put-back out of it.
+
 ## 0.67.2 - 2026-11-27 PT
 
 - `webhooks.item_route` reads the app status column only on a board that has one: a draft's move on ChuangFinance's board

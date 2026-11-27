@@ -67,6 +67,8 @@ WORDS = {
     'status_card_stays': 'a status card stays in {column}',
     'only_change_order': 'only a change order goes into {column}',
     'not_shipped': '#{number} is not shipped live yet (its ticket closes when its release passes its production smoke)',
+    'still_waits': ('#{number} still waits ({light}): the Dock holds only what is ready to ship; it stays in {column} '
+                    'until its wait is over and its work lands'),
     'put_back_line': '{what} was moved into {column} by {by}; put back in {to}: {why}',
     'put_back_mail': 'Board: {line}. If the move was meant, tell {captain} what it should prove.',
     'queued_left': ('#{number}: {light} in {column}, its owner not building it yet; left there (a commit naming it '
@@ -507,6 +509,19 @@ def _guards(cfg: dict) -> tuple:
     return stages.get('shipping', ''), stages.get('shipment', ''), stages.get('app_status', '')
 
 
+WAIT_ROLES = ('blocked', 'scheduled', 'needs', 'queued')   # 0.68.0: the Lights that say a card still waits
+
+
+def _dock_guard(cfg: dict) -> tuple:
+    """(the dock column, its home the shipyard column, the wait Lights' names) when the board has both columns and at
+    least one wait Light; ('', '', ()) otherwise, so a board without them guards nothing new (0.68.0)."""
+    stages, lights = cfg.get('stages') or {}, cfg.get('lights') or {}
+    waits = tuple(lights[r] for r in WAIT_ROLES if lights.get(r))
+    if stages.get('dock') and stages.get('shipyard') and waits:
+        return stages['dock'], stages['shipyard'], waits
+    return '', '', ()
+
+
 def put_back_to(data: dict, cfg: dict = None, marked=None) -> tuple:
     """(column, why) when a read move breaks one of the board's rules, ('', '') when it stands. `data` is the move
     event's data with its `node`; only a Status move of a read item counts, from a column it names (the event's `from`,
@@ -536,6 +551,13 @@ def put_back_to(data: dict, cfg: dict = None, marked=None) -> tuple:
         return back, word('only_change_order', column=shipment)
     if ship and col == ship and n and not co and not shipped_live(node) and not (marked and marked(n)):
         return back, word('not_shipped', number=n)
+    # 0.68.0 (SMADPickleBot #2531; Gene, 11/27/26 2:21 PM PT: "if the 2 tickets on Dock aren't ready for shipping, then
+    # they shouldn't be on dock, should be in Shipyard with Blocked/Scheduled/Needs You tag"): a ticket moved into the
+    # Dock while its Light says it still waits goes back to the Shipyard, its Light kept; the pipeline's own marked move
+    # stands, as in the ship column.
+    dock, yard, waits = _dock_guard(cfg)
+    if dock and col == dock and n and light(node) in waits and not (marked and marked(n)):
+        return yard, word('still_waits', number=n, light=light(node), column=yard)
     return '', ''
 
 
@@ -547,6 +569,9 @@ def guarded(data: dict, cfg: dict = None) -> bool:
         return False
     cfg = cfg or board()
     kept = set(_guards(cfg)) - {''}
+    dock = _dock_guard(cfg)[0]
+    if dock and column_now(node, cfg) == dock:   # 0.68.0: a move into the Dock is read for a waiting Light
+        return True
     return column_now(node, cfg) in kept or _renamed(data.get('from') or '', cfg) in kept
 
 
@@ -561,7 +586,7 @@ def put_back_echo(data: dict, store, now=None, cfg: dict = None) -> bool:
     cfg = cfg or board()
     was = _renamed(data.get('from') or '', cfg)
     apps = _guards(cfg)[2]
-    kept = set(_guards(cfg)) - {''}
+    kept = (set(_guards(cfg)) | {_dock_guard(cfg)[0]}) - {''}   # 0.68.0: a put-back out of the Dock echoes too
     col = column_now(node, cfg)
     status_card = bool(apps) and col == apps and not number(node) and not is_ship_card(node, cfg)
     if was not in kept and not status_card:
