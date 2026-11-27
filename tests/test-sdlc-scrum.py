@@ -778,6 +778,26 @@ check('a dry run says what it would move and writes nothing',
       (S.dock_catch(CFG, S.GitHub(CFG, run=Docked([{'message': 'Ticket: #900'}], {'': []}, places={900: ('Building', '')})), dry=True)),
       ['scrum: #900 is on dock but not in Ready; it would move there (dry run)'])
 
+class Unread:
+    """A board whose every read GitHub refuses; a draft add recorded, which must never happen."""
+    error = 'GitHub /graphql: HTTP 502'
+
+    def __init__(self):
+        self.added = []
+
+    def graphql(self, query, variables=None):
+        return None
+
+    def draft_add(self, title, body):
+        self.added.append(title)
+        return 'D_new'
+
+
+unread = Unread()
+check('0.67.1 (SMADPickleBot #2520): a draft read that fails makes no ship card and says nothing; 0.67.0 read it as a '
+      'board with none and made one', (S.ship_card_home(dict(CFG, ship_card={'home': 'dock'}), S.GitHub(CFG, run=unread)),
+                                       unread.added), ([], []))
+
 print('release_train (0.31.0, SMADPickleBot #1652):')
 from chuang_sdlc import tenant as TN  # noqa: E402
 S.configure(store=lambda: Records())

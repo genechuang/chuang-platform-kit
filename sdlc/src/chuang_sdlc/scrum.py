@@ -1420,8 +1420,10 @@ def ship_card_home(cfg, gh, dry: bool = False, ship_run=None, now: float = None)
     own filter (a dozen cards), kept by tickets.ship_card_keep, the one keeper a ship's sync_columns runs too
     (`ship_run` and `now` passed through). Lines; nothing when it is home and titled, or in the ship column while its
     ship runs."""
-    lines = _tickets.ship_card_keep(gh.run, cfg, _tickets.board_items('is:draft', gh.run, cfg) or [], dry=dry,
-                                    ship_run=ship_run, now=now)
+    drafts = _tickets.board_items('is:draft', gh.run, cfg)
+    if drafts is None:   # 0.67.1: an unread board is never read as one with no ship card, which 0.67.0 would make
+        return []
+    lines = _tickets.ship_card_keep(gh.run, cfg, drafts, dry=dry, ship_run=ship_run, now=now)
     return [('WARNING: scrum: ' + ln[len('WARNING: '):]) if ln.startswith('WARNING: ') else f'scrum: {ln}' for ln in lines]
 
 

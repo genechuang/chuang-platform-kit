@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.67.1 - 2026-11-27 PT
+
+- `scrum.ship_card_home` no longer reads a refused draft read as a board with no drafts (`or []`): with 0.67.0 a failed
+  read would have made a second ship card on every sweep. A read that fails now keeps nothing and makes nothing.
+- `testing.Board.draft_add`, recorded as ('draft', title), so a sweep on a board whose config names a ship card can run
+  in a suite (0.67.0's tag broke test-sdlc-scrum: its CI ran after the tag).
+
 ## 0.67.0 - 2026-11-27 PT
 
 - `tickets.ship_card_keep` makes a missing ship card (SMADPickleBot #2520): a board whose config names a `ship_card` and

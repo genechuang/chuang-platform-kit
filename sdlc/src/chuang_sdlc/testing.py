@@ -293,6 +293,12 @@ class Board:
         self.writes.append(('top', item))
         return True
 
+    def draft_add(self, title, body):
+        """A draft card added (0.67.0: the ship card made when a board has none), recorded as ('draft', title); its
+        item `DR_<n>`, or None when 'draft' is refused."""
+        self.writes.append(('draft', title))
+        return None if 'draft' in self.refuse else f'DR_{len(self.writes)}'
+
     def item_archive(self, item):
         """A card archived off the board, recorded as ('archive', item); False when 'archive' is refused (0.20.0)."""
         self.writes.append(('archive', item))

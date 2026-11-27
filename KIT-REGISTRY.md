@@ -1334,6 +1334,7 @@ project's alerting: a distribution of its own in `alerts/` (its own tags, `alert
 | `Board.item_fields(item, fields)` | Fields written in one request, recorded as ('fields', item, {field id: value}). |
 | `Board.item_field(item, field_id, option_id=, text=, clear=)` | One field, recorded as item_fields records it. |
 | `Board.item_top(item)` | A card to the top of its column, recorded. |
+| `Board.draft_add(title, body)` | A draft card added (0.67.0: the ship card made when a board has none), recorded as ('draft', title); its item `DR_<n>`, or None when 'draft' is refused. |
 | `Board.item_archive(item)` | A card archived off the board, recorded as ('archive', item); False when 'archive' is refused (0.20.0). |
 | `Board.item_unarchive(item)` | A card restored from the archive, recorded as ('unarchive', item); False when 'unarchive' is refused. |
 | `Board.comment(number, body)` | A comment, recorded. |
