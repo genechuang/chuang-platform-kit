@@ -41,7 +41,8 @@
     "shipping": "🚢 Shipping",
     "shipped": "✅ Shipped",
     "failed": "🔴 Wrecked",
-    "needs": "🟡 Needs you"
+    "needs": "🟡 Needs you",
+    "dev": "✅ Ready"
   },
   "placeholders": {
     "next": "— On Deck: a card here is Gene's pick for the Shipyard next —",
@@ -93,14 +94,20 @@
         "🚢 Shipping": "9dbdef09",
         "✅ Shipped": "5753c096",
         "🔴 Wrecked": "b1f68d7b",
-        "🟡 Needs you": "44308121"
+        "🟡 Needs you": "44308121",
+        "✅ Ready": "dc639e45"
       }
     },
     "Owner": {
       "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkOQ",
       "options": {
         "Snow White": "41835579",
-        "Gene": "1d7e4367"
+        "Gene": "1d7e4367",
+        "Black Widow": "36e06c57",
+        "Tim Apple": "4be38840",
+        "ChuangFinance": "41fb2347",
+        "Mr Sandman": "e27293d6",
+        "Dragnet": "ae539fb0"
       }
     },
     "Kind": {
