@@ -11,6 +11,8 @@ A change that breaks a function's signature is a minor-version bump and names th
   scheduled, needs, queued) goes back to the shipyard column, its Light kept, its owner told (`still_waits`). The
   pipeline's own marked move stands; a board with no wait Light, or no dock or shipyard column, guards nothing new.
   `guarded` reads a move into the Dock, and `put_back_echo` knows a put-back out of it.
+- `moves.to_dock` leaves a landing's card with a wait Light where it is (`waiting_left`), as it always left a queued one,
+  where it docked a Needs-you card and kept the Light: the pipeline's own landing and the new guard now agree.
 
 ## 0.67.2 - 2026-11-27 PT
 

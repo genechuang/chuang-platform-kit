@@ -396,7 +396,7 @@ def test_a_landed_ticket_goes_to_the_dock_forward_only_and_sheds_its_blockers():
     assert lines[0] == '#7: Ready, Warming; unblocked from #3, the stuck label off'
     assert lines[1] == '#8: already in Ship; left there'
     assert lines[2].startswith('#9: Queued in Building, its owner not building it yet; left there')
-    assert lines[3] == '#10: still Ready, Needs you kept'
+    assert lines[3].startswith('#10: Needs you in Ready, still waiting; left there')   # 0.68.0: a waiting card is left (#2531)
     assert lines[4] == '#11: not found; not moved'
     removed = [v for q, v in opener.calls if q == M.UNBLOCK]
     assert removed == [{'i': 'I_7', 'b': 'I_3'}]

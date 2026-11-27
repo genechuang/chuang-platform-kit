@@ -73,6 +73,8 @@ WORDS = {
     'put_back_mail': 'Board: {line}. If the move was meant, tell {captain} what it should prove.',
     'queued_left': ('#{number}: {light} in {column}, its owner not building it yet; left there (a commit naming it '
                     'landed: split that step into its own ticket before it lands)'),
+    'waiting_left': ('#{number}: {light} in {column}, still waiting; left there (the Dock holds only what is ready to '
+                     'ship: clear its wait, then its next landing docks it)'),
     'unplanned': ("#{number} was closed as {why}, so its card was archived off the board: nothing shipped, nothing to "
                   "confirm (the board's Archived items can restore it). {title}\n{url}"),
     'unplanned_subject': 'Closed as {why}: #{number}',
@@ -727,6 +729,9 @@ def to_dock(numbers, token: str, cfg: dict = None, opener=None, read=None) -> li
     cfg = cfg or board()
     dock, warming, needs = stage('dock', cfg), cfg['lights']['dock'], cfg['lights']['needs']
     queued = cfg['lights'].get('queued', '')
+    # 0.68.0 (SMADPickleBot #2531): a card whose Light says it still waits stays where it is, as a queued one always did;
+    # the Dock holds only what is ready to ship, and put_back_to would send such a card straight back
+    waits = set(_dock_guard(cfg)[2]) - {''}
     order = [stage(r, cfg) for r in cfg['flow']]
     past = (set(order[order.index(dock) + 1:]) - {dock}) | {stage('failed', cfg)}   # two roles may share the dock column
 
@@ -742,6 +747,8 @@ def to_dock(numbers, token: str, cfg: dict = None, opener=None, read=None) -> li
                 return f'#{n}: already in {col}; left there'
             if queued and have == queued:
                 return word('queued_left', number=n, light=queued, column=col)
+            if have in waits:
+                return word('waiting_left', number=n, light=have, column=col)
             set_fields(item, {**({STATUS_FIELD: dock} if col != dock else {}), **({LIGHT_FIELD: warming} if have != needs else {})},
                        token, cfg, opener)
             words = unblock(issue, token, opener)
