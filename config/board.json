@@ -1,0 +1,135 @@
+{
+  "repo": "SMAD-PickleBot/chuang-platform-kit",
+  "id": "PVT_kwDOFMgdfc4BtbAL",
+  "owner": "SMAD-PickleBot",
+  "owner_type": "organization",
+  "number": 4,
+  "url": "https://github.com/orgs/SMAD-PickleBot/projects/4",
+  "flow": [
+    "backlog",
+    "next",
+    "shipyard",
+    "dock",
+    "shipping",
+    "shipped"
+  ],
+  "people": {
+    "captain": "Snow White",
+    "lead": "Gene",
+    "pipeline": "Snow White"
+  },
+  "stages": {
+    "backlog": "Backlog",
+    "next": "On Deck",
+    "shipyard": "Shipyard",
+    "dock": "Dock",
+    "shipping": "Ship",
+    "shipped": "Ship",
+    "failed": "Shipwreck",
+    "shipment": "Shipment"
+  },
+  "lights": {
+    "backlog": "",
+    "next": "",
+    "shipyard": "",
+    "working": "⏳ Building",
+    "queued": "🔜 Queued",
+    "pushing": "📤 Pushing",
+    "blocked": "⛔ Blocked",
+    "scheduled": "⏰ Scheduled",
+    "dock": "⏳ Warming",
+    "shipping": "🚢 Shipping",
+    "shipped": "✅ Shipped",
+    "failed": "🔴 Wrecked",
+    "needs": "🟡 Needs you"
+  },
+  "placeholders": {
+    "next": "— On Deck: a card here is Gene's pick for the Shipyard next —",
+    "shipyard": "— Shipyard: a card here is being built —",
+    "dock": "— Dock: a card here is built and tested, ready to ship —",
+    "shipping": "— Ship: a card here has shipped, or is shipping —",
+    "failed": "— Shipwreck: a card here failed its release; its bug ticket has the fix —"
+  },
+  "ship_card": {
+    "home": "dock",
+    "word": "SHIP IT",
+    "title": "🚢 SHIP IT! Drag me from the Dock to the Ship column to release every ticket in the Dock"
+  },
+  "labels": {
+    "Feature": "feature",
+    "Bug": "bug",
+    "Task": "task",
+    "Action item": "action-item"
+  },
+  "release": {
+    "workflow": "",
+    "ref": "main"
+  },
+  "fields": {
+    "Status": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkII",
+      "options": {
+        "Todo": "f75ad846",
+        "In Progress": "47fc9ee4",
+        "Done": "98236657",
+        "Backlog": "5ef6a971",
+        "On Deck": "930418f3",
+        "Shipyard": "fc9b3441",
+        "Dock": "c9395ff6",
+        "Ship": "1c194021",
+        "Shipwreck": "e7fd9050",
+        "Shipment": "5b73e101"
+      }
+    },
+    "Light": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkOM",
+      "options": {
+        "⏳ Building": "107e16a0",
+        "🔜 Queued": "2c8a5ddf",
+        "📤 Pushing": "1e8df085",
+        "⛔ Blocked": "07f964f5",
+        "⏰ Scheduled": "8941f1f4",
+        "⏳ Warming": "6f2307a5",
+        "🚢 Shipping": "9dbdef09",
+        "✅ Shipped": "5753c096",
+        "🔴 Wrecked": "b1f68d7b",
+        "🟡 Needs you": "44308121"
+      }
+    },
+    "Owner": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkOQ",
+      "options": {
+        "Snow White": "41835579",
+        "Gene": "1d7e4367"
+      }
+    },
+    "Kind": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkOg",
+      "options": {
+        "Feature": "49ec6f5a",
+        "Bug": "25ae3a48",
+        "Task": "ff697947",
+        "Action item": "a5213e22"
+      }
+    },
+    "Priority": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkPw",
+      "options": {
+        "P1": "d23240c6",
+        "P2": "5cc21a9a",
+        "P3": "04625d13",
+        "P4": "037efd53"
+      }
+    },
+    "Area": {
+      "id": "PVTSSF_lADOFMgdfc4BtbALzhrkkQM",
+      "options": {
+        "Product": "a569561f",
+        "Pipeline": "f55f91d2",
+        "Platform": "d38c7496",
+        "Internal tools": "5385a2da",
+        "Infra": "08e5bdac"
+      }
+    }
+  }
+}
