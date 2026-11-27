@@ -3,6 +3,12 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.67.2 - 2026-11-27 PT
+
+- `webhooks.item_route` reads the app status column only on a board that has one: a draft's move on ChuangFinance's board
+  (its new ship card, 0.67.0's) raised KeyError: 'app_status' and the push decider answered 500 (SMADPickleBot #2528,
+  11/27/26 2:08 PM PT). The lookup was there since 0.6.0; a tenant board's draft moves had not reached it before.
+
 ## 0.67.1 - 2026-11-27 PT
 
 - `scrum.ship_card_home` no longer reads a refused draft read as a board with no drafts (`or []`): with 0.67.0 a failed

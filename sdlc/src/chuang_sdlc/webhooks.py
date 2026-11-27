@@ -146,9 +146,13 @@ def item_route(node: dict, field_name: str, moves, light_field: str = 'Light') -
     Light edit (never a move; an item that could not be read is taken for one), `send` for every other item."""
     if node and moves.is_placeholder(moves.title(node)):
         return 'placeholder'
-    if (node and not moves.number(node) and moves.column(node) == moves.stage('app_status')
-            and not moves.is_ship_card(node)):
-        return 'app_status'
+    if node and not moves.number(node) and not moves.is_ship_card(node):
+        try:
+            app_status = moves.stage('app_status')
+        except KeyError:   # 0.67.2 (SMADPickleBot #2528): a board with no app status column (ChuangFinance's)
+            app_status = None
+        if app_status is not None and moves.column(node) == app_status:
+            return 'app_status'
     if field_name == light_field and not moves.number(node):
         return 'draft_light'
     return 'send'

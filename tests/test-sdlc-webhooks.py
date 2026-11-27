@@ -148,6 +148,11 @@ check('after the read: a move, a placeholder, an app status draft, the ship card
        W.item_route(card(col='Apps'), 'Status', moves), W.item_route(card(title='SHIP IT', col='Apps'), 'Status', moves),
        W.item_route(card(), 'Light', moves), W.item_route({}, 'Light', moves), W.item_route({}, 'Status', moves)],
       ['send', 'placeholder', 'app_status', 'send', 'draft_light', 'draft_light', 'send'])
+bare = Moves(stages={'backlog': 'Backlog', 'shipyard': 'Building', 'dock': 'Ready', 'shipped': 'Shipped', 'failed': 'Wrecked'})
+check("0.67.2 (SMADPickleBot #2528): a board with no app status column (ChuangFinance's) routes a draft's move, never a "
+      "KeyError (its new SHIP card's add was a 500 on 11/27/26 2:08 PM PT)",
+      [W.item_route(card(col='Ready'), 'Status', bare), W.item_route(card(title='SHIP IT', col='Ready'), 'Status', bare)],
+      ['send', 'send'])
 
 print("the delivery's age")
 now = datetime(2026, 11, 8, 8, 0, 1, tzinfo=timezone.utc)   # utc-ok: a fixed instant against GitHub's UTC stamp
