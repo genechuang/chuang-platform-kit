@@ -3,6 +3,13 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.67.0 - 2026-11-27 PT
+
+- `tickets.ship_card_keep` makes a missing ship card (SMADPickleBot #2520): a board whose config names a `ship_card` and
+  holds no such draft gets one, the config's title (else "🚢 <word>") in its home column, `SHIP_CARD_BODY` its body. Until
+  now the keeper only kept a card made by hand, so a tenant's board (ChuangFinance, 11/27/26) never had one. A draft read
+  that fails makes nothing (it returned [] before, the same).
+
 ## 0.66.2 - 2026-11-26 PT
 
 - `scrum.unplaced_sweep`: a card with no column whose issue is another repository's is left alone and said, never given

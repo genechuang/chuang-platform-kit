@@ -747,6 +747,16 @@ check('just dropped in a door: left whatever the record says, the grace once pas
        T.board_items('is:draft', fresh(drafts=[dropped('2026-10-29T19:39:00Z')]))[0]['status_at']),
       ([], ['the SHIP IT card was in Apps with no ship under way (the last ship is done); moved back to Ready'],
        '2026-10-29T19:39:00Z'))
+# 0.67.0 (SMADPickleBot #2520): a board whose config names a ship card and holds none gets one, in its home column
+gh = fresh(drafts=[])
+made = T.ship_card_keep(gh)
+card = next((c for c in gh.cards.values() if c.get('title') == 'SHIP IT: drag me to Done'), None)
+check("the ship card missing: made with the config's title in its home column; a dry run says so and makes nothing; a "
+      "board with no ship_card configured makes none",
+      (made, card is not None and card.get('status'), T.ship_card_keep(fresh(drafts=[]), dry=True),
+       T.ship_card_keep(fresh(drafts=[]), CFG)),
+      (['the SHIP IT card was not on the board; made in Ready'], 'Ready',
+       ['the SHIP IT card is not on the board; it would be made in Ready (dry run)'], []))
 check("a board with no app status column: the ship column alone waits",
       T.ship_card_keep(fresh(drafts=[draft('Apps', 'SHIP IT: drag me to Done')]), SHIP_CFG,
                        ship_run=lambda: {'state': 'shipping', 'at': '2026-10-29T19:36:00Z'}, now=1793302800.0),

@@ -1065,6 +1065,24 @@ DRAFT_EDIT = ('mutation($d:ID!,$t:String!,$b:String){updateProjectV2DraftIssue(i
 SHIP_RUN_STALE_SECONDS = 1800
 
 
+SHIP_CARD_BODY = ("The ship button: drag this card to the ship column to ship every ticket ready in its home column. It comes "
+                  "back home when the ship ends. Leave it on the board; deleted, the next sweep makes it again.")
+
+
+def _ship_card_make(spec: dict, home: str, run, cfg: dict, dry: bool) -> str:
+    """0.67.0 (SMADPickleBot #2520): a board whose config names a `ship_card` and holds none gets one, the config's
+    title (else "🚢 <word>") in its home column. Until then the keeper only kept a card made by hand, and a tenant's
+    board (ChuangFinance, 11/27/26) never had one. The line said; a WARNING for what GitHub refused."""
+    title = spec['title'] or f"\U0001F6A2 {spec['word']}"
+    name = f"the {spec['word']} card"
+    if dry:
+        return f'{name} is not on the board; it would be made in {home} (dry run)'
+    item = run.draft_add(title, SHIP_CARD_BODY)
+    if item and set_fields(item, {'Status': spec['home']}, run, cfg):
+        return f'{name} was not on the board; made in {home}'
+    return f"WARNING: {name} is not on the board and was not made ({(getattr(run, 'error', '') or '').strip()[:160]})"
+
+
 def ship_card_spec(cfg: dict = None) -> dict:
     """The board config's `ship_card`: {home, word, title}, the ship card's home role (`dock` unless named), the word
     its title carries (`SHIP IT`) and the title ship_card_keep writes on it ('' leaves the title as it is)."""
@@ -1146,8 +1164,12 @@ def ship_card_keep(run=None, cfg: dict = None, drafts=None, dry: bool = False, s
     run, cfg = _run(run), _cfg(cfg)
     spec = ship_card_spec(cfg)
     if drafts is None:
-        drafts = board_items('is:draft', run, cfg) or []
+        drafts = board_items('is:draft', run, cfg)
+        if drafts is None:
+            return []   # unread: the placeholders' pass says so, and no card is made on a read that failed
     home, ship = stage(spec['home'], cfg), stage('shipping', cfg)
+    if 'ship_card' in cfg and not any(is_ship_card(c, cfg) for c in drafts):
+        return [_ship_card_make(spec, home, run, cfg, dry)]
     # 0.13.0 (SMADPickleBot #1237; Gene, 11/9/26 12:59 AM PT: "ship it should stay in App Status column until shipping is
     # done - same behavior when I drag it to Ship column"): every door the card is dragged to ships something, and the
     # card waits in it as in the ship column, the config's `ship_card` `doors` by role (the ship column and the app
