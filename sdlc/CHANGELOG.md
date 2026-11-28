@@ -3,6 +3,15 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.70.0 - 2026-11-28 PT
+
+- `tickets.sweep` takes the triage label off a waiting ticket whose line is `Triage: none (why)` and leaves it open
+  for its owner (`tickets.unlabel_none`, new; SMADPickleBot #2596). Until now the sweep did nothing at all on such a
+  ticket, so the label stayed and a host's hourly check for untriaged tickets asked about it every hour: SMADPickleBot
+  #2593, a question its triager answered with `Triage: none` at 4:09 AM PT on 11/28/26, was asked about each hour
+  after. An alert issue's `none` still closes it as not planned, and a filed ticket with no triage label is still
+  left alone. No signature changed.
+
 ## 0.69.0 - 2026-11-27 PT
 
 - The lead's reply ends an owner's wait (SMADPickleBot #2537; Gene, 11/27/26 4:21 PM PT: "I answered 'scrum: yes' in

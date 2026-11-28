@@ -1937,13 +1937,26 @@ def close_none(number: int, why: str, run=None, cfg: dict = None) -> str:
             f'(GitHub: {(getattr(run, "error", "") or "").strip()[:120]}); the next sweep tries again')
 
 
+def unlabel_none(number: int, why: str, run=None) -> str:
+    """A ticket still carrying the triage label whose Triage line is `none (why)`: the label comes off and the ticket
+    stays open, its owner's to close (0.70.0, SMADPickleBot #2596: the sweep left such a ticket untouched, so the
+    label stayed and a host's hourly check for untriaged tickets asked about it every hour). A refused label write
+    is a WARNING the next sweep tries again."""
+    run = _run(run)
+    if run.remove_label(int(number), label('triage')) is False:
+        return (f'WARNING: tickets: #{number} keeps its triage label after its Triage: none line '
+                f'(GitHub: {(getattr(run, "error", "") or "").strip()[:120]}); the next sweep tries again')
+    return f'tickets: #{number} triage label off: Triage: none ({why}); left open for its owner'
+
+
 def sweep(run=None, cfg: dict = None, mail=None) -> list:
     """Every open issue off the Project whose newest `Triage:` line, in a comment by the repository's owner (nobody
     else's line counts), names a priority: triaged. `Triage: none (why)` on such an issue closes it as not planned
     (close_none, 0.8.1); an issue already on the Project (its
     `area:` label) is left, except a ticket still carrying the triage label: its line is the triager's decision,
     applied by `decide`: a P1 is now, P2 to P4 the backlog at that priority and owner, `Triage: backlog` the backlog
-    with neither; a ticket carrying the admin-ask label is now whatever its rank. A line's `LOE:` is the ticket's
+    with neither; a ticket carrying the admin-ask label is now whatever its rank; and its `Triage: none (why)` takes
+    the label off and leaves it open (unlabel_none, 0.70.0). A line's `LOE:` is the ticket's
     estimate stage, said on its line. Lines, one per issue acted on."""
     run, cfg = _run(run), _cfg(cfg)
     issues = run.issues(state='open', limit=100, comments=60)
@@ -1961,8 +1974,8 @@ def sweep(run=None, cfg: dict = None, mail=None) -> list:
         if not t:
             continue
         if 'none' in t:
-            if not waiting:
-                lines.append(close_none(i['number'], t['none'], run, cfg))
+            lines.append(unlabel_none(i['number'], t['none'], run) if waiting
+                         else close_none(i['number'], t['none'], run, cfg))
             continue
         acted = len(lines)
         if waiting:

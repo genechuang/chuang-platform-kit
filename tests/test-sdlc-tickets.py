@@ -544,10 +544,17 @@ gh = fresh({86: {'title': 'Alert B', 'comments': [mine('finding\nTriage: none (f
             87: {'title': 'Feedback none', 'labels': ['waiting'], 'comments': [mine('Triage: none (a duplicate)')]},
             88: {'title': 'Filed none', 'labels': ['area:product'], 'comments': [mine('Triage: none (done)')]}})
 lines = T.sweep(gh)
-check("a none line on an alert issue closes it as not planned with its reason; a waiting or filed one is left",
-      (lines, gh.closed),
-      (['tickets: #86 closed as not planned: Triage: none (fixed in October)'],
-       [(86, 'not_planned', T.NONE_COMMENT.format(why='fixed in October'))]))
+check("a none line on an alert issue closes it as not planned with its reason; a filed one is left; a waiting one "
+      "(0.70.0, SMADPickleBot #2596) loses its triage label and stays open",
+      (lines, gh.closed, gh.removed),
+      (['tickets: #86 closed as not planned: Triage: none (fixed in October)',
+        'tickets: #87 triage label off: Triage: none (a duplicate); left open for its owner'],
+       [(86, 'not_planned', T.NONE_COMMENT.format(why='fixed in October'))], [(87, 'waiting')]))
+gh.remove_label = lambda number, label: False
+gh.error = 'HTTP 403 Resource not accessible'
+check('  a refused label write is a WARNING the next sweep tries again', T.unlabel_none(87, 'a duplicate', gh),
+      'WARNING: tickets: #87 keeps its triage label after its Triage: none line (GitHub: HTTP 403 Resource not '
+      'accessible); the next sweep tries again')
 gh.close_issue = lambda number, reason='completed', comment='': False
 gh.error = 'HTTP 403 Resource not accessible'
 check('a refused close is a WARNING the next sweep tries again', T.close_none(91, 'x', gh),
