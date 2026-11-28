@@ -38,6 +38,7 @@ the push is redelivered. Every line shown passes chuang_platform_kit.redact.
 import json
 import logging
 import re
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 from chuang_platform_kit.redact import redact
@@ -45,6 +46,7 @@ from chuang_platform_kit.redact import redact
 DEBOUNCE = timedelta(minutes=30)     # one message per system per 30 minutes; the rest counted
 QUIET = timedelta(minutes=30)        # a service quiet this long is Fixed
 END_WAIT = timedelta(minutes=15)     # held job lines without an end are sent after this
+DESCRIBED_WAIT = timedelta(minutes=2)  # and a self-described run's (described_run), which says it has ended, after this
 RETRY_SLACK = timedelta(minutes=2)   # a held schedule waits its first backoff and this for its retry's answer
 KEEP_PENDING = timedelta(days=2)     # sent or dropped holds are swept after this
 MAX_LINES = 5
@@ -546,8 +548,9 @@ def job_history(ctx: Context, job: str, variant: str, started: datetime) -> tupl
 
 
 def compose_job(job: str, variant: str, execution: str, started: datetime, summary: dict, condition: str,
-                last_good, recovered, oldest, link: str, also: str = '', ended: bool = True) -> tuple:
-    """(subject, body) for a failed job run."""
+                last_good, recovered, oldest, link: str, also: str = '', ended: bool = True, where: str = '') -> tuple:
+    """(subject, body) for a failed job run; `where` is a self-described run's place ("on the desktop"), said after
+    the run's name."""
     entry = _need('job_entry')(job, variant)
     steps_cat = (_CFG['jobs'].get(job) or {}).get('steps') or {}
     steps = summary.get('steps')
@@ -571,7 +574,8 @@ def compose_job(job: str, variant: str, execution: str, started: datetime, summa
         count = clean(condition) if condition else 'It failed.'
     if not ended:
         count += ' It has logged errors for 15 minutes and has not finished.'
-    lines = [f"What broke: {entry['name']}, run {execution} of {system}, started {pt(started)}. {count}"]
+    place = f' {where}' if where else ''
+    lines = [f"What broke: {entry['name']}, run {execution} of {system}{place}, started {pt(started)}. {count}"]
     shown = 0
     for step, text in errors[:MAX_LINES]:
         lines.append(f" - {step}: {text}" if step else f" - {text}")
@@ -615,9 +619,11 @@ def job_log_link(job: str, execution: str) -> str:
 
 
 def handle_job_end(ctx: Context, job: str, execution: str, command, args, ok: bool, started, ended,
-                   condition: str = '', link: str = '') -> str:
+                   condition: str = '', link: str = '', where: str = '') -> str:
     """One execution's end: a failure's message, a success's Fixed, or nothing (a smoke test or a hand
-    command, or a duplicate). What it did, for the log."""
+    command, or a duplicate). What it did, for the log. `where` is a self-described run's place, said after the
+    run's name; `link` then is its own page, used for every message about it."""
+    page = link if where and link else job_log_link(job, execution)
     incidents, pending = _CFG['incidents'], _CFG['pending']
     variant = variant_of(command, args)
     held = ctx.store.get(pending, execution)
@@ -642,14 +648,14 @@ def handle_job_end(ctx: Context, job: str, execution: str, command, args, ok: bo
             if fixed and left:
                 ctx.tell(_subject(f"Partly fixed: {system} ({pt(ended or ctx.now)})"),
                          f"Fixed: {', '.join(fixed)} passed in run {execution} at {pt(ended or ctx.now)}. "
-                         f"Still failing: {', '.join(left)}.", job_log_link(job, execution))
+                         f"Still failing: {', '.join(left)}.", page)
                 ctx.store.set(incidents, key, dict(inc, failed_steps=left, last_at=iso(ctx.now)))
                 return f'{execution}: partly fixed'
             if not fixed:
                 return f'{execution}: passed, but ran none of the failed steps'
         ctx.tell(_subject(f"Fixed: {system} ({pt(ended or ctx.now)})"),
                  f"Fixed: {system} run {execution} at {pt(started)} passed. It had failed since "
-                 f"{pt(inc['first_at'])} ({inc.get('count', 1)} failed run(s)).", job_log_link(job, execution))
+                 f"{pt(inc['first_at'])} ({inc.get('count', 1)} failed run(s)).", page)
         ctx.store.set(incidents, key, dict(inc, open=False, closed_at=iso(ctx.now)))
         return f'{execution}: Fixed sent'
     if held and held.get('sent'):
@@ -662,8 +668,8 @@ def handle_job_end(ctx: Context, job: str, execution: str, command, args, ok: bo
     summary = summarize(entries)
     last_good, recovered, oldest = job_history(ctx, job, variant, started)
     subject, body = compose_job(job, variant, execution, started, summary, condition, last_good, recovered,
-                                oldest, link, also=others_open(ctx, key), ended=ended is not None)
-    ctx.tell(subject, body, link or job_log_link(job, execution))
+                                oldest, link, also=others_open(ctx, key), ended=ended is not None, where=where)
+    ctx.tell(subject, body, link or page)
     ctx.store.set(pending, execution, {'kind': 'job', 'job': job, 'sent': True, 'at': iso(ctx.now)})
     inc = ctx.store.get(incidents, key)
     failed = in_step_order(job, [s for s, c in (summary.get('steps') or {}).items() if c != 0]) or \
@@ -671,11 +677,11 @@ def handle_job_end(ctx: Context, job: str, execution: str, command, args, ok: bo
     if inc and inc.get('open'):
         inc = dict(inc, last_at=iso(ctx.now), count=int(inc.get('count', 1)) + 1, execution=execution,
                    failed_steps=in_step_order(job, sorted(set(inc.get('failed_steps') or []) | set(failed))),
-                   body=redact(body), link=link or job_log_link(job, execution))
+                   body=redact(body), link=link or page)
     else:
         inc = {'open': True, 'kind': 'job', 'label': system, 'first_at': iso(started), 'last_at': iso(ctx.now),
                'count': 1, 'execution': execution, 'failed_steps': failed, 'subject': redact(subject),
-               'body': redact(body), 'link': link or job_log_link(job, execution)}
+               'body': redact(body), 'link': link or page}
     if recovered:
         inc = dict(inc, open=False, closed_at=iso(ctx.now))
     ctx.store.set(incidents, key, inc)
@@ -702,8 +708,32 @@ def on_job_event(ctx: Context, entry: dict) -> str:
                           condition=cond or message, link=status.get('logUri', ''))
 
 
+RUN_LABELS = {'where': 'alerts/where', 'args': 'alerts/args', 'started': 'alerts/started', 'ended': 'alerts/ended',
+              'exit': 'alerts/exit'}
+
+
+def described_run(entry: dict) -> dict:
+    """A run that describes itself on its own lines (SMADPickleBot #2579): a job run made outside Cloud Run, which
+    logs as the job under an execution name of its own and so has no execution the Run Admin API can answer for. Its
+    lines carry RUN_LABELS: `alerts/where` (the host's words for where it ran, "on the desktop"), `alerts/args` (its
+    arguments, space separated, which name its variant), `alerts/started` and `alerts/ended` (instants) and
+    `alerts/exit` (its exit code). {} for a line with no `alerts/where`, which is every Cloud Run execution's."""
+    labels = entry.get('labels') or {}
+    if not str(labels.get(RUN_LABELS['where']) or '').strip():
+        return {}
+    return {k: str(labels.get(label) or '').strip() for k, label in RUN_LABELS.items()}
+
+
+def described_link(job: str, execution: str) -> str:
+    """The Logs Explorer page of a self-described run's lines: it has no execution page in the console."""
+    query = (f'resource.type="cloud_run_job" resource.labels.job_name="{job}" '
+             f'labels."run.googleapis.com/execution_name"="{execution}"')
+    return f"{_CFG['console']}/logs/query;query={urllib.parse.quote(query, safe='')}?project={_CFG['project']}"
+
+
 def on_job_line(ctx: Context, entry: dict) -> str:
-    """A job's ERROR line before its end: held under its execution, never sent on its own."""
+    """A job's ERROR line before its end: held under its execution, never sent on its own. A line that describes its
+    own run (described_run) keeps that with the hold, for the sweep."""
     pending = _CFG['pending']
     execution = (entry.get('labels') or {}).get('run.googleapis.com/execution_name', '')
     job = (entry.get('resource') or {}).get('labels', {}).get('job_name', '')
@@ -714,6 +744,9 @@ def on_job_line(ctx: Context, entry: dict) -> str:
     held = ctx.store.get(pending, execution) or {'kind': 'job', 'job': job, 'sent': False,
                                                  'first_at': iso(parse_ts(entry.get('timestamp')) or ctx.now),
                                                  'entries': []}
+    run = described_run(entry)
+    if run and not held.get('run'):
+        held = dict(held, run=run)
     if held.get('sent'):
         _JOB_FULL.add(execution)
         return f'{execution}: already told'
@@ -1153,7 +1186,8 @@ def sweep(ctx: Context) -> list:
                 # A build's ERROR lines come before its status is final; each sweep looks again.
                 done.append(handle_build(ctx, held.get('build') or key[len('build-'):]))
                 continue
-            if ctx.now - at < END_WAIT:
+            # A run that described itself as ended has no end event to wait for: only its other lines, sent with it.
+            if ctx.now - at < (DESCRIBED_WAIT if (held.get('run') or {}).get('ended') else END_WAIT):
                 continue
             done.append(sweep_job(ctx, key, held))
         except Exception as e:   # noqa: BLE001
@@ -1163,8 +1197,18 @@ def sweep(ctx: Context) -> list:
 
 def sweep_job(ctx: Context, execution: str, held: dict) -> str:
     """Held job lines 15 minutes old with no end seen: the execution as the Run Admin API has it, finished
-    or not."""
+    or not. A run that described itself on its lines (described_run) is judged from that alone, as an execution is
+    by its end: the Run Admin API has no such execution, and asking it told a run that had ended as "(unknown)" and
+    "still running" (SMADPickleBot #2579)."""
     job = held.get('job', '')
+    run = held.get('run') or {}
+    if run:
+        ended = parse_ts(run.get('ended'))
+        code = run.get('exit', '')
+        return handle_job_end(ctx, job, execution, None, run.get('args', '').split(), ended is not None and code == '0',
+                              run.get('started') or held.get('first_at'), ended,
+                              condition=f'It ended with exit {code}.' if code not in ('', '0') else '',
+                              link=described_link(job, execution), where=run.get('where', ''))
     try:
         x = ctx.google.execution(job, execution)
     except Exception as e:   # noqa: BLE001

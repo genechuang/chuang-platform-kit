@@ -66,7 +66,11 @@ class Google:
     """Google's reads: the serving revisions, an execution's lines, a job's history."""
 
     def __init__(self, serving=None, lines=None):
-        self.serving, self.lines = serving or set(), lines or []
+        self.serving, self.lines, self.asked = serving or set(), lines or [], []
+
+    def execution(self, job, name):
+        self.asked.append(name)
+        raise OSError('404: no such execution')
 
     def serving_revisions(self, service):
         return set(self.serving)
@@ -180,6 +184,65 @@ check('  its end tells one message with the failed step first, the passing step 
 check('  a second end of the same execution is not told again',
       (E.handle(end, ctx(store3, out3, '2026-10-10T08:02:00', Google(lines=[line, summary]))), len(out3.sent)),
       ('nightly-abc: already told', 1))
+
+# A run made outside Cloud Run describes itself on its lines (SMADPickleBot #2579): judged from that, by its exit.
+store4, out4 = Store(), Outbox()
+
+
+def described(execution, code, text='the grab ended with no court'):
+    return {'resource': {'type': 'cloud_run_job', 'labels': {'job_name': 'nightly'}}, 'severity': 'ERROR',
+            'timestamp': '2026-10-10T08:01:20Z', 'jsonPayload': {'message': text},
+            'labels': {'run.googleapis.com/execution_name': execution, 'alerts/where': 'on the desktop',
+                       'alerts/args': 'quick', 'alerts/started': '2026-10-10T08:00:00Z',
+                       'alerts/ended': '2026-10-10T08:01:18Z', 'alerts/exit': str(code)}}
+
+
+failed_line = described('desktop-n1-a', 1)
+held4 = E.handle(failed_line, ctx(store4, out4, '2026-10-10T08:01:20'))
+kept4 = dict(store4.d[('pend', 'desktop-n1-a')])
+g4 = Google(lines=[failed_line])
+early = E.sweep(ctx(store4, out4, '2026-10-10T08:02:20', g4))
+swept = E.sweep(ctx(store4, out4, '2026-10-10T08:03:30', g4))
+body4 = out4.sent[0][1] if out4.sent else ''
+check('a self-described run (the positive case): its lines are held with what it says of itself',
+      (held4, kept4.get('sent'), kept4.get('run')),
+      ('desktop-n1-a: held', False, {'where': 'on the desktop', 'args': 'quick', 'started': '2026-10-10T08:00:00Z',
+                                     'ended': '2026-10-10T08:01:18Z', 'exit': '1'}))
+check('  nothing is told in its first two minutes, then one message, and the Run Admin API is never asked',
+      (early, len(out4.sent), swept[0].split(' (')[0], g4.asked), ([], 1, 'desktop-n1-a: told', []))
+check('  the message names the run, its place, its real start, its variant and its exit',
+      body4.split('\n')[0],
+      'What broke: the nightly job, run desktop-n1-a of nightly quick on the desktop, started Sat 10/10/26 8:00 AM UTC. '
+      'It ended with exit 1.')
+check('  it is never "(unknown)" or "still running", and its link is its own lines in the Logs Explorer',
+      ('(unknown)' in body4, 'still running' in body4, 'has not finished' in body4, 'Status: still broken' in body4,
+       '/logs/query;query=' in out4.sent[0][2], 'desktop-n1-a' in out4.sent[0][2], out4.sent[0][2].endswith('?project=proj')),
+      (False, False, False, True, True, True, True))
+second = described('desktop-n2-a', 1)
+E.handle(second, ctx(store4, out4, '2026-10-11T08:01:20'))
+E.sweep(ctx(store4, out4, '2026-10-11T08:04:00', Google(lines=[second])))
+check('  the next run, under its own name, is told again (one shared name was "already told" for two days)',
+      (len(out4.sent), 'desktop-n2-a' in out4.sent[-1][1]), (2, True))
+
+store5, out5 = Store(), Outbox()
+E.handle(described('desktop-n1-b', 0, 'a line at ERROR in a run that ended well'), ctx(store5, out5, '2026-10-10T08:01:20'))
+g5 = Google()
+passed = E.sweep(ctx(store5, out5, '2026-10-10T08:04:00', g5))
+check('a self-described run that exited 0 passes as an execution does: nothing told, its hold dropped, nothing asked',
+      (passed, len(out5.sent), ('pend', 'desktop-n1-b') in store5.d, g5.asked), (['desktop-n1-b: passed'], 0, False, []))
+
+store6, out6 = Store(), Outbox()
+plain = {k: v for k, v in described('nightly-old', 1).items() if k != 'labels'}
+plain['labels'] = {'run.googleapis.com/execution_name': 'nightly-old'}
+E.handle(plain, ctx(store6, out6, '2026-10-10T08:01:20'))
+g6 = Google(lines=[plain])
+soon = E.sweep(ctx(store6, out6, '2026-10-10T08:04:00', g6))
+late = E.sweep(ctx(store6, out6, '2026-10-10T08:17:00', g6))
+check('a run that says nothing of itself is an execution: it waits its 15 minutes and the Run Admin API is asked',
+      (soon, g6.asked, len(out6.sent), late[0].split(' (')[0]), ([], ['nightly-old'], 1, 'nightly-old: told'))
+check('described_run: {} without `alerts/where`; every label read, blanks kept as blanks',
+      (E.described_run(plain), E.described_run({'labels': {'alerts/where': ' on a laptop '}})),
+      ({}, {'where': 'on a laptop', 'args': '', 'started': '', 'ended': '', 'exit': ''}))
 
 # configure itself.
 try:

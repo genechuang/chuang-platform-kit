@@ -1,5 +1,19 @@
 # chuang-alerts changelog
 
+## 0.4.0 (2026-11-28)
+
+- `engine`: a job run made outside Cloud Run can describe itself on its own lines, and is judged from that
+  (SMADPickleBot #2579). A host that runs a job on a box of its own and logs as the job has no execution the Run
+  Admin API can answer for: the sweep asked anyway, read nothing, and told a run that had ended as "(unknown)",
+  "has not finished" and "still running". A line may now carry `RUN_LABELS` (`alerts/where`, the host's words for
+  the place; `alerts/args`; `alerts/started`; `alerts/ended`; `alerts/exit`). `described_run` reads them,
+  `on_job_line` keeps them with the hold, and `sweep_job` builds the run from them without the Run Admin API: exit 0
+  passes as an execution does, any other exit is told with its place, its real start and its variant, and its link is
+  its own lines in the Logs Explorer (`described_link`). Such a run that says it has ended is swept after
+  `DESCRIBED_WAIT` (2 minutes), not `END_WAIT`. `handle_job_end` and `compose_job` take `where`. A run with no
+  `alerts/where` is an execution, as before. The host gives each run an execution name of its own: one shared name
+  is "already told" for `KEEP_PENDING` after its first alert. Suite: `tests/test-alerts-engine.py`.
+
 ## 0.3.2 (2026-11-21)
 
 - `engine.decode` reads the pushed message through chuang-platform-kit's `pubsub.decode` instead of its own base64 and

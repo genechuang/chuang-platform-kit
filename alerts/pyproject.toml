@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 #   chuang-alerts @ git+https://github.com/genechuang/chuang-platform-kit@alerts-v<version>#subdirectory=alerts
 [project]
 name = "chuang-alerts"
-version = "0.3.2"
+version = "0.4.0"
 description = "A project's alerting: the hourly WARNING digest's folding into kinds and which kind a person should look at, a Pub/Sub subscription's backlog read and sorted before its dead letters, and an alert catalog's shape and lookups."
 readme = "README.md"
 license = { text = "MIT" }
