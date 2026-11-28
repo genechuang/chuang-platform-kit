@@ -219,6 +219,10 @@ def scrum_line(comments, login: str, skip=()) -> dict:
 
 ANSWER_MAX = 600
 
+WAIT_KINDS = ('blocked on', 'blocked by')   # an owner's wait (`scheduled` reads as `blocked on`), which the lead may end
+
+REF_RE = re.compile(r'(?:\b([\w.-]+/[\w.-]+))?#(\d+)')   # #N, or owner/name#N with its repository
+
 
 ANY_SCRUM = re.compile(r'^\s*Scrum:\s*(.+)$', re.I | re.M)
 
@@ -422,6 +426,22 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
     # assignment are its) or the host's pushing light (a push under way): the review of #1336.
     relight = blocked and light != blocked and light not in (lights.get('needs'), lights.get('pushing'))
     unblocked_q = f"#{n} is unblocked: pick it back up (`Scrum: building | eta <when>`), or say `Scrum: next | after #N`."
+    wait_answer = facts.get('wait_answer') or {}
+    if line.get('kind') in WAIT_KINDS and wait_answer:
+        # 0.69.0 (SMADPickleBot #2537; Gene, 11/27/26 4:21 PM PT: "I answered 'scrum: yes' in 1654 twice now, the comment
+        # didn't trigger scrum master to immediately review and unblock the ticket"): the lead's reply after a wait is
+        # their word that it is over, as their reply to a Needs-you ask is; the card is unblocked and the owner handed it.
+        what = line.get('ask') or (f"#{line['ref']}" if line.get('ref') else 'its wait')
+        text = wait_answer['text']
+        if BLOCKED_LABEL in labels:
+            out['actions'].append(('unlabel', BLOCKED_LABEL))
+        if light and light in (blocked, scheduled):
+            out['actions'].append(('light', 'shipyard'))
+        out['state'] = f'{who_leads} answered: “{text}”'
+        out['change'] = f'{who_leads} answered on its wait (“{text}”), so it waits no more; handed back to its owner.'
+        out['question'] = (f'{who_leads} answered #{n}\'s wait ({what}): “{text}”. Act on it, then say where it stands: '
+                           '`Scrum: building | eta <when>` or `Scrum: next | after #N`.')
+        return out
     if line.get('kind') == 'blocked on':
         # 0.22.0: a wait outside the board (an email, a daily cycle, Apple's review), its ETA when the wait should end;
         # the card stays in the shipyard, its light the blocked one and its label on, and once the ETA passes its owner
@@ -432,13 +452,19 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         # or links is closed the card is unblocked in the same pass. #1829 sat Blocked 11 hours after #2079 closed, and
         # #230 18 minutes after its three linked blockers closed, since a `blocked on` line returned here before the
         # every-blocker-closed rule below was reached.
-        named = [int(m) for m in re.findall(r'#(\d+)', what) if int(m) != n]
+        # 0.69.0 (#2537): a full reference to another repository's ticket (`owner/name#N`) is that ticket, read there by
+        # the sweep (facts['foreign']: (ref, state, closedAt)), never this repository's #N, and never linked here.
+        own = (cfg.get('repo') or '').lower()
+        named = [int(m.group(2)) for m in REF_RE.finditer(what)
+                 if (not m.group(1) or m.group(1).lower() == own) and int(m.group(2)) != n]
+        foreign = facts.get('foreign') or []
+        foreign_open = [r for r, s, _at in foreign if s != 'CLOSED']
         linked_now = [b for b, _s in blockers]
         # 0.63.0 (SMADPickleBot #2200; Gene, 11/22/26: "maybe blocked is not a good label, we also need Scheduled for
         # ticket that is blocked until a time/event?", with 13 cards Blocked and three of them blocked on anybody): a
         # wait that names and links no ticket is a date or an event, and on a board with a scheduled Light it shows
         # that Light and carries no blocked label. A wait on tickets stays blocked, as `blocked by` is.
-        sched = bool(scheduled) and not named and not linked_now
+        sched = bool(scheduled) and not named and not linked_now and not foreign
         wait_role, wait_light = ('scheduled', scheduled) if sched else ('blocked', blocked)
         word = 'scheduled for' if sched else 'blocked on'
         missing = [r for r in named if r not in linked_now]
@@ -449,16 +475,17 @@ def plan(card: dict, facts: dict, state: dict, now: datetime, cfg: dict) -> dict
         # passed or when it has none. A ticket that closed before the wait is context or an old link: #2106 and #2027
         # through old links, #1573 ("since #1572 shipped") and #2028 through tickets named as context, were unblocked by
         # 0.43.0 with their ETAs days ahead. 0.45.0 applied this to unnamed waits alone.
-        closed_since = (facts.get('blockers_closed') or '') > (line.get('at') or '')
-        decides = bool(named or linked_now) and (closed_since or not (eta and eta > now))
-        if decides and not missing and not open_blockers:
-            closed = sorted(set(named) | set(linked_now))
+        last_closed = max([facts.get('blockers_closed') or ''] + [at or '' for _r, s, at in foreign if s == 'CLOSED'])
+        closed_since = last_closed > (line.get('at') or '')
+        decides = bool(named or linked_now or foreign) and (closed_since or not (eta and eta > now))
+        if decides and not missing and not open_blockers and not foreign_open:
+            closed = [f'#{r}' for r in sorted(set(named) | set(linked_now))] + [r for r, _s, _at in foreign]
             out['state'] = 'every ticket its wait names or links is closed'
             if BLOCKED_LABEL in labels:
                 out['actions'].append(('unlabel', BLOCKED_LABEL))
             if light and light in (blocked, scheduled):
                 out['actions'].append(('light', 'shipyard'))
-            out['change'] = 'Unblocked: every ticket its wait names or links is closed (' + ', '.join(f'#{r}' for r in closed) + ').'
+            out['change'] = 'Unblocked: every ticket its wait names or links is closed (' + ', '.join(closed) + ').'
             out['question'] = unblocked_q
             return out
         for r in missing:
@@ -1253,8 +1280,19 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                          else {'status': 'idle', 'column': col})
         asked_at = (line.get('at') if line.get('kind') == NEEDS_KIND else '') or state.get('needs_at') or ''
         answer = lead_answer(comments, login, gh_stamp(asked_at)) if asked_at else {}
+        # 0.69.0 (#2537): the lead's reply after the owner's own wait line, read from that line alone (an old Needs-you
+        # time never counts here), and the other repositories' tickets the wait names, read in their own repository
+        waiting = line.get('kind') in WAIT_KINDS and line.get('at')
+        wait_answer = lead_answer(comments, login, gh_stamp(line['at'])) if waiting else {}
+        foreign = []
+        if line.get('kind') == 'blocked on':
+            for m in REF_RE.finditer(line.get('ask') or ''):
+                if m.group(1) and m.group(1).lower() != cfg['repo'].lower():
+                    other = gh.card(int(m.group(2)), repo=m.group(1)) or {}
+                    foreign.append((f'{m.group(1)}#{m.group(2)}', other.get('state') or 'UNKNOWN', other.get('closedAt') or ''))
         p = plan(card, {'line': line, 'blockers': blockers, 'last_commit': last, 'closed': closed, 'answer': answer,
-                        'owner_building': owner_building, 'after': after, 'blockers_closed': blockers_closed},
+                        'owner_building': owner_building, 'after': after, 'blockers_closed': blockers_closed,
+                        'wait_answer': wait_answer, 'foreign': foreign},
                  state, now, cfg)
         did = []
         needs = cfg['lights']['needs']
@@ -1337,7 +1375,7 @@ def sweep(cfg=None, gh=None, store=None, mail=None, now=None, dry=False, out=pri
                 waited = max(0, round((now - datetime.fromisoformat(first)).total_seconds() / 60))
                 question += f' (Asked {count} times now; first asked {waited} minutes ago.)'
             to = card.get('owner') or captain()
-            if to == who_leads and answer and p['state'].startswith(f'{who_leads} answered'):
+            if to == who_leads and (answer or wait_answer) and p['state'].startswith(f'{who_leads} answered'):
                 to = captain()   # the lead's own card, answered by them: the captain takes it, never a Needs you back on them
             if to == who_leads:
                 gh.field(n, 'Light', needs)

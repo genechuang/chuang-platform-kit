@@ -3,6 +3,18 @@
 A change that breaks a function's signature is a minor-version bump and names the host call sites to change. Tags are
 `sdlc-v<version>`, cut from a green main.
 
+## 0.69.0 - 2026-11-27 PT
+
+- The lead's reply ends an owner's wait (SMADPickleBot #2537; Gene, 11/27/26 4:21 PM PT: "I answered 'scrum: yes' in
+  1654 twice now, the comment didn't trigger scrum master to immediately review and unblock the ticket"): on a card
+  whose owner's newest line is `blocked on`, `scheduled` or `blocked by`, the lead's reply after that line (the
+  `lead_answer` rules: an unsigned `Scrum:` line in any other word, or a short plain comment) takes the blocked label
+  off, puts the light back to the shipyard's and hands the owner the words. Until now only a Needs-you ask read it.
+- A wait's tickets keep their repository: `owner/name#N` in a `blocked on` or `scheduled` wait is read in that
+  repository by the sweep (`facts['foreign']`) and never taken as this repository's `#N` or linked here. On #1654, the
+  kit tickets `#174` and `#175` closed at 11:10 PM PT 11/26/26, and the wait still read SMAD's own `#174` and `#175`,
+  closed long before it. `scrum.WAIT_KINDS` and `scrum.REF_RE` are new.
+
 ## 0.68.0 - 2026-11-27 PT
 
 - `moves.put_back_to` guards the Dock (SMADPickleBot #2531; Gene, 11/27/26 2:21 PM PT: "if the 2 tickets on Dock aren't

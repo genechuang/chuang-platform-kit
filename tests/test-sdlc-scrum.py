@@ -402,6 +402,36 @@ check('  a scheduled light its owner\'s newest line no longer backs comes off, a
       ([('light', 'shipyard')], 'no block on record: the scheduled light off', True))
 check('  a board with no scheduled light shows the same wait as blocked, as before',
       sorted(a for a in bplan(card(light='busy'), word)['actions'] if a[0] in ('light', 'label')), [('label', 'blocked'), ('light', 'blocked')])
+# 0.69.0 (SMADPickleBot #2537; Gene, 11/27/26 4:21 PM PT: "I answered 'scrum: yes' in 1654 twice now, the comment didn't
+# trigger scrum master to immediately review and unblock the ticket"): the lead's reply on a waiting card ends the wait.
+wait = S.scrum_line([say('Scrum: scheduled | the next ship | eta 11/11/26 6 PM', 30)], LOGIN)
+yes = S.lead_answer([say('Scrum: scheduled | the next ship | eta 11/11/26 6 PM', 30), say('scrum: yes', 2)], LOGIN, S.gh_stamp(wait['at']))
+p = splan(dict(card(light='clock'), labels=('blocked',)), wait, wait_answer=yes)
+check("0.69.0, the positive case: the lead's `Scrum: yes` after a wait ends it: the light back to the shipyard's, the "
+      'label off, and the owner handed the words',
+      (yes['text'], sorted(a for a in p['actions'] if a[0] in ('light', 'unlabel')), p['state'],
+       '“yes”' in p['question'] and 'the next ship' in p['question']),
+      ('yes', [('light', 'shipyard'), ('unlabel', 'blocked')], 'Lee answered: “yes”', True))
+check("  the same on a `blocked by` wait, and the lead's reply from before the wait line is no answer to it",
+      ([a for a in splan(card(light='stop', labels=('blocked',)), {'kind': 'blocked by', 'ref': 9, 'at': wait['at']},
+                         wait_answer=yes)['actions'] if a[0] == 'light'],
+       S.lead_answer([say('scrum: yes', 40), say('Scrum: scheduled | the next ship | eta 11/11/26 6 PM', 30)], LOGIN,
+                     S.gh_stamp(wait['at']))),
+      ([('light', 'shipyard')], {}))
+# A wait naming another repository's ticket (`acme/kit#174`) is that ticket, never this repository's #174
+kit = S.scrum_line([say('Scrum: scheduled | the next ship, which closes acme/kit#174 and acme/kit#175 | eta 11/11/26 6 PM', 30)], LOGIN)
+after = (NOW - timedelta(minutes=10)).strftime('%Y-%m-%dT%H:%M:%SZ')
+p = splan(card(light='stop'), kit, foreign=[('acme/kit#174', 'CLOSED', after), ('acme/kit#175', 'CLOSED', after)])
+check("  0.69.0: a wait whose other-repository tickets have all closed since it was written is unblocked, none linked "
+      'here as this repository\'s #174',
+      ([a for a in p['actions'] if a[0] in ('link', 'light')], p['state'], 'acme/kit#174' in p['change']),
+      ([('light', 'shipyard')], 'every ticket its wait names or links is closed', True))
+p = splan(card(light='busy'), kit, foreign=[('acme/kit#174', 'CLOSED', after), ('acme/kit#175', 'OPEN', '')])
+check('  one of them still open keeps it waiting, blocked and linked to nothing here',
+      ([a for a in p['actions'] if a[0] in ('link', 'light', 'label')], p['state'].startswith('blocked on')),
+      ([('light', 'blocked'), ('label', 'blocked')], True))
+check("  the sweep reads another repository's ticket there: the reference parsed with its repository",
+      [(m.group(1), m.group(2)) for m in S.REF_RE.finditer(kit['ask'])], [('acme/kit', '174'), ('acme/kit', '175')])
 check('  a scheduled card is no card its owner is told to start',
       S.idle_owners([row(61, light='clock')], scfg, {}, NOW), {})
 pcfg = dict(CFG, lights=dict(CFG['lights'], pushing='push'))
